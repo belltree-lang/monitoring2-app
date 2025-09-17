@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ケアマネ・モニタリング</title>
+<style>
+:root {
+  --fg:#222; --bg:#f4f6fa; --card:#fff; --brand:#1976d2;
+  --muted:#555; --accent:#e3f2fd;
+}
+body { font-family:"Noto Sans JP",system-ui,sans-serif; margin:0; padding:24px; background:var(--bg); color:var(--fg);}
+h1 { margin:0 0 20px; font-size:1.6rem; color:var(--brand);}
+h2 { margin:14px 0 8px; font-size:1.15rem; color:#333;}
+.card { background:var(--card); border-radius:10px; padding:16px; margin-bottom:18px;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);}
+.toolbar { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;}
+input[type=text], select, textarea { font-family:inherit; border:1px solid #ccc; border-radius:6px; padding:8px 10px;}
+textarea { width:100%; min-height:120px;}
+button { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; transition:.2s; font-size:0.85rem;}
+button { background:var(--brand); color:#fff;}
+button.secondary { background:#eee; color:#333;}
+button.danger { background:#d32f2f; color:#fff;}
+button:hover { opacity:0.9;}
+.pill { display:inline-block; padding:4px 10px; font-size:.85rem; border-radius:999px; background:var(--accent); color:var(--brand);}
+.autocomplete-list { position:absolute; background:#fff; border:1px solid #ccc; border-radius:6px;
+  max-height:220px; overflow-y:auto; width:260px; box-shadow:0 2px 6px rgba(0,0,0,.1); z-index:100;}
+.autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
+.autocomplete-item:hover { background:var(--accent);}
+.layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
+@media(max-width:960px){.layout{grid-template-columns:1fr;}}
+.record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
+.record .muted { font-size:0.85rem; color:#666;}
+.record .toolbar { margin-top:6px;}
+</style>
+</head>
+<body>
+<h1>ケアマネ・モニタリング 
+  <span class="pill" id="memberTag">未選択</span>
+</h1>
+
+<!-- 利用者選択 -->
+<div class="card">
+  <h2>利用者を選択</h2>
+  <div class="toolbar" style="position:relative;">
+    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
+    <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
+    <select id="recordRange">
+      <option value="all">全件</option>
+      <option value="90">直近90日</option>
+      <option value="30" selected>直近30日</option>
+      <option value="7">直近7日</option>
+    </select>
+    <button id="btnReload" class="secondary">更新</button>
+  </div>
+  <div id="idStatus" class="muted"></div>
+</div>
+
+<!-- 新規利用者登録 -->
+<div class="card">
+  <h2>新規利用者登録</h2>
+  <div class="toolbar">
+    <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
+    <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
+    <button id="btnAddMember">登録</button>
+  </div>
+  <div id="addMemberStatus" class="muted"></div>
+</div>
+
+<!-- メインUI -->
+<div id="mainArea" style="display:none;">
+  <div class="layout">
+    <div class="left">
+      <!-- 新規記録 -->
+      <div class="card">
+        <h2>新規モニタリング記録</h2>
+        <div class="toolbar">
+          <label for="kindSelect">種別:</label>
+          <select id="kindSelect">
+            <option value="訪問">訪問</option>
+            <option value="電話">電話</option>
+            <option value="施設面談">施設面談</option>
+            <option value="通所観察">通所観察</option>
+            <option value="サービス担当者会議">サービス担当者会議</option>
+            <option value="その他" selected>その他</option>
+          </select>
+        </div>
+        <textarea id="inputText" placeholder="記録を入力..."></textarea>
+        <div class="toolbar">
+          <input id="fileInput" type="file" multiple />
+          <button id="btnSave">保存</button>
+          <span id="saveStatus" class="muted"></span>
+        </div>
+      </div>
+      <!-- AI要約 -->
+      <div class="card">
+        <h2>AI要約</h2>
+        <div class="toolbar">
+          <select id="summaryFormat">
+            <option value="normal">標準</option>
+            <option value="icf">ICF形式</option>
+            <option value="soap">SOAP形式</option>
+            <option value="doctor">医療連携</option>
+            <option value="family">家族向け</option>
+          </select>
+          <button id="btnSummary">要約生成</button>
+        </div>
+        <div id="summaryOutput" class="muted">ここに要約が表示されます</div>
+      </div>
+      <!-- 提案 -->
+      <div class="card">
+        <h2>ケアマネからの提案</h2>
+        <div class="toolbar">
+          <select id="adviceHorizonSelect">
+            <option value="now">すぐに対応</option>
+            <option value="2w">2週間</option>
+            <option value="1m">1か月</option>
+            <option value="3m" selected>3か月</option>
+          </select>
+          <button id="btnAdvice">提案生成</button>
+        </div>
+        <div id="adviceOutput" class="muted">ここに提案が表示されます</div>
+      </div>
+      <!-- 過去の記録 -->
+      <div class="card">
+        <h2>過去の記録</h2>
+        <div id="recordList" class="muted">利用者を選択してください</div>
+      </div>
+    </div>
+    <aside class="right">
+      <div class="card">
+        <h2>添付ギャラリー</h2>
+        <div id="mediaGallery" class="muted">利用者を選択してください</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+let memberId=null, memberName="";
+let memberList=[];
+
+// ===== 候補リスト取得 =====
+function refreshMemberList(){
+  google.script.run.withSuccessHandler(list=>{
+    memberList = Array.isArray(list) ? list : [];
+  }).getMemberList();
+}
+refreshMemberList();
+
+// ===== ユーティリティ =====
+function toHalfDigits(s){ return String(s||"").replace(/[０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+
+// ===== オートコンプリート =====
+const input=document.getElementById("memberIdInput");
+const listBox=document.getElementById("autocompleteList");
+
+input.addEventListener("input",()=>{
+  const qRaw=input.value.trim();
+  if(!qRaw){ listBox.style.display="none"; return; }
+  const q=toHalfDigits(qRaw);
+  const hits=memberList.filter(m=>m.id.includes(q)||m.name.includes(qRaw));
+  if(!hits.length){ listBox.style.display="none"; return; }
+  listBox.innerHTML=hits.map(m=>`<div class="autocomplete-item" data-id="${m.id}" data-name="${m.name}">${m.id}　${m.name}</div>`).join("");
+  listBox.style.display="block";
+});
+listBox.addEventListener("click",e=>{
+  const item=e.target.closest(".autocomplete-item");
+  if(!item) return;
+  selectMember(item.dataset.id,item.dataset.name);
+});
+input.addEventListener("keydown",e=>{
+  if(e.key==="Enter"){ e.preventDefault(); resolveInput(); }
+});
+input.addEventListener("blur",()=>{ setTimeout(resolveInput,100); });
+
+function resolveInput(){
+  const val=input.value.trim();
+  if(!val) return;
+  const half=toHalfDigits(val);
+  const hit=memberList.find(m=>m.id===half||m.name===val);
+  if(hit){ selectMember(hit.id,hit.name); return; }
+  if(/^\d{4}$/.test(half)){ selectMember(half,""); return; }
+  document.getElementById("idStatus").textContent="候補が見つかりません";
+}
+function selectMember(id,name){
+  memberId=id; memberName=name;
+  input.value=`${id}${name?"　"+name:""}`;
+  listBox.style.display="none";
+  document.getElementById("idStatus").textContent=`選択中: ${id}${name?"　"+name:""}`;
+  document.getElementById("memberTag").textContent=`${id}${name?"　"+name:""}`;
+  document.getElementById("mainArea").style.display="";
+  loadRecords();
+}
+
+// ===== 新規利用者登録 =====
+document.getElementById("btnAddMember").onclick=()=>{
+  const id=document.getElementById("newMemberId").value.trim();
+  const name=document.getElementById("newMemberName").value.trim();
+  const status=document.getElementById("addMemberStatus");
+  if(!id||!name){ status.textContent="IDと氏名を入力してください"; return; }
+  google.script.run.withSuccessHandler(res=>{
+    if(res.status==="success"){
+      status.textContent=`登録しました: ${res.id} ${res.name}`;
+      document.getElementById("newMemberId").value="";
+      document.getElementById("newMemberName").value="";
+      refreshMemberList();
+    }else{
+      status.textContent="失敗: "+res.message;
+    }
+  }).withFailureHandler(err=>{
+    status.textContent="エラー: "+(err.message||err);
+  }).addMember(id,name);
+};
+
+// ===== 保存 =====
+document.getElementById("btnSave").onclick=()=>{
+  const text=document.getElementById("inputText").value.trim();
+  const files=document.getElementById("fileInput").files;
+  const status=document.getElementById("saveStatus");
+  if(!memberId){ alert("利用者を選択してください"); return; }
+  if(!text && files.length===0){ alert("内容または添付を入力してください"); return; }
+  status.textContent="送信中…";
+  if(files.length===0){
+    google.script.run.withSuccessHandler(()=>{
+      status.textContent="保存しました";
+      document.getElementById("inputText").value="";
+      loadRecords();
+    }).withFailureHandler(err=>{
+      status.textContent="失敗: "+(err.message||err);
+    }).saveRecordFromBrowser(memberId,text,new Date().toISOString(),"[]","その他");
+  }
+};
+
+// ===== 要約 =====
+document.getElementById("btnSummary").onclick=()=>{
+  const fmt=document.getElementById("summaryFormat").value;
+  const days=document.getElementById("recordRange").value;
+  const out=document.getElementById("summaryOutput");
+  out.textContent="生成中…";
+  google.script.run.withSuccessHandler(res=>{
+    out.textContent=(res.status==="success")?res.summary:("失敗:"+res.message);
+  }).generateAISummaryForDays(memberId,fmt,days);
+};
+
+// ===== 提案 =====
+document.getElementById("btnAdvice").onclick=()=>{
+  const horizon=document.getElementById("adviceHorizonSelect").value;
+  const days=document.getElementById("recordRange").value;
+  const out=document.getElementById("adviceOutput");
+  out.textContent="生成中…";
+  google.script.run.withSuccessHandler(res=>{
+    out.textContent=(res.status==="success")?res.advice:("失敗:"+res.message);
+  }).generateCareAdviceWithHorizon(memberId,days,horizon);
+};
+
+// ===== 過去記録（編集・削除付き） =====
+function loadRecords(){
+  const days=document.getElementById("recordRange").value;
+  const list=document.getElementById("recordList");
+  if(!memberId){ list.textContent="利用者を選択してください"; return; }
+  list.textContent="読込中…";
+  google.script.run.withSuccessHandler(res=>{
+    if(res.status!=="success"){ list.textContent="エラー:"+res.message; return; }
+    if(!res.records.length){ list.textContent="記録なし"; return; }
+    list.innerHTML=res.records.map(r=>
+      `<div class="record" data-row="${r.rowIndex}">
+        <div><b>${r.dateText}</b>【${r.kind}】</div>
+        <div class="text">${r.text}</div>
+        <div class="toolbar">
+          <button class="secondary btnEdit">編集</button>
+          <button class="danger btnDelete">削除</button>
+        </div>
+      </div>`
+    ).join("");
+    bindRecordActions();
+  }).getRecordsByMemberId_v3(memberId,days);
+}
+document.getElementById("btnReload").onclick=()=>loadRecords();
+
+function bindRecordActions(){
+  document.querySelectorAll(".btnEdit").forEach(btn=>{
+    btn.onclick=()=>{
+      const rec=btn.closest(".record");
+      const row=rec.dataset.row;
+      const old=rec.querySelector(".text").textContent;
+      const nv=prompt("内容を修正:",old);
+      if(nv===null) return;
+      google.script.run.withSuccessHandler(()=>{
+        loadRecords();
+      }).updateRecord(row,nv);
+    };
+  });
+  document.querySelectorAll(".btnDelete").forEach(btn=>{
+    btn.onclick=()=>{
+      const rec=btn.closest(".record");
+      const row=rec.dataset.row;
+      if(!confirm("この記録を削除しますか？")) return;
+      google.script.run.withSuccessHandler(()=>{
+        loadRecords();
+      }).deleteRecord(row);
+    };
+  });
+}
+</script>
+</body>
+</html>
