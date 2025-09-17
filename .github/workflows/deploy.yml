@@ -1,19 +1,26 @@
 name: Deploy to Google Apps Script
 
 on:
-  push:
+  # PR が main にマージされたとき
+  pull_request:
+    types: [closed]
     branches:
-      - main  # mainブランチにpushされたら実行
+      - main
+
+  # 手動実行ボタン
+  workflow_dispatch:
 
 jobs:
   deploy:
+    # 「マージ済み」PRだけを対象にする条件
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
@@ -21,10 +28,10 @@ jobs:
       - name: Install clasp
         run: npm install -g @google/clasp
 
-      - name: Create .clasprc.json
+      - name: Set up clasp credentials
         run: |
-          echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
+          echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+          echo '${{ secrets.CLASP_JSON }}' > .clasp.json
 
-      - name: Push to GAS
-        run: |
-          clasp push --force
+      - name: Push to Google Apps Script
+        run: clasp push --force
