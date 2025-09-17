@@ -1,14 +1,15 @@
 - name: Setup clasp auth
+  env:
+    CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
   run: |
     node -e "
       const fs = require('fs');
       const raw = process.env.CLASP_CREDENTIALS;
       let src;
-      try { src = JSON.parse(raw); } catch (e) { 
+      try { src = JSON.parse(raw); } catch (e) {
         console.error('CLASP_CREDENTIALS is not valid JSON'); process.exit(1);
       }
       let out;
-      // case A: tokens.default 形式（あなたが貼ってくれた形）
       if (src.tokens && src.tokens.default) {
         const d = src.tokens.default;
         out = {
@@ -17,7 +18,6 @@
             refresh_token: d.refresh_token,
             scope: d.scope || 'https://www.googleapis.com/auth/script.projects https://www.googleapis.com/auth/script.deployments https://www.googleapis.com/auth/script.container.ui',
             token_type: 'Bearer',
-            // いったん1時間後にしておく（clasp 側で refresh される）
             expiry_date: Date.now() + 3600 * 1000
           },
           oauth2ClientSettings: {
@@ -28,8 +28,7 @@
           isLocalCreds: true
         };
       } else {
-        // case B: すでに token 形式ならそのまま
         out = src;
       }
       fs.writeFileSync(process.env.HOME + '/.clasprc.json', JSON.stringify(out));
-    "  # ← ここまで node -e
+    "
