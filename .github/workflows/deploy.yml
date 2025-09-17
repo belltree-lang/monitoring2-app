@@ -1,18 +1,14 @@
 name: Deploy to Google Apps Script
 
 on:
-  # PR が main にマージされたとき
   pull_request:
     types: [closed]
     branches:
       - main
-
-  # 手動実行ボタン
   workflow_dispatch:
 
 jobs:
   deploy:
-    # 「マージ済み」PRだけを対象にする条件
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
@@ -30,8 +26,7 @@ jobs:
 
       - name: Set up clasp credentials
         run: |
-          echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
-          echo '${{ secrets.CLASP_JSON }}' > .clasp.json
+          echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
 
       - name: Push to Google Apps Script
         run: clasp push --force
