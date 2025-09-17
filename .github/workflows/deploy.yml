@@ -8,7 +8,6 @@ on:
 
 jobs:
   deploy:
-    # PR がマージされたとき or 手動実行のみ走る
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
@@ -24,27 +23,23 @@ jobs:
       - name: Install clasp
         run: npm install -g @google/clasp
 
-      # Secrets.CLASP_CREDENTIALS を ~/.clasprc.json に“正規化して”書き出す
-      # （tokens.default 形式でも token 形式でもOKにする）
       - name: Setup clasp auth
         env:
-          CREDS: ${{ secrets.CLASP_CREDENTIALS }}
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
           node - <<'JS'
           const fs = require('fs');
-          const path = require('path');
           const os = require('os');
-
-          const raw = process.env.CREDS;
+          const raw = process.env.CLASP_CREDENTIALS;
           if (!raw) { console.error('Missing CLASP_CREDENTIALS secret'); process.exit(1); }
 
           let src;
           try { src = JSON.parse(raw); }
           catch (e) { console.error('CLASP_CREDENTIALS is not valid JSON'); process.exit(1); }
 
-          let out = src;
-          // GitHub Secret が { tokens: { default: {...} } } の場合は .clasprc.json 形式に変換
+          let out;
           if (src.tokens && src.tokens.default) {
+            // tokens.default → token 形式に変換
             const d = src.tokens.default;
             out = {
               token: {
@@ -61,10 +56,12 @@ jobs:
               },
               isLocalCreds: true
             };
+          } else {
+            // すでに token 形式ならそのまま
+            out = src;
           }
 
-          const dest = path.join(os.homedir(), '.clasprc.json');
-          fs.writeFileSync(dest, JSON.stringify(out));
+          fs.writeFileSync(os.homedir() + '/.clasprc.json', JSON.stringify(out));
           JS
 
       - name: Deploy (clasp push)
