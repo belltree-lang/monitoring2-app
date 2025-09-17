@@ -1,14 +1,16 @@
 name: Deploy to Google Apps Script
 
 on:
+  # PR が main にマージされたとき
   pull_request:
     types: [closed]
-    branches:
-      - main
+    branches: [ main ]
+  # 手動実行
   workflow_dispatch:
 
 jobs:
   deploy:
+    # 手動実行 もしくは "merged == true" の PR のみ実行
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
@@ -24,9 +26,15 @@ jobs:
       - name: Install clasp
         run: npm install -g @google/clasp
 
-      - name: Set up clasp credentials
+      # ← ここが「Setup clasp auth」のステップ
+      - name: Setup clasp auth
         run: |
           echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
 
-      - name: Push to Google Apps Script
-        run: clasp push --force
+      # 念のため scriptId を表示（任意）
+      - name: Show .clasp.json
+        run: cat .clasp.json
+
+      # ← ここが「Push to Apps Script」のステップ
+      - name: Push to Apps Script
+        run: npx clasp push --force
