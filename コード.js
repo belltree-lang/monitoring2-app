@@ -519,8 +519,9 @@ function diagnoseUploadPath(){
 }
 /** 利用者一覧を取得（ほのぼのIDシートから） */
 function getMemberList() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sh = ss.getSheetByName('ほのぼのID');
+  if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
   const vals = sh.getDataRange().getValues();
   const out = [];
 
