@@ -1,40 +1,35 @@
-name: Deploy to Google Apps Script
-
-on:
-  # PR が main にマージされたとき
-  pull_request:
-    types: [closed]
-    branches: [ main ]
-  # 手動実行
-  workflow_dispatch:
-
-jobs:
-  deploy:
-    # 手動実行 もしくは "merged == true" の PR のみ実行
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install clasp
-        run: npm install -g @google/clasp
-
-      # ← ここが「Setup clasp auth」のステップ
-      - name: Setup clasp auth
-        run: |
-          echo '${{ secrets.CLASP_CREDENTIALS }}' > ~/.clasprc.json
-
-      # 念のため scriptId を表示（任意）
-      - name: Show .clasp.json
-        run: cat .clasp.json
-
-      # ← ここが「Push to Apps Script」のステップ
-      - name: Push to Apps Script
-        run: npx clasp push --force
+- name: Setup clasp auth
+  run: |
+    node -e "
+      const fs = require('fs');
+      const raw = process.env.CLASP_CREDENTIALS;
+      let src;
+      try { src = JSON.parse(raw); } catch (e) { 
+        console.error('CLASP_CREDENTIALS is not valid JSON'); process.exit(1);
+      }
+      let out;
+      // case A: tokens.default 形式（あなたが貼ってくれた形）
+      if (src.tokens && src.tokens.default) {
+        const d = src.tokens.default;
+        out = {
+          token: {
+            access_token: d.access_token || '',
+            refresh_token: d.refresh_token,
+            scope: d.scope || 'https://www.googleapis.com/auth/script.projects https://www.googleapis.com/auth/script.deployments https://www.googleapis.com/auth/script.container.ui',
+            token_type: 'Bearer',
+            // いったん1時間後にしておく（clasp 側で refresh される）
+            expiry_date: Date.now() + 3600 * 1000
+          },
+          oauth2ClientSettings: {
+            clientId: d.client_id,
+            clientSecret: d.client_secret,
+            redirectUri: 'http://localhost'
+          },
+          isLocalCreds: true
+        };
+      } else {
+        // case B: すでに token 形式ならそのまま
+        out = src;
+      }
+      fs.writeFileSync(process.env.HOME + '/.clasprc.json', JSON.stringify(out));
+    "  # ← ここまで node -e
