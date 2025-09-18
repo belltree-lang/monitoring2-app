@@ -20,12 +20,11 @@ jobs:
 
       - name: Setup clasp auth
         env:
-          CLASPRC_JSON: ${{ secrets.CLASP_CREDENTIALS }}
+          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
-          echo "$CLASPRC_JSON" | base64 -d > $HOME/.clasprc.json
+          echo "$CLASP_CREDENTIALS" > $HOME/.clasprc.json
           echo "=== ~/.clasprc.json ==="
           cat $HOME/.clasprc.json
-          ls -la $HOME
 
       - name: Push to Google Apps Script
         run: clasp push -f
