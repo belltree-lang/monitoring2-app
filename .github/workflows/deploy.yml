@@ -1,68 +1,35 @@
 name: Deploy to Google Apps Script
 
 on:
-  pull_request:
-    types: [closed]
-    branches: [ main ]
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      # リポジトリをチェックアウト
+      - uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      # Node.js セットアップ
+      - uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - name: Install clasp
-        run: npm install -g @google/clasp
+      # clasp インストール
+      - run: npm install -g @google/clasp
 
-      - name: Setup clasp auth
+      # Google 認証
+      - name: Authenticate with Google
         env:
-          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
-          node - <<'JS'
-          const fs = require('fs');
-          const os = require('os');
-          const raw = process.env.CLASP_CREDENTIALS;
-          if (!raw) { console.error('Missing CLASP_CREDENTIALS secret'); process.exit(1); }
+          echo "$CLASPRC_JSON" | base64 -d > ~/.clasprc.json
+          echo "=== ~/.clasprc.json ==="
+          cat ~/.clasprc.json
 
-          let src;
-          try { src = JSON.parse(raw); }
-          catch (e) { console.error('CLASP_CREDENTIALS is not valid JSON'); process.exit(1); }
-
-          let out;
-          if (src.tokens && src.tokens.default) {
-            // tokens.default → token 形式に変換
-            const d = src.tokens.default;
-            out = {
-              token: {
-                access_token: d.access_token || '',
-                refresh_token: d.refresh_token,
-                scope: d.scope || 'https://www.googleapis.com/auth/script.projects https://www.googleapis.com/auth/script.deployments https://www.googleapis.com/auth/script.container.ui',
-                token_type: 'Bearer',
-                expiry_date: Date.now() + 3600 * 1000
-              },
-              oauth2ClientSettings: {
-                clientId: d.client_id,
-                clientSecret: d.client_secret,
-                redirectUri: 'http://localhost'
-              },
-              isLocalCreds: true
-            };
-          } else {
-            // すでに token 形式ならそのまま
-            out = src;
-          }
-
-          fs.writeFileSync(os.homedir() + '/.clasprc.json', JSON.stringify(out));
-          JS
-
-      - name: Deploy (clasp push)
-        run: npx clasp push --force
+      # デプロイ
+      - name: Push to Google Apps Script
+        run: clasp push -f
