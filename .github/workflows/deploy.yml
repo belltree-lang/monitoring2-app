@@ -10,27 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # リポジトリをチェックアウト
       - uses: actions/checkout@v3
 
-      # Node.js セットアップ
       - uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      # clasp インストール
       - run: npm install -g @google/clasp
 
-      # Google 認証
-      - name: Authenticate with Google
+      - name: Setup clasp auth
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
           echo "$CLASPRC_JSON" | base64 -d > $HOME/.clasprc.json
-          echo "=== $HOME/.clasprc.json ==="
+          echo "=== ~/.clasprc.json ==="
           cat $HOME/.clasprc.json
+          ls -la $HOME
 
-      # デプロイ
       - name: Push to Google Apps Script
-        run: |
-          clasp push -f
+        run: clasp push -f
