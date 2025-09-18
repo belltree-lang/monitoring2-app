@@ -26,10 +26,11 @@ jobs:
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
         run: |
-          echo "$CLASPRC_JSON" | base64 -d > ~/.clasprc.json
-          cp ~/.clasprc.json .clasprc.json   # ← これを追加
+          echo "$CLASPRC_JSON" | base64 -d > $HOME/.clasprc.json
+          echo "=== $HOME/.clasprc.json ==="
+          cat $HOME/.clasprc.json
 
       # デプロイ
       - name: Push to Google Apps Script
         run: |
-          clasp push -f --json .clasprc.json
+          clasp push -f
