@@ -20,7 +20,7 @@ jobs:
 
       - name: Setup clasp auth
         env:
-          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          CLASPRC_JSON: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
           echo "$CLASPRC_JSON" | base64 -d > $HOME/.clasprc.json
           echo "=== ~/.clasprc.json ==="
