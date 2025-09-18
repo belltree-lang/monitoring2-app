@@ -23,7 +23,7 @@ jobs:
           CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
           echo "$CLASP_CREDENTIALS" | base64 -d > $HOME/.clasprc.json
-          echo "=== ~/.clasprc.json ==="
+          ls -la $HOME
           cat $HOME/.clasprc.json
 
       - name: Push to Google Apps Script
