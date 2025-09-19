@@ -642,7 +642,8 @@ function updateMediaGallery(records) {
     </div>`;
   }).join("");
   gallery.innerHTML = `<div class="media-grid">${cards}</div>`;
-  
+}
+
 // ===== 過去記録（編集・削除付き） =====
 function loadRecords(){
   const days=document.getElementById("recordRange").value;
