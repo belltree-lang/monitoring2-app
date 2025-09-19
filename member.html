@@ -32,6 +32,13 @@ button:hover { opacity:0.9;}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
 .record .muted { font-size:0.85rem; color:#666;}
 .record .toolbar { margin-top:6px;}
+#mediaGallery { min-height:80px; }
+.media-grid { display:flex; flex-direction:column; gap:8px; }
+.media-item { background:#f7f9ff; border:1px solid #dbe6f6; border-radius:8px; padding:8px 10px; }
+.media-item a { color:var(--brand); font-weight:600; text-decoration:none; word-break:break-all; }
+.media-item a:hover { text-decoration:underline; }
+.media-missing { color:#777; font-weight:600; word-break:break-all; }
+.media-meta { margin-top:4px; font-size:0.78rem; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -258,12 +265,26 @@ document.getElementById("btnAdvice").onclick=()=>{
 function loadRecords(){
   const days=document.getElementById("recordRange").value;
   const list=document.getElementById("recordList");
-  if(!memberId){ list.textContent="利用者を選択してください"; return; }
+  if(!memberId){
+    list.textContent="利用者を選択してください";
+    setGalleryMessage("利用者を選択してください");
+    return;
+  }
   list.textContent="読込中…";
+  setGalleryMessage("添付を読み込んでいます…");
   google.script.run.withSuccessHandler(res=>{
-    if(res.status!=="success"){ list.textContent="エラー:"+res.message; return; }
-    if(!res.records.length){ list.textContent="記録なし"; return; }
-    list.innerHTML=res.records.map(r=>
+    if(res.status!=="success"){
+      list.textContent="エラー:"+(res.message||"不明なエラー");
+      setGalleryMessage("添付ファイルを読み込めませんでした");
+      return;
+    }
+    const records=Array.isArray(res.records)?res.records:[];
+    renderMediaGallery(records);
+    if(!records.length){
+      list.textContent="記録なし";
+      return;
+    }
+    list.innerHTML=records.map(r=>
       `<div class="record" data-row="${r.rowIndex}">
         <div><b>${r.dateText}</b>【${r.kind}】</div>
         <div class="text">${r.text}</div>
@@ -274,6 +295,10 @@ function loadRecords(){
       </div>`
     ).join("");
     bindRecordActions();
+  }).withFailureHandler(err=>{
+    const msg=(err&&err.message)||err||"不明なエラー";
+    list.textContent="エラー:"+msg;
+    setGalleryMessage("添付ファイルを読み込めませんでした");
   }).getRecordsByMemberId_v3(memberId,days);
 }
 document.getElementById("btnReload").onclick=()=>loadRecords();
@@ -301,6 +326,102 @@ function bindRecordActions(){
       }).deleteRecord(row);
     };
   });
+}
+
+function setGalleryMessage(message){
+  const gallery=document.getElementById("mediaGallery");
+  if(!gallery) return;
+  gallery.classList.add("muted");
+  gallery.innerHTML="";
+  gallery.textContent=message;
+}
+
+function renderMediaGallery(records){
+  const gallery=document.getElementById("mediaGallery");
+  if(!gallery) return;
+  gallery.innerHTML="";
+  const attachments=[];
+  (Array.isArray(records)?records:[]).forEach(record=>{
+    if(!record) return;
+    const files=Array.isArray(record.attachments)?record.attachments:[];
+    files.forEach(att=>{
+      if(att==null) return;
+      const normalized=(typeof att==="object" && !Array.isArray(att))?{...att}:{ name:String(att)};
+      normalized.recordDate=record.dateText;
+      attachments.push(normalized);
+    });
+  });
+  if(!attachments.length){
+    setGalleryMessage("添付ファイルはありません");
+    return;
+  }
+  gallery.classList.remove("muted");
+  const container=document.createElement("div");
+  container.className="media-grid";
+  attachments.sort((a,b)=>{
+    const tb=getAttachmentTime(b);
+    const ta=getAttachmentTime(a);
+    if(isNaN(ta) && isNaN(tb)) return 0;
+    if(isNaN(ta)) return 1;
+    if(isNaN(tb)) return -1;
+    return tb-ta;
+  });
+  attachments.forEach(att=>{
+    const item=document.createElement("div");
+    item.className="media-item";
+    const label=att.name||att.fileName||att.title||att.displayName||"名称未設定のファイル";
+    if(att.url){
+      const link=document.createElement("a");
+      link.href=att.url;
+      link.target="_blank";
+      link.rel="noopener noreferrer";
+      link.textContent=label;
+      item.appendChild(link);
+    }else{
+      const span=document.createElement("span");
+      span.className="media-missing";
+      span.textContent=label;
+      item.appendChild(span);
+    }
+    const metaParts=[];
+    const uploadedLabel=formatDateTime(att.uploadedAt||att.createdAt||att.timestamp);
+    if(uploadedLabel){
+      metaParts.push(`アップロード: ${uploadedLabel}`);
+    }else if(att.recordDate){
+      metaParts.push(`記録日: ${att.recordDate}`);
+    }
+    if(att.mimeType) metaParts.push(att.mimeType);
+    if(!att.url) metaParts.push("リンク情報なし");
+    if(metaParts.length){
+      const meta=document.createElement("div");
+      meta.className="media-meta";
+      meta.textContent=metaParts.join(" ｜ ");
+      item.appendChild(meta);
+    }
+    container.appendChild(item);
+  });
+  gallery.appendChild(container);
+}
+
+function getAttachmentTime(att){
+  if(!att) return NaN;
+  const candidate=att.uploadedAt||att.createdAt||att.timestamp||att.recordDate;
+  return toTime(candidate);
+}
+
+function toTime(value){
+  if(!value) return NaN;
+  const d=new Date(value);
+  const t=d.getTime();
+  return Number.isNaN(t)?NaN:t;
+}
+
+function formatDateTime(value){
+  const t=toTime(value);
+  if(Number.isNaN(t)) return "";
+  const d=new Date(t);
+  const pad=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 </script>
 </body>
