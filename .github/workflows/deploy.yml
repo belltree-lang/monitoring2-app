@@ -33,6 +33,7 @@ jobs:
           const fs = require('fs');
           const {google} = require('googleapis');
 
+          // 認証
           const creds = JSON.parse(fs.readFileSync(process.env.HOME + '/creds.json', 'utf8'));
           const scopes = [
             'https://www.googleapis.com/auth/script.projects',
@@ -45,10 +46,10 @@ jobs:
             creds.private_key,
             scopes
           );
-
           const script = google.script({version: 'v1', auth});
           const SCRIPT_ID = process.env.SCRIPT_ID;
 
+          // ファイル探索（対象拡張子のみ、不要ディレクトリ除外）
           const walk = (dir) =>
             fs.readdirSync(dir).flatMap(file => {
               const path = `${dir}/${file}`;
@@ -56,20 +57,25 @@ jobs:
               return {path, name: file};
             });
 
-          // 重複防止: ファイル名は拡張子を除いたベース名に統一
-          const files = walk('.').filter(f =>
-            /\.(gs|js|ts|html|json)$/.test(f.name) &&
-            f.name !== 'package.json'
-          ).map(f => {
-            const baseName = f.name.replace(/\.(gs|js|ts|html|json)$/, '');
-            return {
-              name: baseName,
-              type: f.name.endsWith('.html') ? 'HTML'
-                   : f.name.endsWith('.json') ? 'JSON'
-                   : 'SERVER_JS',
-              source: fs.readFileSync(f.path, 'utf8')
-            };
-          });
+          const allowedExts = /\.(gs|js|ts|html|json)$/;
+
+          const files = walk('.')
+            .filter(f =>
+              allowedExts.test(f.name) &&
+              !f.path.includes('.github') &&
+              !f.path.includes('node_modules') &&
+              !['package.json', 'package-lock.json', 'README.md'].includes(f.name)
+            )
+            .map(f => {
+              const baseName = f.name.replace(/\.(gs|js|ts|html|json)$/, '');
+              return {
+                name: baseName,
+                type: f.name.endsWith('.html') ? 'HTML'
+                     : f.name.endsWith('.json') ? 'JSON'
+                     : 'SERVER_JS',
+                source: fs.readFileSync(f.path, 'utf8')
+              };
+            });
 
           (async () => {
             try {
