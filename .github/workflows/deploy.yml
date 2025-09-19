@@ -16,78 +16,68 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install tools
+      - name: Install dependencies
         run: |
-          npm install -g @google/clasp
-          npm install google-auth-library@9
+          npm install googleapis@105
 
-      # サービスアカウントJSONをBase64で保存している前提
-      - name: Setup clasp auth (Service Account)
+      # サービスアカウントJSONをBase64でSecretsに保存してある想定
+      - name: Decode service account credentials
         env:
           CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
-          echo "$CLASP_CREDENTIALS" | base64 -d > $HOME/_creds.json
-          node - <<'JS'
+          echo "$CLASP_CREDENTIALS" | base64 -d > $HOME/creds.json
+
+      - name: Deploy to Apps Script via API
+        run: |
+          node <<'JS'
           const fs = require('fs');
-          const path = require('path');
-          const {JWT} = require('google-auth-library');
+          const {google} = require('googleapis');
 
-          const srcPath = path.join(process.env.HOME, '_creds.json');
-          const src = JSON.parse(fs.readFileSync(srcPath, 'utf8'));
-          const dest = path.join(process.env.HOME, '.clasprc.json');
+          // 認証情報読み込み
+          const creds = JSON.parse(fs.readFileSync(process.env.HOME + '/creds.json', 'utf8'));
+          const scopes = [
+            'https://www.googleapis.com/auth/script.projects',
+            'https://www.googleapis.com/auth/script.deployments',
+            'https://www.googleapis.com/auth/script.webapp.deploy'
+          ];
+          const auth = new google.auth.JWT(
+            creds.client_email,
+            null,
+            creds.private_key,
+            scopes
+          );
 
-          if (src.type === 'service_account') {
-            const scopes = [
-              'https://www.googleapis.com/auth/script.projects',
-              'https://www.googleapis.com/auth/script.deployments',
-              'https://www.googleapis.com/auth/script.webapp.deploy',
-              'https://www.googleapis.com/auth/drive'
-            ];
-            const client = new JWT({
-              email: src.client_email,
-              key: src.private_key,
-              scopes
+          const script = google.script({version: 'v1', auth});
+
+          // GitHub Secrets に保存した SCRIPT_ID を利用
+          const SCRIPT_ID = process.env.SCRIPT_ID;
+
+          // src/ 以下のファイルを読み込んでGAS API形式に変換
+          const walk = (dir) =>
+            fs.readdirSync(dir).flatMap(file => {
+              const path = `${dir}/${file}`;
+              if (fs.statSync(path).isDirectory()) return walk(path);
+              return {path, name: file};
             });
 
-            (async () => {
-              try {
-                const {token} = await client.getAccessToken();
-                if (!token) throw new Error('Failed to mint access token');
+          const files = walk('src').map(f => ({
+            name: f.name.replace(/\.(gs|js|ts|html)$/, ''),
+            type: f.name.endsWith('.html') ? 'HTML' : 'SERVER_JS',
+            source: fs.readFileSync(f.path, 'utf8')
+          }));
 
-                const out = {
-                  token: {
-                    access_token: token,
-                    refresh_token: '',
-                    scope: scopes.join(' '),
-                    token_type: 'Bearer',
-                    expiry_date: Date.now() + 3500 * 1000
-                  },
-                  oauth2ClientSettings: {
-                    clientId: '',
-                    clientSecret: '',
-                    redirectUri: 'http://localhost'
-                  },
-                  isLocalCreds: true
-                };
-                fs.writeFileSync(dest, JSON.stringify(out));
-                console.log('✅ Wrote ~/.clasprc.json with service account token');
-                process.exit(0);
-              } catch (e) {
-                console.error(e);
-                process.exit(1);
-              }
-            })();
-          } else {
-            console.error('CLASP_CREDENTIALS must be a service account JSON');
-            process.exit(1);
-          }
+          (async () => {
+            try {
+              await script.projects.updateContent({
+                scriptId: SCRIPT_ID,
+                requestBody: {files}
+              });
+              console.log('✅ Deployed to Google Apps Script');
+            } catch (err) {
+              console.error('❌ Deployment failed:', err.response?.data || err.message);
+              process.exit(1);
+            }
+          })();
           JS
-
-      # デバッグ: clasprc.json の確認
-      - name: Debug .clasprc.json
-        run: |
-          echo "=== ~/.clasprc.json ==="
-          cat $HOME/.clasprc.json || echo "No file"
-
-      - name: Push to Google Apps Script
-        run: clasp push -f
+        env:
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
