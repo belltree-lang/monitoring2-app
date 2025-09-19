@@ -39,6 +39,8 @@ jobs:
             'https://www.googleapis.com/auth/script.projects',
             'https://www.googleapis.com/auth/script.deployments',
             'https://www.googleapis.com/auth/script.webapp.deploy'
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/cloud-platform'
           ];
           const auth = new google.auth.JWT(
             creds.client_email,
