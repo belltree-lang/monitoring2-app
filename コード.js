@@ -73,7 +73,7 @@ function doPost(e) {
 
     try { ensureSharingForMember_(file, memberId); } catch(_e){}
 
-    var out = { status:'success', fileId:fileId, url:url, name:file.getName(), mimeType:file.getMimeType() };
+    var out = { status:'success', fileId:fileId, url:url, name:file.getName(), mimeType:file.getMimeType(), uploadedAt: new Date().toISOString() };
     return ContentService.createTextOutput(JSON.stringify(out))
       .setMimeType(ContentService.MimeType.JSON)
       .setHeader('Access-Control-Allow-Origin','*');
@@ -117,9 +117,10 @@ function uploadAttachment_(memberId, fileName, mimeType, base64) {
 
     const fileId = file.getId();
     const url = 'https://drive.google.com/file/d/' + fileId + '/view';
+    const uploadedAt = new Date().toISOString();
 
     where.push('done');
-    return { status:'success', fileId, url, name:file.getName(), mimeType:file.getMimeType() };
+    return { status:'success', fileId, url, name:file.getName(), mimeType:file.getMimeType(), uploadedAt };
 
   } catch (err) {
     const msg = 'uploadAttachment_ 失敗 at [' + where.join(' > ') + ']: ' + (err && err.message || err);
