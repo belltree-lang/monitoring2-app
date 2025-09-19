@@ -2,32 +2,110 @@ name: Deploy to Google Apps Script
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - name: Install clasp
-        run: npm install -g @google/clasp
+      - name: Install deps
+        run: npm install googleapis@105
 
-      - name: Setup credentials
-        run: echo "$CLASP_CREDENTIALS" | base64 -d > creds.json
+      - name: Decode service account (base64 -> json)
         env:
           CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
-
-      - name: Deploy to GAS
         run: |
-          npx clasp push -f --creds creds.json
+          set -euo pipefail
+          if [ -z "${CLASP_CREDENTIALS:-}" ]; then
+            echo "❌ Secret CLASP_CREDENTIALS is empty"; exit 1
+          fi
+          # 改行混入対策としてtrでCR除去
+          echo "$CLASP_CREDENTIALS" | tr -d '\r' | base64 -d > "$RUNNER_TEMP/creds.json"
+          # 目視用にclient_emailだけ出す
+          node -e "const c=require(process.env.RUNNER_TEMP+'/creds.json');console.log('Using SA:',c.client_email||'N/A')"
+
+      - name: Deploy via Apps Script API
         env:
           SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+          CREDS_PATH: ${{ runner.temp }}/creds.json
+        run: |
+          set -euo pipefail
+          if [ -z "${SCRIPT_ID:-}" ]; then
+            echo "❌ Secret SCRIPT_ID is empty"; exit 1
+          fi
+
+          node <<'JS'
+          const fs = require('fs');
+          const path = require('path');
+          const {google} = require('googleapis');
+
+          const CREDS_PATH = process.env.CREDS_PATH;
+          const SCRIPT_ID  = process.env.SCRIPT_ID;
+
+          const creds = JSON.parse(fs.readFileSync(CREDS_PATH, 'utf8'));
+          const scopes = [
+            'https://www.googleapis.com/auth/script.projects',
+            'https://www.googleapis.com/auth/script.deployments',
+            'https://www.googleapis.com/auth/script.webapp.deploy',
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/cloud-platform'
+          ];
+
+          const auth = new google.auth.JWT({
+            email: creds.client_email,
+            key: creds.private_key,
+            scopes
+          });
+
+          (async () => {
+            try {
+              // 明示的にトークン取得（ここで403/認証ミスを早期に検出）
+              await auth.authorize();
+
+              const script = google.script({version: 'v1', auth});
+
+              // まずGETで権限とAPI有効化をプレチェック（ここで出る403の中身をそのまま表示）
+              await script.projects.get({ scriptId: SCRIPT_ID });
+
+              // 送るファイルはリポジトリ直下のみ（重複/衝突回避）
+              const rootFiles = fs.readdirSync('.');
+
+              const pick = f =>
+                /\.(gs|js|ts|html)$/.test(f) || f === 'appsscript.json';
+
+              const files = rootFiles
+                .filter(pick)
+                .map(name => {
+                  const src = fs.readFileSync(name, 'utf8');
+                  if (name === 'appsscript.json') {
+                    return { name: 'appsscript', type: 'JSON', source: src };
+                  }
+                  const base = name.replace(/\.(gs|js|ts|html)$/,'');
+                  const type = name.endsWith('.html') ? 'HTML' : 'SERVER_JS';
+                  return { name: base, type, source: src };
+                });
+
+              if (files.length === 0) {
+                console.log('⚠️ No GAS files found at repo root. Nothing to deploy.');
+                process.exit(0);
+              }
+
+              await script.projects.updateContent({
+                scriptId: SCRIPT_ID,
+                requestBody: { files }
+              });
+
+              console.log('✅ Deployed to Google Apps Script');
+            } catch (err) {
+              const data = err?.response?.data || err.message || err;
+              console.error('❌ Deployment failed:', data);
+              process.exit(1);
+            }
+          })();
+          JS
