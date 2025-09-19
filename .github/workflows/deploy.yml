@@ -17,73 +17,60 @@ jobs:
           node-version: 18
 
       - name: Install dependencies
-        run: |
-          npm install googleapis@105
+        run: npm install googleapis@105
 
-      # サービスアカウントJSONをBase64でSecretsに保存してある想定
-      - name: Decode service account credentials
+      - name: Deploy to Google Apps Script
         env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/creds.json
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
           CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
         run: |
-          echo "$CLASP_CREDENTIALS" | base64 -d > $HOME/creds.json
+          echo "$CLASP_CREDENTIALS" | base64 -d > creds.json
 
-      - name: Deploy to Apps Script via API
-        run: |
           node <<'JS'
           const fs = require('fs');
-          const {google} = require('googleapis');
+          const { google } = require('googleapis');
 
-          // 認証
-          const creds = JSON.parse(fs.readFileSync(process.env.HOME + '/creds.json', 'utf8'));
-          const scopes = [
-            'https://www.googleapis.com/auth/script.projects',
-            'https://www.googleapis.com/auth/script.deployments',
-            'https://www.googleapis.com/auth/script.webapp.deploy'
-            'https://www.googleapis.com/auth/drive',
-            'https://www.googleapis.com/auth/cloud-platform'
-          ];
-          const auth = new google.auth.JWT(
-            creds.client_email,
-            null,
-            creds.private_key,
-            scopes
-          );
-          const script = google.script({version: 'v1', auth});
-          const SCRIPT_ID = process.env.SCRIPT_ID;
+          const key = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
 
-          // ファイル探索（対象拡張子のみ、不要ディレクトリ除外）
-          const walk = (dir) =>
-            fs.readdirSync(dir).flatMap(file => {
-              const path = `${dir}/${file}`;
-              if (fs.statSync(path).isDirectory()) return walk(path);
-              return {path, name: file};
+          const auth = new google.auth.GoogleAuth({
+            credentials: key,
+            scopes: ['https://www.googleapis.com/auth/script.projects']
+          });
+
+          const script = google.script({ version: 'v1', auth });
+
+          // 対象フォルダ内のコードを収集
+          const files = [];
+          const walkSync = (dir, filelist = []) => {
+            const path = require('path');
+            const files = fs.readdirSync(dir);
+            files.forEach(file => {
+              if (fs.statSync(path.join(dir, file)).isDirectory()) {
+                filelist = walkSync(path.join(dir, file), filelist);
+              } else {
+                filelist.push(path.join(dir, file));
+              }
             });
+            return filelist;
+          };
 
-          const allowedExts = /\.(gs|js|ts|html|json)$/;
-
-          const files = walk('.')
-            .filter(f =>
-              allowedExts.test(f.name) &&
-              !f.path.includes('.github') &&
-              !f.path.includes('node_modules') &&
-              !['package.json', 'package-lock.json', 'README.md'].includes(f.name)
-            )
-            .map(f => {
-              const baseName = f.name.replace(/\.(gs|js|ts|html|json)$/, '');
-              return {
-                name: baseName,
-                type: f.name.endsWith('.html') ? 'HTML'
-                     : f.name.endsWith('.json') ? 'JSON'
-                     : 'SERVER_JS',
-                source: fs.readFileSync(f.path, 'utf8')
-              };
-            });
+          const allFiles = walkSync('.');
+          allFiles.forEach(f => {
+            if (f.endsWith('.gs') || f.endsWith('.js')) {
+              files.push({ name: f, type: 'SERVER_JS', source: fs.readFileSync(f, 'utf8') });
+            } else if (f.endsWith('.html')) {
+              files.push({ name: f, type: 'HTML', source: fs.readFileSync(f, 'utf8') });
+            } else if (f.endsWith('appsscript.json')) {
+              files.push({ name: 'appsscript', type: 'JSON', source: fs.readFileSync(f, 'utf8') });
+            }
+          });
 
           (async () => {
             try {
               await script.projects.updateContent({
-                scriptId: SCRIPT_ID,
-                requestBody: {files}
+                scriptId: process.env.SCRIPT_ID,
+                requestBody: { files }
               });
               console.log('✅ Deployed to Google Apps Script');
             } catch (err) {
@@ -92,5 +79,3 @@ jobs:
             }
           })();
           JS
-        env:
-          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
