@@ -22,6 +22,7 @@ button { background:var(--brand); color:#fff;}
 button.secondary { background:#eee; color:#333;}
 button.danger { background:#d32f2f; color:#fff;}
 button:hover { opacity:0.9;}
+.btn-compact { padding:4px 8px; font-size:0.8rem; }
 .pill { display:inline-block; padding:4px 10px; font-size:.85rem; border-radius:999px; background:var(--accent); color:var(--brand);}
 .autocomplete-list { position:absolute; background:#fff; border:1px solid #ccc; border-radius:6px;
   max-height:220px; overflow-y:auto; width:260px; box-shadow:0 2px 6px rgba(0,0,0,.1); z-index:100;}
@@ -32,6 +33,34 @@ button:hover { opacity:0.9;}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
 .record .muted { font-size:0.85rem; color:#666;}
 .record .toolbar { margin-top:6px;}
+
+.record .text { margin:6px 0; font-size:0.92rem; white-space:pre-wrap; line-height:1.5; }
+.record .attachments { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; }
+.record .attachments a { display:inline-flex; align-items:center; gap:4px; padding:4px 8px; font-size:0.8rem; border-radius:999px; background:#f0f4ff; color:var(--brand); text-decoration:none; }
+.record .attachments a:hover { background:#dbe5ff; }
+.search-toolbar { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0 4px; }
+.search-toolbar label { font-size:0.85rem; color:#666; display:flex; align-items:center; gap:6px; }
+.search-toolbar input[type=date], .search-toolbar input[type=text] { font-size:0.85rem; }
+.media-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); }
+.media-card { border:1px solid #ddd; border-radius:8px; overflow:hidden; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.media-card a { display:block; color:inherit; text-decoration:none; }
+.media-card img { width:100%; height:100px; object-fit:cover; display:block; background:#f6f8fb; }
+.media-card .media-icon { height:100px; display:flex; align-items:center; justify-content:center; font-size:1.8rem; background:#f6f8fb; }
+.media-card .media-meta { padding:8px; font-size:0.75rem; color:#555; }
+.media-card .media-meta .name { font-weight:600; color:#333; margin-bottom:4px; }
+.dashboard-table table { width:100%; border-collapse:collapse; }
+.dashboard-table th, .dashboard-table td { text-align:left; padding:6px 4px; font-size:0.82rem; border-bottom:1px solid #eee; }
+.dashboard-table tr.status-alert { background:#ffebee; }
+.dashboard-table tr.status-ok { background:#f1f8e9; }
+.dashboard-table tr.selected { outline:2px solid var(--brand); }
+.dashboard-table .status-label { font-weight:600; }
+.dashboard-table .status-ok .status-label { color:#2e7d32; }
+.dashboard-table .status-alert .status-label { color:#c62828; }
+.dashboard-table .actions { text-align:right; }
+.dashboard-table a.link-button { display:inline-block; padding:4px 8px; border-radius:6px; background:#eee; color:#333; text-decoration:none; font-size:0.78rem; }
+.dashboard-table a.link-button:hover { background:#ddd; }
+.muted { color:#666; font-size:0.8rem; }
+  
 #mediaGallery { min-height:80px; }
 .media-grid { display:flex; flex-direction:column; gap:8px; }
 .media-item { background:#f7f9ff; border:1px solid #dbe6f6; border-radius:8px; padding:8px 10px; }
@@ -131,6 +160,27 @@ button:hover { opacity:0.9;}
       <!-- 過去の記録 -->
       <div class="card">
         <h2>過去の記録</h2>
+        <div class="search-toolbar">
+          <label>種別
+            <select id="filterKind">
+              <option value="all">すべて</option>
+              <option value="訪問">訪問</option>
+              <option value="電話">電話</option>
+              <option value="施設面談">施設面談</option>
+              <option value="通所観察">通所観察</option>
+              <option value="サービス担当者会議">サービス担当者会議</option>
+              <option value="その他">その他</option>
+            </select>
+          </label>
+          <label>開始
+            <input type="date" id="filterDateFrom">
+          </label>
+          <label>終了
+            <input type="date" id="filterDateTo">
+          </label>
+          <input type="text" id="filterText" placeholder="本文検索（キーワード）" style="flex:1; min-width:160px;">
+          <button id="btnClearFilters" class="secondary btn-compact">クリア</button>
+        </div>
         <div id="recordList" class="muted">利用者を選択してください</div>
       </div>
     </div>
@@ -139,128 +189,460 @@ button:hover { opacity:0.9;}
         <h2>添付ギャラリー</h2>
         <div id="mediaGallery" class="muted">利用者を選択してください</div>
       </div>
+      <div class="card">
+        <h2>ダッシュボード</h2>
+        <div id="dashboardStatus" class="muted">読込中…</div>
+        <div id="dashboardTable" class="dashboard-table"></div>
+      </div>
     </aside>
   </div>
 </div>
 
 <script>
-let memberId=null, memberName="";
-let memberList=[];
+let memberId = null, memberName = "";
+let memberList = [];
+let recordsCache = [];
+let dashboardState = { data: [], monthLabel: "" };
 
-// ===== 候補リスト取得 =====
-function refreshMemberList(){
-  google.script.run.withSuccessHandler(list=>{
+function toHalfDigits(s) {
+  return String(s || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+
+const queryParams = new URLSearchParams(window.location.search);
+let initialMemberId = (() => {
+  const raw = queryParams.get("id") || "";
+  if (!raw) return "";
+  const half = toHalfDigits(raw.trim());
+  if (!half) return "";
+  if (/^\d{1,4}$/.test(half)) return ("0000" + half).slice(-4);
+  return "";
+})();
+
+function escapeHtml(value) {
+  const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
+  return String(value ?? "").replace(/[&<>"']/g, ch => map[ch]);
+}
+
+function callGoogle(functionName, ...args) {
+  return new Promise((resolve, reject) => {
+    try {
+      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(err => reject(err));
+      runner[functionName](...args);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve({
+        base64,
+        mimeType: file.type || "application/octet-stream",
+        name: file.name || "attachment"
+      });
+    };
+    reader.onerror = () => reject(reader.error || new Error("ファイルの読み込みに失敗しました"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getRecordTimestamp(record) {
+  if (record && typeof record.timestamp === "number" && !isNaN(record.timestamp)) {
+    return record.timestamp;
+  }
+  if (record && record.date instanceof Date && !isNaN(record.date.getTime())) {
+    return record.date.getTime();
+  }
+  const raw = record && (record.dateValue || record.dateText || record.date);
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return isNaN(parsed) ? null : parsed;
+}
+
+function normalizeRecord(record) {
+  const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+  return {
+    ...record,
+    attachments,
+    timestamp: getRecordTimestamp(record)
+  };
+}
+
+function buildAttachmentViewUrl(att) {
+  if (!att) return "#";
+  if (att.url) return att.url;
+  if (att.fileId) return "https://drive.google.com/file/d/" + att.fileId + "/view";
+  return "#";
+}
+
+function buildAttachmentThumbnailUrl(att) {
+  if (!att) return "";
+  if (att.fileId) {
+    return "https://drive.google.com/thumbnail?id=" + att.fileId + "&sz=w200";
+  }
+  return "";
+}
+
+function refreshMemberList() {
+  google.script.run.withSuccessHandler(list => {
     memberList = Array.isArray(list) ? list : [];
+    if (initialMemberId && !memberId) {
+      const hit = memberList.find(m => m.id === initialMemberId);
+      if (hit) {
+        selectMember(hit.id, hit.name);
+        initialMemberId = "";
+      } else if (/^\d{4}$/.test(initialMemberId)) {
+        selectMember(initialMemberId, "");
+        initialMemberId = "";
+      }
+    }
+  }).withFailureHandler(err => {
+    console.error("member list error", err);
   }).getMemberList();
 }
-refreshMemberList();
 
-// ===== ユーティリティ =====
-function toHalfDigits(s){ return String(s||"").replace(/[０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
-
-// ===== オートコンプリート =====
-const input=document.getElementById("memberIdInput");
-const listBox=document.getElementById("autocompleteList");
-
-input.addEventListener("input",()=>{
-  const qRaw=input.value.trim();
-  if(!qRaw){ listBox.style.display="none"; return; }
-  const q=toHalfDigits(qRaw);
-  const hits=memberList.filter(m=>m.id.includes(q)||m.name.includes(qRaw));
-  if(!hits.length){ listBox.style.display="none"; return; }
-  listBox.innerHTML=hits.map(m=>`<div class="autocomplete-item" data-id="${m.id}" data-name="${m.name}">${m.id}　${m.name}</div>`).join("");
-  listBox.style.display="block";
-});
-listBox.addEventListener("click",e=>{
-  const item=e.target.closest(".autocomplete-item");
-  if(!item) return;
-  selectMember(item.dataset.id,item.dataset.name);
-});
-input.addEventListener("keydown",e=>{
-  if(e.key==="Enter"){ e.preventDefault(); resolveInput(); }
-});
-input.addEventListener("blur",()=>{ setTimeout(resolveInput,100); });
-
-function resolveInput(){
-  const val=input.value.trim();
-  if(!val) return;
-  const half=toHalfDigits(val);
-  const hit=memberList.find(m=>m.id===half||m.name===val);
-  if(hit){ selectMember(hit.id,hit.name); return; }
-  if(/^\d{4}$/.test(half)){ selectMember(half,""); return; }
-  document.getElementById("idStatus").textContent="候補が見つかりません";
+function loadDashboard() {
+  const statusEl = document.getElementById("dashboardStatus");
+  const container = document.getElementById("dashboardTable");
+  statusEl.textContent = "読込中…";
+  container.innerHTML = "";
+  callGoogle("getDashboardSummary").then(res => {
+    if (!res || res.status !== "success") {
+      statusEl.textContent = "エラー: " + (res && res.message ? res.message : "取得に失敗しました");
+      dashboardState = { data: [], monthLabel: "" };
+      return;
+    }
+    dashboardState = {
+      data: Array.isArray(res.data) ? res.data : [],
+      monthLabel: res.monthLabel || ""
+    };
+    statusEl.textContent = dashboardState.monthLabel ? "対象月：" + dashboardState.monthLabel : "";
+    renderDashboard();
+  }).catch(err => {
+    console.error("dashboard error", err);
+    statusEl.textContent = "エラー: " + (err && err.message ? err.message : err);
+    dashboardState = { data: [], monthLabel: "" };
+  });
 }
-function selectMember(id,name){
-  memberId=id; memberName=name;
-  input.value=`${id}${name?"　"+name:""}`;
-  listBox.style.display="none";
-  document.getElementById("idStatus").textContent=`選択中: ${id}${name?"　"+name:""}`;
-  document.getElementById("memberTag").textContent=`${id}${name?"　"+name:""}`;
-  document.getElementById("mainArea").style.display="";
+
+function renderDashboard() {
+  const container = document.getElementById("dashboardTable");
+  const data = dashboardState.data || [];
+  if (!data.length) {
+    container.innerHTML = "<div class=\"muted\">データがありません</div>";
+    return;
+  }
+  const rows = data.map(entry => {
+    const statusOk = Number(entry.countThisMonth || 0) > 0;
+    const rowClass = statusOk ? "status-ok" : "status-alert";
+    const selected = memberId && entry.id === memberId ? " selected" : "";
+    const statusLabel = statusOk ? "✅ 今月入力あり" : "⚠️ 今月未入力";
+    const latest = entry.latestDateText ? escapeHtml(entry.latestDateText) : "---";
+    const safeId = escapeHtml(entry.id || "");
+    const safeName = escapeHtml(entry.name || "");
+    const link = "?id=" + encodeURIComponent(entry.id || "");
+    return [
+      "<tr class=\"" + rowClass + selected + "\">",
+      "<td>" + safeId + "</td>",
+      "<td>" + safeName + "</td>",
+      "<td>" + (entry.countThisMonth || 0) + "</td>",
+      "<td>" + latest + "</td>",
+      "<td><span class=\"status-label\">" + statusLabel + "</span></td>",
+      "<td class=\"actions\">",
+      "<button class=\"secondary btn-compact dashboard-select\" data-id=\"" + safeId + "\" data-name=\"" + safeName + "\">表示</button>",
+      " <a class=\"link-button\" href=\"" + link + "\">詳細</a>",
+      "</td>",
+      "</tr>"
+    ].join("");
+  }).join("");
+  container.innerHTML = "<table><thead><tr><th>ID</th><th>氏名</th><th>今月の記録件数</th><th>最新記録日</th><th>ステータス</th><th class=\"actions\">操作</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  bindDashboardActions();
+}
+
+function bindDashboardActions() {
+  document.querySelectorAll(".dashboard-select").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.id || "";
+      const name = btn.dataset.name || "";
+      selectMember(toHalfDigits(id), name);
+    };
+  });
+}
+
+const input = document.getElementById("memberIdInput");
+const listBox = document.getElementById("autocompleteList");
+
+input.addEventListener("input", () => {
+  const qRaw = input.value.trim();
+  if (!qRaw) { listBox.style.display = "none"; return; }
+  const q = toHalfDigits(qRaw);
+  const hits = memberList.filter(m => m.id.includes(q) || m.name.includes(qRaw));
+  if (!hits.length) { listBox.style.display = "none"; return; }
+  listBox.innerHTML = hits.map(m => `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}</div>`).join("");
+  listBox.style.display = "block";
+});
+listBox.addEventListener("click", e => {
+  const item = e.target.closest(".autocomplete-item");
+  if (!item) return;
+  selectMember(item.dataset.id, item.dataset.name);
+});
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); resolveInput(); }
+});
+input.addEventListener("blur", () => { setTimeout(resolveInput, 100); });
+
+function resolveInput() {
+  const val = input.value.trim();
+  if (!val) return;
+  const half = toHalfDigits(val);
+  const hit = memberList.find(m => m.id === half || m.name === val);
+  if (hit) { selectMember(hit.id, hit.name); return; }
+  if (/^\d{4}$/.test(half)) { selectMember(half, ""); return; }
+  document.getElementById("idStatus").textContent = "候補が見つかりません";
+}
+
+function selectMember(id, name) {
+  memberId = id;
+  memberName = name || "";
+  input.value = `${id}${memberName ? "　" + memberName : ""}`;
+  listBox.style.display = "none";
+  document.getElementById("idStatus").textContent = `選択中: ${id}${memberName ? "　" + memberName : ""}`;
+  document.getElementById("memberTag").textContent = `${id}${memberName ? "　" + memberName : ""}`;
+  document.getElementById("mainArea").style.display = "";
+  document.getElementById("filterKind").value = "all";
+  document.getElementById("filterDateFrom").value = "";
+  document.getElementById("filterDateTo").value = "";
+  document.getElementById("filterText").value = "";
+  document.getElementById("summaryOutput").textContent = "ここに要約が表示されます";
+  document.getElementById("adviceOutput").textContent = "ここに提案が表示されます";
+  updateMediaGallery([]);
+  renderDashboard();
   loadRecords();
 }
 
-// ===== 新規利用者登録 =====
-document.getElementById("btnAddMember").onclick=()=>{
-  const id=document.getElementById("newMemberId").value.trim();
-  const name=document.getElementById("newMemberName").value.trim();
-  const status=document.getElementById("addMemberStatus");
-  if(!id||!name){ status.textContent="IDと氏名を入力してください"; return; }
-  google.script.run.withSuccessHandler(res=>{
-    if(res.status==="success"){
-      status.textContent=`登録しました: ${res.id} ${res.name}`;
-      document.getElementById("newMemberId").value="";
-      document.getElementById("newMemberName").value="";
+document.getElementById("btnAddMember").onclick = () => {
+  const idInput = document.getElementById("newMemberId");
+  const nameInput = document.getElementById("newMemberName");
+  const id = idInput.value.trim();
+  const name = nameInput.value.trim();
+  const status = document.getElementById("addMemberStatus");
+  if (!id || !name) { status.textContent = "IDと氏名を入力してください"; return; }
+  google.script.run.withSuccessHandler(res => {
+    if (res.status === "success") {
+      status.textContent = `登録しました: ${res.id} ${res.name}`;
+      idInput.value = "";
+      nameInput.value = "";
       refreshMemberList();
-    }else{
-      status.textContent="失敗: "+res.message;
+      loadDashboard();
+    } else {
+      status.textContent = "失敗: " + res.message;
     }
-  }).withFailureHandler(err=>{
-    status.textContent="エラー: "+(err.message||err);
-  }).addMember(id,name);
+  }).withFailureHandler(err => {
+    status.textContent = "エラー: " + (err && err.message ? err.message : err);
+  }).addMember(id, name);
 };
 
-// ===== 保存 =====
-document.getElementById("btnSave").onclick=()=>{
-  const text=document.getElementById("inputText").value.trim();
-  const files=document.getElementById("fileInput").files;
-  const status=document.getElementById("saveStatus");
-  if(!memberId){ alert("利用者を選択してください"); return; }
-  if(!text && files.length===0){ alert("内容または添付を入力してください"); return; }
-  status.textContent="送信中…";
-  if(files.length===0){
-    google.script.run.withSuccessHandler(()=>{
-      status.textContent="保存しました";
-      document.getElementById("inputText").value="";
-      loadRecords();
-    }).withFailureHandler(err=>{
-      status.textContent="失敗: "+(err.message||err);
-    }).saveRecordFromBrowser(memberId,text,new Date().toISOString(),"[]","その他");
+document.getElementById("btnSave").addEventListener("click", handleSave);
+
+async function handleSave() {
+  const text = document.getElementById("inputText").value.trim();
+  const files = Array.from(document.getElementById("fileInput").files || []);
+  const status = document.getElementById("saveStatus");
+  if (!memberId) { alert("利用者を選択してください"); return; }
+  if (!text && files.length === 0) { alert("内容または添付を入力してください"); return; }
+  status.textContent = "送信中…";
+  try {
+    const kind = document.getElementById("kindSelect").value;
+    const attachmentsMeta = [];
+    for (const file of files) {
+      const payload = await readFileAsBase64(file);
+      const uploadRes = await callGoogle("uploadAttachment_", memberId, payload.name, payload.mimeType, payload.base64);
+      if (!uploadRes || uploadRes.status !== "success") {
+        throw new Error(uploadRes && uploadRes.message ? uploadRes.message : "添付ファイルのアップロードに失敗しました");
+      }
+      attachmentsMeta.push({
+        fileId: uploadRes.fileId,
+        url: uploadRes.url,
+        name: uploadRes.name || payload.name,
+        mimeType: uploadRes.mimeType || payload.mimeType
+      });
+    }
+    await callGoogle("saveRecordFromBrowser", memberId, text, new Date().toISOString(), JSON.stringify(attachmentsMeta), kind);
+    status.textContent = "保存しました";
+    document.getElementById("inputText").value = "";
+    document.getElementById("fileInput").value = "";
+    setTimeout(() => { status.textContent = ""; }, 3000);
+    loadRecords();
+    loadDashboard();
+  } catch (err) {
+    status.textContent = "失敗: " + (err && err.message ? err.message : err);
   }
+}
+
+document.getElementById("btnSummary").onclick = () => {
+  if (!memberId) { alert("利用者を選択してください"); return; }
+  const fmt = document.getElementById("summaryFormat").value;
+  const days = document.getElementById("recordRange").value;
+  const out = document.getElementById("summaryOutput");
+  out.textContent = "生成中…";
+  google.script.run.withSuccessHandler(res => {
+    out.textContent = (res.status === "success") ? res.summary : ("失敗:" + res.message);
+  }).withFailureHandler(err => {
+    out.textContent = "失敗: " + (err && err.message ? err.message : err);
+  }).generateAISummaryForDays(memberId, fmt, days);
 };
 
-// ===== 要約 =====
-document.getElementById("btnSummary").onclick=()=>{
-  const fmt=document.getElementById("summaryFormat").value;
-  const days=document.getElementById("recordRange").value;
-  const out=document.getElementById("summaryOutput");
-  out.textContent="生成中…";
-  google.script.run.withSuccessHandler(res=>{
-    out.textContent=(res.status==="success")?res.summary:("失敗:"+res.message);
-  }).generateAISummaryForDays(memberId,fmt,days);
+document.getElementById("btnAdvice").onclick = () => {
+  if (!memberId) { alert("利用者を選択してください"); return; }
+  const horizon = document.getElementById("adviceHorizonSelect").value;
+  const days = document.getElementById("recordRange").value;
+  const out = document.getElementById("adviceOutput");
+  out.textContent = "生成中…";
+  google.script.run.withSuccessHandler(res => {
+    out.textContent = (res.status === "success") ? res.advice : ("失敗:" + res.message);
+  }).withFailureHandler(err => {
+    out.textContent = "失敗: " + (err && err.message ? err.message : err);
+  }).generateCareAdviceWithHorizon(memberId, days, horizon);
 };
 
-// ===== 提案 =====
-document.getElementById("btnAdvice").onclick=()=>{
-  const horizon=document.getElementById("adviceHorizonSelect").value;
-  const days=document.getElementById("recordRange").value;
-  const out=document.getElementById("adviceOutput");
-  out.textContent="生成中…";
-  google.script.run.withSuccessHandler(res=>{
-    out.textContent=(res.status==="success")?res.advice:("失敗:"+res.message);
-  }).generateCareAdviceWithHorizon(memberId,days,horizon);
-};
 
+function loadRecords() {
+  const days = document.getElementById("recordRange").value;
+  const list = document.getElementById("recordList");
+  if (!memberId) {
+    list.textContent = "利用者を選択してください";
+    recordsCache = [];
+    updateMediaGallery([]);
+    return;
+  }
+  list.textContent = "読込中…";
+  google.script.run.withSuccessHandler(res => {
+    if (!res || res.status !== "success") {
+      list.textContent = "エラー:" + (res && res.message ? res.message : "取得に失敗しました");
+      recordsCache = [];
+      updateMediaGallery([]);
+      return;
+    }
+    recordsCache = (res.records || []).map(normalizeRecord);
+    renderRecords();
+  }).withFailureHandler(err => {
+    list.textContent = "エラー: " + (err && err.message ? err.message : err);
+    recordsCache = [];
+    updateMediaGallery([]);
+  }).getRecordsByMemberId_v3(memberId, days);
+}
+
+document.getElementById("btnReload").onclick = () => loadRecords();
+document.getElementById("recordRange").addEventListener("change", () => {
+  if (memberId) loadRecords();
+});
+
+function renderRecords() {
+  const list = document.getElementById("recordList");
+  if (!memberId) {
+    list.textContent = "利用者を選択してください";
+    updateMediaGallery([]);
+    return;
+  }
+  if (!recordsCache.length) {
+    list.textContent = "記録なし";
+    updateMediaGallery([]);
+    return;
+  }
+  const filtered = filterRecords(recordsCache);
+  if (!filtered.length) {
+    list.textContent = "条件に一致する記録がありません";
+    updateMediaGallery([]);
+    return;
+  }
+  const html = filtered.map((r, idx) => {
+    const text = escapeHtml(r.text || "").replace(/\n/g, "<br>");
+    const attachmentsHtml = (r.attachments && r.attachments.length)
+      ? `<div class="attachments">${r.attachments.map((att, i) => renderAttachment(att, r, i)).join("")}</div>`
+      : "";
+    return `<div class="record" data-row="${r.rowIndex}">
+      <div><b>${escapeHtml(r.dateText || "")}</b>【${escapeHtml(r.kind || "")}】</div>
+      <div class="text">${text || '<span class="muted">（本文なし）</span>'}</div>
+      ${attachmentsHtml}
+      <div class="toolbar">
+        <button class="secondary btnEdit">編集</button>
+        <button class="danger btnDelete">削除</button>
+      </div>
+    </div>`;
+  }).join("");
+  list.innerHTML = html;
+  bindRecordActions();
+  updateMediaGallery(filtered);
+}
+
+function renderAttachment(att, record, index) {
+  const url = escapeHtml(buildAttachmentViewUrl(att));
+  const label = escapeHtml(att && att.name ? att.name : `添付${index + 1}`);
+  return `<a href="${url}" target="_blank" rel="noopener">📎 ${label}</a>`;
+}
+
+function filterRecords(records) {
+  const kind = document.getElementById("filterKind").value;
+  const text = document.getElementById("filterText").value.trim().toLowerCase();
+  const fromVal = document.getElementById("filterDateFrom").value;
+  const toVal = document.getElementById("filterDateTo").value;
+  const fromTime = fromVal ? new Date(fromVal + "T00:00:00").getTime() : null;
+  const toTime = toVal ? new Date(toVal + "T23:59:59").getTime() : null;
+  return records.filter(r => {
+    const ts = getRecordTimestamp(r);
+    if (kind && kind !== "all" && String(r.kind) !== kind) return false;
+    if (fromTime && (ts === null || ts < fromTime)) return false;
+    if (toTime && (ts === null || ts > toTime)) return false;
+    if (text) {
+      const hay = `${(r.text || "").toLowerCase()} ${(r.kind || "").toLowerCase()}`;
+      if (!hay.includes(text)) return false;
+    }
+    return true;
+  }).sort((a, b) => (getRecordTimestamp(b) || 0) - (getRecordTimestamp(a) || 0));
+}
+
+function updateMediaGallery(records) {
+  const gallery = document.getElementById("mediaGallery");
+  if (!records || !records.length) {
+    gallery.textContent = "添付ファイルはありません";
+    return;
+  }
+  const items = [];
+  records.forEach(r => {
+    if (Array.isArray(r.attachments)) {
+      r.attachments.forEach(att => items.push({ attachment: att, record: r }));
+    }
+  });
+  if (!items.length) {
+    gallery.textContent = "添付ファイルはありません";
+    return;
+  }
+  const cards = items.map(item => {
+    const att = item.attachment || {};
+    const rec = item.record || {};
+    const viewUrl = escapeHtml(buildAttachmentViewUrl(att));
+    const thumbUrlRaw = buildAttachmentThumbnailUrl(att);
+    const thumbUrl = thumbUrlRaw ? escapeHtml(thumbUrlRaw) : "";
+    const isImage = att.mimeType && att.mimeType.indexOf("image/") === 0;
+    const preview = (isImage && thumbUrl)
+      ? `<img src="${thumbUrl}" alt="${escapeHtml(att.name || "添付ファイル")}のサムネイル">`
+      : `<div class="media-icon">📎</div>`;
+    return `<div class="media-card">
+      <a href="${viewUrl}" target="_blank" rel="noopener">
+        ${preview}
+        <div class="media-meta">
+          <div class="name">${escapeHtml(att.name || "添付ファイル")}</div>
+          <div>${escapeHtml(rec.dateText || "")}</div>
+        </div>
+      </a>
+    </div>`;
+  }).join("");
+  gallery.innerHTML = `<div class="media-grid">${cards}</div>`;
+  
 // ===== 過去記録（編集・削除付き） =====
 function loadRecords(){
   const days=document.getElementById("recordRange").value;
@@ -301,32 +683,58 @@ function loadRecords(){
     setGalleryMessage("添付ファイルを読み込めませんでした");
   }).getRecordsByMemberId_v3(memberId,days);
 }
-document.getElementById("btnReload").onclick=()=>loadRecords();
 
-function bindRecordActions(){
-  document.querySelectorAll(".btnEdit").forEach(btn=>{
-    btn.onclick=()=>{
-      const rec=btn.closest(".record");
-      const row=rec.dataset.row;
-      const old=rec.querySelector(".text").textContent;
-      const nv=prompt("内容を修正:",old);
-      if(nv===null) return;
-      google.script.run.withSuccessHandler(()=>{
+function bindRecordActions() {
+  document.querySelectorAll(".btnEdit").forEach(btn => {
+    btn.onclick = () => {
+      const rec = btn.closest(".record");
+      if (!rec) return;
+      const row = rec.dataset.row;
+      const textEl = rec.querySelector(".text");
+      const oldText = textEl ? textEl.textContent : "";
+      const nv = prompt("内容を修正:", oldText);
+      if (nv === null) return;
+      google.script.run.withSuccessHandler(() => {
         loadRecords();
-      }).updateRecord(row,nv);
+      }).withFailureHandler(err => {
+        alert("更新に失敗しました: " + (err && err.message ? err.message : err));
+      }).updateRecord(row, nv);
     };
   });
-  document.querySelectorAll(".btnDelete").forEach(btn=>{
-    btn.onclick=()=>{
-      const rec=btn.closest(".record");
-      const row=rec.dataset.row;
-      if(!confirm("この記録を削除しますか？")) return;
-      google.script.run.withSuccessHandler(()=>{
+  document.querySelectorAll(".btnDelete").forEach(btn => {
+    btn.onclick = () => {
+      const rec = btn.closest(".record");
+      if (!rec) return;
+      const row = rec.dataset.row;
+      if (!confirm("この記録を削除しますか？")) return;
+      google.script.run.withSuccessHandler(() => {
         loadRecords();
+        loadDashboard();
+      }).withFailureHandler(err => {
+        alert("削除に失敗しました: " + (err && err.message ? err.message : err));
       }).deleteRecord(row);
     };
   });
 }
+
+
+["filterKind", "filterDateFrom", "filterDateTo"].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener("change", () => { renderRecords(); });
+  }
+});
+document.getElementById("filterText").addEventListener("input", () => { renderRecords(); });
+document.getElementById("btnClearFilters").addEventListener("click", () => {
+  document.getElementById("filterKind").value = "all";
+  document.getElementById("filterDateFrom").value = "";
+  document.getElementById("filterDateTo").value = "";
+  document.getElementById("filterText").value = "";
+  renderRecords();
+});
+
+refreshMemberList();
+loadDashboard();
 
 function setGalleryMessage(message){
   const gallery=document.getElementById("mediaGallery");
