@@ -17,14 +17,22 @@ jobs:
       - name: Install clasp
         run: npm install -g @google/clasp
 
-      - name: Restore clasp OAuth token
+      - name: Restore .clasprc.json
         env:
           CLASP_RC_JSON_B64: ${{ secrets.CLASP_RC_JSON_B64 }}
         run: |
+          mkdir -p "$HOME"
           echo "$CLASP_RC_JSON_B64" | tr -d '\r' | base64 -d > "$HOME/.clasprc.json"
-          echo "✅ Restored .clasprc.json"
-          head -c 80 "$HOME/.clasprc.json" && echo ""
+          echo "✅ .clasprc.json restored"
+          cat "$HOME/.clasprc.json" | head -c 200 || true
 
-      # リポジトリrootに .clasp.json があり、scriptId が正しいことが前提
-      - name: Push to GAS
+      - name: Ensure .clasp.json exists
+        run: |
+          if [ ! -f ".clasp.json" ]; then
+            echo "❌ .clasp.json not found in repo root"
+            exit 1
+          fi
+          cat .clasp.json
+
+      - name: Deploy
         run: clasp push -f
