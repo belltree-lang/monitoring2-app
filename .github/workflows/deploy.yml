@@ -2,11 +2,13 @@ name: Deploy to Google Apps Script
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
@@ -14,25 +16,10 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install clasp
-        run: npm install -g @google/clasp
+      - run: npm install -g @google/clasp
 
       - name: Restore .clasprc.json
-        env:
-          CLASP_RC_JSON_B64: ${{ secrets.CLASP_RC_JSON_B64 }}
-        run: |
-          mkdir -p "$HOME"
-          echo "$CLASP_RC_JSON_B64" | tr -d '\r' | base64 -d > "$HOME/.clasprc.json"
-          echo "✅ .clasprc.json restored"
-          cat "$HOME/.clasprc.json" | head -c 200 || true
+        run: echo "$CLASP_CREDENTIALS" | tr -d '\r' | base64 -d > "$HOME/.clasprc.json"
 
-      - name: Ensure .clasp.json exists
-        run: |
-          if [ ! -f ".clasp.json" ]; then
-            echo "❌ .clasp.json not found in repo root"
-            exit 1
-          fi
-          cat .clasp.json
-
-      - name: Deploy
+      - name: Push to Google Apps Script
         run: clasp push -f
