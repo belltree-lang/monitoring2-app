@@ -88,3 +88,8 @@ jobs:
 
       - name: Push to Google Apps Script
         run: clasp push -f
+
+      - name: Debug .clasprc.json
+        run: |
+          echo "=== ~/.clasprc.json ==="
+          cat $HOME/.clasprc.json || echo "No file"
