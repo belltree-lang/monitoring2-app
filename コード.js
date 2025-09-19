@@ -184,23 +184,149 @@ function fetchRecordsWithIndex_(memberId, days) {
 
     const rawDate = row[colDate];
     const d = (rawDate instanceof Date) ? rawDate : new Date(rawDate);
-    if (limitDate && d instanceof Date && !isNaN(d) && d < limitDate) continue;
+    const ts = (d instanceof Date && !isNaN(d.getTime())) ? d.getTime() : null;
+    if (limitDate && ts !== null && ts < limitDate.getTime()) continue;
 
     let attachments = [];
     try { attachments = JSON.parse(String(row[colAtt] || '[]')) || []; }
     catch(_e){ attachments = []; }
+    const normalizedAttachments = Array.isArray(attachments)
+      ? attachments.map(att => {
+          if (att && typeof att === 'object') {
+            const fileId = String(att.fileId || att.id || '').trim();
+            const url = String(att.url || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '') || '').trim();
+            const name = String(att.name || att.fileName || '').trim();
+            const mimeType = String(att.mimeType || att.type || '').trim();
+            return { fileId, url, name, mimeType };
+          }
+          const label = String(att ?? '').trim();
+          return { fileId: '', url: '', name: label, mimeType: '' };
+        })
+      : [];
 
     out.push({
       rowIndex : i + 1,
       dateText : toDateText(rawDate),
       kind     : String(row[colKind] ?? ''),
       text     : String(row[colRec]  ?? ''),
-      attachments
+      attachments: normalizedAttachments,
+      timestamp : ts
     });
   }
 
-  out.sort((a,b) => new Date(b.dateText).getTime() - new Date(a.dateText).getTime());
+  out.sort((a,b) => {
+    const ta = (typeof a.timestamp === 'number') ? a.timestamp : 0;
+    const tb = (typeof b.timestamp === 'number') ? b.timestamp : 0;
+    if (tb !== ta) return tb - ta;
+    return (b.rowIndex || 0) - (a.rowIndex || 0);
+  });
   return out;
+}
+
+/***** ── ダッシュボード要約 ─────────────────*****/
+function getDashboardSummary() {
+  const dbg = { spreadsheetId: SPREADSHEET_ID, sheetName: SHEET_NAME };
+  try {
+    const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthLabel = Utilities.formatDate(monthStart, tz, 'yyyy/MM');
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    const memberMap = {};
+    const memberSheet = ss.getSheetByName('ほのぼのID');
+    if (memberSheet) {
+      const mVals = memberSheet.getDataRange().getValues();
+      for (let i = 1; i < mVals.length; i++) {
+        const rawId = String(mVals[i][0] || '').replace(/[^0-9０-９]/g, '');
+        if (!rawId) continue;
+        const half = rawId.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+        const id = ('0000' + half).slice(-4);
+        if (!id) continue;
+        memberMap[id] = String(mVals[i][1] || '').trim();
+      }
+    }
+
+    const sh = ss.getSheetByName(SHEET_NAME);
+    if (!sh) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+    const vals = sh.getDataRange().getValues();
+    if (!vals || vals.length === 0) {
+      const emptyData = Object.keys(memberMap).map(id => ({
+        id,
+        name: memberMap[id] || '',
+        countThisMonth: 0,
+        latestTimestamp: null,
+        latestDateText: ''
+      }));
+      return { status: 'success', data: emptyData, monthLabel, debug: dbg };
+    }
+
+    const header = vals[0].map(v => String(v || '').trim());
+    const colDate = header.indexOf('日付');
+    const colId   = header.indexOf('利用者ID');
+    if (colDate < 0 || colId < 0) {
+      throw new Error(`ヘッダー不一致（必要: 日付/利用者ID, 実際: ${JSON.stringify(header)}）`);
+    }
+
+    const summaryMap = new Map();
+    const ensureEntry = (id) => {
+      if (!summaryMap.has(id)) {
+        summaryMap.set(id, {
+          id,
+          name: memberMap[id] || '',
+          countThisMonth: 0,
+          latestTimestamp: null,
+        });
+      }
+      return summaryMap.get(id);
+    };
+
+    for (let i = 1; i < vals.length; i++) {
+      const row = vals[i];
+      const rawId = String(row[colId] || '').trim();
+      if (!rawId) continue;
+      const half = rawId.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, '');
+      const id = ('0000' + half).slice(-4);
+      if (!id) continue;
+      const entry = ensureEntry(id);
+
+      const rawDate = row[colDate];
+      const d = (rawDate instanceof Date) ? rawDate : new Date(rawDate);
+      if (!(d instanceof Date) || isNaN(d.getTime())) continue;
+      const ts = d.getTime();
+      if (!entry.latestTimestamp || ts > entry.latestTimestamp) {
+        entry.latestTimestamp = ts;
+      }
+      if (ts >= monthStart.getTime()) {
+        entry.countThisMonth += 1;
+      }
+    }
+
+    Object.keys(memberMap).forEach(id => ensureEntry(id));
+
+    const data = Array.from(summaryMap.values()).map(entry => ({
+      id: entry.id,
+      name: entry.name,
+      countThisMonth: entry.countThisMonth,
+      latestTimestamp: entry.latestTimestamp || null,
+      latestDateText: entry.latestTimestamp
+        ? Utilities.formatDate(new Date(entry.latestTimestamp), tz, 'yyyy/MM/dd HH:mm')
+        : ''
+    }));
+
+    data.sort((a, b) => {
+      if (a.name && b.name && a.name !== b.name) return a.name.localeCompare(b.name, 'ja');
+      if (a.name && !b.name) return -1;
+      if (!a.name && b.name) return 1;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+
+    return { status: 'success', data, monthLabel, debug: dbg };
+  } catch (e) {
+    return { status: 'error', message: String(e && e.message || e), debug: dbg };
+  }
 }
 
 /***** ── AI要約／アドバイス（ケアマネ視点） ─────────────────*****/
