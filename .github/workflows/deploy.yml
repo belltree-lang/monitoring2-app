@@ -10,72 +10,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - name: Install dependencies
-        run: npm install googleapis@105
+      - name: Install clasp
+        run: npm install -g @google/clasp
 
-      - name: Deploy to Google Apps Script
+      - name: Setup credentials
+        run: echo "$CLASP_CREDENTIALS" | base64 -d > creds.json
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/creds.json
-          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
           CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
+
+      - name: Deploy to GAS
         run: |
-          echo "$CLASP_CREDENTIALS" | base64 -d > creds.json
-
-          node <<'JS'
-          const fs = require('fs');
-          const { google } = require('googleapis');
-
-          const key = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-
-          const auth = new google.auth.GoogleAuth({
-            credentials: key,
-            scopes: ['https://www.googleapis.com/auth/script.projects']
-          });
-
-          const script = google.script({ version: 'v1', auth });
-
-          // 対象フォルダ内のコードを収集
-          const files = [];
-          const walkSync = (dir, filelist = []) => {
-            const path = require('path');
-            const files = fs.readdirSync(dir);
-            files.forEach(file => {
-              if (fs.statSync(path.join(dir, file)).isDirectory()) {
-                filelist = walkSync(path.join(dir, file), filelist);
-              } else {
-                filelist.push(path.join(dir, file));
-              }
-            });
-            return filelist;
-          };
-
-          const allFiles = walkSync('.');
-          allFiles.forEach(f => {
-            if (f.endsWith('.gs') || f.endsWith('.js')) {
-              files.push({ name: f, type: 'SERVER_JS', source: fs.readFileSync(f, 'utf8') });
-            } else if (f.endsWith('.html')) {
-              files.push({ name: f, type: 'HTML', source: fs.readFileSync(f, 'utf8') });
-            } else if (f.endsWith('appsscript.json')) {
-              files.push({ name: 'appsscript', type: 'JSON', source: fs.readFileSync(f, 'utf8') });
-            }
-          });
-
-          (async () => {
-            try {
-              await script.projects.updateContent({
-                scriptId: process.env.SCRIPT_ID,
-                requestBody: { files }
-              });
-              console.log('✅ Deployed to Google Apps Script');
-            } catch (err) {
-              console.error('❌ Deployment failed:', err.response?.data || err.message);
-              process.exit(1);
-            }
-          })();
-          JS
+          npx clasp push -f --creds creds.json
+        env:
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
