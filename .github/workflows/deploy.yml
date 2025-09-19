@@ -1,89 +1,59 @@
-name: Deploy to Google Apps Script
+- name: Deploy to Apps Script via API
+  run: |
+    node <<'JS'
+    const fs = require('fs');
+    const {google} = require('googleapis');
 
-on:
-  push:
-    branches:
-      - main
+    const creds = JSON.parse(fs.readFileSync(process.env.HOME + '/creds.json', 'utf8'));
+    const scopes = [
+      'https://www.googleapis.com/auth/script.projects',
+      'https://www.googleapis.com/auth/script.deployments',
+      'https://www.googleapis.com/auth/script.webapp.deploy'
+    ];
+    const auth = new google.auth.JWT(
+      creds.client_email,
+      null,
+      creds.private_key,
+      scopes
+    );
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+    const script = google.script({version: 'v1', auth});
+    const SCRIPT_ID = process.env.SCRIPT_ID;
 
-    steps:
-      - uses: actions/checkout@v3
+    const walk = (dir) =>
+      fs.readdirSync(dir).flatMap(file => {
+        const path = `${dir}/${file}`;
+        if (fs.statSync(path).isDirectory()) return walk(path);
+        return {path, name: file};
+      });
 
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 18
+    // 重複防止: ファイル名は拡張子を除いたベース名に統一
+    const files = walk('.').filter(f =>
+      /\.(gs|js|ts|html|json)$/.test(f.name) &&
+      f.name !== 'package.json'
+    ).map(f => {
+      const baseName = f.name.replace(/\.(gs|js|ts|html|json)$/, '');
+      return {
+        name: baseName,
+        type: f.name.endsWith('.html') ? 'HTML'
+             : f.name.endsWith('.json') ? 'JSON'
+             : 'SERVER_JS',
+        source: fs.readFileSync(f.path, 'utf8')
+      };
+    });
 
-      - name: Install dependencies
-        run: |
-          npm install googleapis@105
-
-      # サービスアカウントJSONをBase64でSecretsに保存してある想定
-      - name: Decode service account credentials
-        env:
-          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
-        run: |
-          echo "$CLASP_CREDENTIALS" | base64 -d > $HOME/creds.json
-
-      - name: Deploy to Apps Script via API
-        run: |
-          node <<'JS'
-          const fs = require('fs');
-          const {google} = require('googleapis');
-
-          // 認証情報読み込み
-          const creds = JSON.parse(fs.readFileSync(process.env.HOME + '/creds.json', 'utf8'));
-          const scopes = [
-            'https://www.googleapis.com/auth/script.projects',
-            'https://www.googleapis.com/auth/script.deployments',
-            'https://www.googleapis.com/auth/script.webapp.deploy'
-          ];
-          const auth = new google.auth.JWT(
-            creds.client_email,
-            null,
-            creds.private_key,
-            scopes
-          );
-
-          const script = google.script({version: 'v1', auth});
-
-          // GAS プロジェクトのスクリプトID
-          const SCRIPT_ID = process.env.SCRIPT_ID;
-
-          // ディレクトリ内のファイルを再帰的に読み込み
-          const walk = (dir) =>
-            fs.readdirSync(dir).flatMap(file => {
-              const path = `${dir}/${file}`;
-              if (fs.statSync(path).isDirectory()) return walk(path);
-              return {path, name: file};
-            });
-
-          // 拡張子ごとに Apps Script API 用の形式に変換
-          const files = walk('.').filter(f =>
-            /\.(gs|js|ts|html|json)$/.test(f.name) &&
-            f.name !== 'package.json'
-          ).map(f => ({
-            name: f.name.replace(/\.(gs|js|ts|html)$/, ''),
-            type: f.name.endsWith('.html') ? 'HTML'
-                 : f.name.endsWith('.json') ? 'JSON'
-                 : 'SERVER_JS',
-            source: fs.readFileSync(f.path, 'utf8')
-          }));
-
-          (async () => {
-            try {
-              await script.projects.updateContent({
-                scriptId: SCRIPT_ID,
-                requestBody: {files}
-              });
-              console.log('✅ Deployed to Google Apps Script');
-            } catch (err) {
-              console.error('❌ Deployment failed:', err.response?.data || err.message);
-              process.exit(1);
-            }
-          })();
-          JS
-        env:
-          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+    (async () => {
+      try {
+        await script.projects.updateContent({
+          scriptId: SCRIPT_ID,
+          requestBody: {files}
+        });
+        console.log('✅ Deployed to Google Apps Script');
+      } catch (err) {
+        console.error('❌ Deployment failed:', err.response?.data || err.message);
+        process.exit(1);
+      }
+    })();
+    JS
+  env:
+    SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
