@@ -49,10 +49,10 @@ jobs:
 
           const script = google.script({version: 'v1', auth});
 
-          // GitHub Secrets に保存した SCRIPT_ID を利用
+          // GAS プロジェクトのスクリプトID
           const SCRIPT_ID = process.env.SCRIPT_ID;
 
-          // src/ 以下のファイルを読み込んでGAS API形式に変換
+          // ディレクトリ内のファイルを再帰的に読み込み
           const walk = (dir) =>
             fs.readdirSync(dir).flatMap(file => {
               const path = `${dir}/${file}`;
@@ -60,9 +60,15 @@ jobs:
               return {path, name: file};
             });
 
-          const files = walk('src').map(f => ({
+          // 拡張子ごとに Apps Script API 用の形式に変換
+          const files = walk('.').filter(f =>
+            /\.(gs|js|ts|html|json)$/.test(f.name) &&
+            f.name !== 'package.json'
+          ).map(f => ({
             name: f.name.replace(/\.(gs|js|ts|html)$/, ''),
-            type: f.name.endsWith('.html') ? 'HTML' : 'SERVER_JS',
+            type: f.name.endsWith('.html') ? 'HTML'
+                 : f.name.endsWith('.json') ? 'JSON'
+                 : 'SERVER_JS',
             source: fs.readFileSync(f.path, 'utf8')
           }));
 
