@@ -40,7 +40,8 @@ jobs:
             const scopes = [
               'https://www.googleapis.com/auth/script.projects',
               'https://www.googleapis.com/auth/script.deployments',
-              'https://www.googleapis.com/auth/script.webapp.deploy'
+              'https://www.googleapis.com/auth/script.webapp.deploy',
+              'https://www.googleapis.com/auth/drive'
             ];
             const client = new JWT({
               email: src.client_email,
@@ -82,14 +83,11 @@ jobs:
           }
           JS
 
-          echo "=== ~/.clasprc.json (token.head only) ==="
-          head -c 80 $HOME/.clasprc.json
-          echo ""
-
-      - name: Push to Google Apps Script
-        run: clasp push -f
-
+      # デバッグ: clasprc.json の確認
       - name: Debug .clasprc.json
         run: |
           echo "=== ~/.clasprc.json ==="
           cat $HOME/.clasprc.json || echo "No file"
+
+      - name: Push to Google Apps Script
+        run: clasp push -f
