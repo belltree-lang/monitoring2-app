@@ -48,28 +48,54 @@ button:hover { opacity:0.9;}
 .media-card .media-icon { height:100px; display:flex; align-items:center; justify-content:center; font-size:1.8rem; background:#f6f8fb; }
 .media-card .media-meta { padding:8px; font-size:0.75rem; color:#555; }
 .media-card .media-meta .name { font-weight:600; color:#333; margin-bottom:4px; }
-.dashboard-table table { width:100%; border-collapse:collapse; }
-.dashboard-table th, .dashboard-table td { text-align:left; padding:6px 4px; font-size:0.82rem; border-bottom:1px solid #eee; }
-.dashboard-table tr.status-alert { background:#ffebee; }
-.dashboard-table tr.status-ok { background:#f1f8e9; }
-.dashboard-table tr.selected { outline:2px solid var(--brand); }
-.dashboard-table .status-label { font-weight:600; }
-.dashboard-table .status-ok .status-label { color:#2e7d32; }
-.dashboard-table .status-alert .status-label { color:#c62828; }
-.dashboard-table .actions { text-align:right; }
-.dashboard-table a.link-button { display:inline-block; padding:4px 8px; border-radius:6px; background:#eee; color:#333; text-decoration:none; font-size:0.78rem; }
-.dashboard-table a.link-button:hover { background:#ddd; }
-.dashboard-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px; }
-.dashboard-sort label { display:flex; align-items:center; gap:6px; font-size:0.78rem; color:var(--muted); }
-.dashboard-sort select { font-size:0.8rem; padding:4px 6px; border-radius:6px; border:1px solid #ccd5e6; background:#fff; }
-.dashboard-index { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-.dashboard-index button { background:#e9f0fb; color:#1c3a6b; border:none; border-radius:999px; padding:4px 10px; font-size:0.75rem; cursor:pointer; transition:.2s; }
-.dashboard-index button:hover { opacity:0.85; }
-.dashboard-index button.active { background:var(--brand); color:#fff; }
-.dashboard-pagination { margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:flex-end; font-size:0.78rem; color:var(--muted); }
-.dashboard-pagination button { background:#e1e9fa; color:#1c3a6b; }
-.dashboard-pagination button:disabled { background:#f3f6fc; color:#9aa4b5; cursor:not-allowed; opacity:0.65; }
-.dashboard-pagination select { font-size:0.8rem; padding:4px 6px; border-radius:6px; border:1px solid #ccd5e6; background:#fff; }
+.dashboard-card h2 { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.dashboard-wrapper { display:flex; gap:14px; align-items:flex-start; margin-top:8px; }
+.dashboard-sidebar { width:48px; display:flex; flex-direction:column; gap:6px; position:sticky; top:12px; }
+.dashboard-sidebar .dashboard-index-btn { background:#e9f0fb; color:#1c3a6b; border:none; border-radius:12px; padding:8px 0; font-size:0.75rem; cursor:pointer; transition:.2s; width:100%; min-height:32px; }
+.dashboard-sidebar .dashboard-index-btn.active { background:var(--brand); color:#fff; box-shadow:0 2px 8px rgba(25,118,210,0.25); }
+.dashboard-sidebar .dashboard-index-btn:hover { opacity:0.85; }
+.dashboard-sidebar .dashboard-index-empty { font-size:0.75rem; color:#718096; writing-mode:vertical-rl; text-orientation:mixed; padding:8px 0; }
+.dashboard-main { flex:1; display:flex; flex-direction:column; gap:12px; }
+.dashboard-filters { background:#f5f8ff; border:1px solid #d3e0f6; border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.dashboard-filter-row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.dashboard-filter { display:flex; flex-direction:column; gap:6px; font-size:0.8rem; color:#4a5a75; min-width:160px; }
+.dashboard-filter label { font-weight:600; }
+.dashboard-filter select { font-size:0.85rem; padding:6px 8px; border-radius:6px; border:1px solid #ccd5e6; background:#fff; }
+.dashboard-care-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.dashboard-chip { border:1px solid #b8c7e6; background:#fff; color:#2b3d6d; border-radius:999px; padding:6px 12px; font-size:0.78rem; cursor:pointer; transition:.2s; }
+.dashboard-chip.active { background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 2px 8px rgba(25,118,210,0.25); }
+.dashboard-filter-summary { font-size:0.78rem; color:#5a6a85; }
+.dashboard-sections { display:flex; flex-direction:column; gap:12px; }
+.dashboard-section { border:1px solid #dbe6f6; border-radius:12px; background:#fff; overflow:hidden; }
+.dashboard-section-toggle { width:100%; background:#f1f6ff; border:none; display:flex; align-items:center; gap:10px; padding:12px 14px; font-size:0.95rem; color:#1f3763; font-weight:600; cursor:pointer; transition:.2s; text-align:left; }
+.dashboard-section-toggle::after { content:'▸'; margin-left:auto; font-size:1rem; color:#4a5a75; transition:transform .2s; }
+.dashboard-section-toggle.is-open { background:#e4efff; }
+.dashboard-section-toggle.is-open::after { content:'▾'; }
+.dashboard-section-count { font-size:0.78rem; color:#5a6a85; font-weight:500; }
+.dashboard-section-body { display:none; }
+.dashboard-section-body.is-open { display:block; }
+.dashboard-entry { display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px; padding:12px 16px; border-top:1px solid #e3ebf8; }
+.dashboard-entry:first-of-type { border-top:none; }
+.dashboard-entry.status-pending { background:#fff9f4; }
+.dashboard-entry.status-completed { background:#f5faf4; }
+.dashboard-entry.selected { box-shadow:0 0 0 2px rgba(25,118,210,0.2); border-radius:10px; }
+.dashboard-entry-main { flex:1; min-width:220px; }
+.dashboard-entry-name { font-weight:600; font-size:0.95rem; color:#1f2f4b; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.dashboard-entry-id { font-size:0.8rem; color:#5a6a85; background:#eef3ff; border-radius:6px; padding:2px 6px; }
+.dashboard-entry-meta { margin-top:6px; display:flex; flex-wrap:wrap; gap:8px 14px; font-size:0.8rem; color:#5a6a85; }
+.dashboard-entry-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-end; min-width:140px; }
+.dashboard-status-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:0.78rem; font-weight:600; }
+.dashboard-status-badge.pending { background:#ffe4d6; color:#c55400; }
+.dashboard-status-badge.completed { background:#e4f3e8; color:#2e7d32; }
+.dashboard-entry-actions .link-button { text-decoration:none; }
+.dashboard-index-note { font-size:0.75rem; color:#5a6a85; }
+@media(max-width:960px){
+  .dashboard-wrapper{flex-direction:column;}
+  .dashboard-sidebar{width:100%; position:static; flex-direction:row; flex-wrap:wrap; justify-content:flex-start; }
+  .dashboard-sidebar .dashboard-index-btn{flex:0 0 auto; padding:6px 10px; min-width:36px; }
+  .dashboard-sidebar .dashboard-index-empty{writing-mode:initial; text-align:center; width:100%; }
+  .dashboard-entry-actions{flex-direction:row; align-items:center; justify-content:flex-end; }
+}
 .muted { color:#666; font-size:0.8rem; }
   
 #mediaGallery { min-height:80px; }
@@ -251,10 +277,16 @@ body.external-mode { background:#f0f4ff; }
         <h2>添付ギャラリー</h2>
         <div id="mediaGallery" class="muted">利用者を選択してください</div>
       </div>
-      <div class="card">
-        <h2>ダッシュボード</h2>
+      <div class="card dashboard-card">
+        <h2>利用者ダッシュボード</h2>
         <div id="dashboardStatus" class="muted">読込中…</div>
-        <div id="dashboardTable" class="dashboard-table"></div>
+        <div class="dashboard-wrapper">
+          <nav id="dashboardIndex" class="dashboard-sidebar" aria-label="五十音ナビ"></nav>
+          <div class="dashboard-main">
+            <div id="dashboardFilters" class="dashboard-filters"></div>
+            <div id="dashboardTable" class="dashboard-sections"></div>
+          </div>
+        </div>
       </div>
       <div class="card share-card">
         <h2>外部共有</h2>
@@ -325,20 +357,64 @@ body.external-mode { background:#f0f4ff; }
 let memberId = null, memberName = "";
 let memberList = [];
 let recordsCache = [];
+const queryParams = new URLSearchParams(window.location.search);
+const externalToken = queryParams.get("share") || queryParams.get("token") || "";
+const isExternalMode = !!externalToken;
+
+const DASHBOARD_COLLAPSE_STORAGE_KEY = "monitoringDashboardCollapsed";
+
+function loadDashboardCollapsedSections() {
+  try {
+    const raw = sessionStorage.getItem(DASHBOARD_COLLAPSE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn("collapse-state-load", err);
+  }
+  return {};
+}
+
+function saveDashboardCollapsedSections() {
+  try {
+    const snapshot = dashboardState && dashboardState.collapsedSections ? dashboardState.collapsedSections : {};
+    sessionStorage.setItem(DASHBOARD_COLLAPSE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (err) {
+    console.warn("collapse-state-save", err);
+  }
+}
+
+function getInitialDashboardFiltersFromQuery() {
+  const validStatus = ["all", "pending", "completed"];
+  const statusParam = String(queryParams.get("monitoringStatus") || "").toLowerCase();
+  const status = validStatus.includes(statusParam) ? statusParam : "all";
+  const careManagers = queryParams.getAll("careManager").map(v => String(v || "").trim()).filter(Boolean);
+  return {
+    status,
+    careManagers
+  };
+}
+
 let dashboardState = {
   data: [],
   monthLabel: "",
   sortKey: "name",
   sortDir: "asc",
-  page: 1,
-  pageSize: 50,
-  activeInitial: null
+  activeInitial: null,
+  filters: getInitialDashboardFiltersFromQuery(),
+  collapsedSections: loadDashboardCollapsedSections(),
+  pendingScrollLabel: null
 };
 let externalShares = [];
 let shareFormOpen = false;
 const queryParams = new URLSearchParams(window.location.search);
 const externalToken = queryParams.get("share") || queryParams.get("token") || "";
 const isExternalMode = !!externalToken;
+
+let externalShares = [];
+let shareFormOpen = false;
 
 const DASHBOARD_KANA_GROUPS = [
   { label: "あ", members: ["ア", "イ", "ウ", "エ", "オ", "ァ", "ィ", "ゥ", "ェ", "ォ"] },
@@ -400,6 +476,89 @@ function getDashboardIndexGroups(sortedData) {
   return order.filter(label => exists.has(label));
 }
 
+function parseCareManagerList(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(/[、,，;；\/／\|｜\n]+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+
+function getDashboardCareManagerOptions(data) {
+  const set = new Set();
+  (Array.isArray(data) ? data : []).forEach(entry => {
+    parseCareManagerList(entry && entry.careManager).forEach(name => set.add(name));
+  });
+  const list = Array.from(set);
+  list.sort((a, b) => DASHBOARD_COLLATOR.compare(a, b));
+  return list;
+}
+
+function applyDashboardFilters(data) {
+  const filters = dashboardState && dashboardState.filters ? dashboardState.filters : {};
+  const status = filters.status || "all";
+  const careManagers = Array.isArray(filters.careManagers) ? filters.careManagers : [];
+  return (Array.isArray(data) ? data : []).filter(entry => {
+    if (!entry) return false;
+    const statusKey = (entry.monitoringStatus === "completed") ? "completed" : "pending";
+    if (status === "pending" && statusKey !== "pending") return false;
+    if (status === "completed" && statusKey !== "completed") return false;
+    if (careManagers.length) {
+      const entryManagers = parseCareManagerList(entry.careManager);
+      if (!entryManagers.some(name => careManagers.includes(name))) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function buildDashboardSections(data) {
+  const sections = [];
+  const groups = new Map();
+  (Array.isArray(data) ? data : []).forEach(entry => {
+    const label = getInitialGroupFromName(entry && (entry.name || entry.id));
+    if (!groups.has(label)) {
+      groups.set(label, []);
+    }
+    groups.get(label).push(entry);
+  });
+  const order = getDashboardIndexGroups(data);
+  order.forEach(label => {
+    sections.push({ label, entries: groups.get(label) || [] });
+  });
+  return sections;
+}
+
+function getDashboardSectionDomId(label) {
+  const base = String(label || "").trim();
+  const safe = base.replace(/[^0-9A-Za-z\u3040-\u30FF]/g, "").toLowerCase();
+  return `dashboard-section-${safe || "misc"}`;
+}
+
+function updateDashboardFilterQueryParams() {
+  if (isExternalMode) return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const filters = dashboardState && dashboardState.filters ? dashboardState.filters : {};
+    const status = filters.status || "all";
+    if (status && status !== "all") {
+      params.set("monitoringStatus", status);
+    } else {
+      params.delete("monitoringStatus");
+    }
+    params.delete("careManager");
+    const careManagers = Array.isArray(filters.careManagers) ? filters.careManagers : [];
+    careManagers.forEach(name => params.append("careManager", name));
+    const query = params.toString();
+    const newUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", newUrl);
+  } catch (err) {
+    console.warn("filter-query-update", err);
+  }
+}
+
 function getEntryLatestTimestamp(entry) {
   if (!entry) return NaN;
   const candidates = [
@@ -456,12 +615,13 @@ function getSortedDashboardData() {
 
 function jumpToDashboardInitial(label) {
   if (!label || dashboardState.sortKey !== "name") return;
-  const sorted = getSortedDashboardData();
-  const index = sorted.findIndex(entry => getInitialGroupFromName(entry && (entry.name || entry.id)) === label);
-  if (index < 0) return;
-  const pageSize = dashboardState.pageSize || 50;
-  dashboardState.page = Math.floor(index / pageSize) + 1;
   dashboardState.activeInitial = label;
+  if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
+    dashboardState.collapsedSections = {};
+  }
+  dashboardState.collapsedSections[label] = false;
+  dashboardState.pendingScrollLabel = label;
+  saveDashboardCollapsedSections();
   renderDashboard();
 }
 
@@ -568,199 +728,318 @@ function refreshMemberList() {
 function loadDashboard() {
   const statusEl = document.getElementById("dashboardStatus");
   const container = document.getElementById("dashboardTable");
-  statusEl.textContent = "読込中…";
-  container.innerHTML = "";
+  if (statusEl) statusEl.textContent = "読込中…";
+  if (container) container.innerHTML = "";
   callGoogle("getDashboardSummary").then(res => {
     if (!res || res.status !== "success") {
-      statusEl.textContent = "エラー: " + (res && res.message ? res.message : "取得に失敗しました");
+      if (statusEl) statusEl.textContent = "エラー: " + (res && res.message ? res.message : "取得に失敗しました");
       dashboardState.data = [];
       dashboardState.monthLabel = "";
-      dashboardState.page = 1;
       dashboardState.activeInitial = null;
-      container.innerHTML = "";
+      if (container) container.innerHTML = "";
       return;
     }
     dashboardState.data = Array.isArray(res.data) ? res.data : [];
     dashboardState.monthLabel = res.monthLabel || "";
-    dashboardState.page = 1;
     dashboardState.activeInitial = null;
-    statusEl.textContent = dashboardState.monthLabel ? "対象月：" + dashboardState.monthLabel : "";
     renderDashboard();
   }).catch(err => {
     console.error("dashboard error", err);
-    statusEl.textContent = "エラー: " + (err && err.message ? err.message : err);
+    if (statusEl) statusEl.textContent = "エラー: " + (err && err.message ? err.message : err);
     dashboardState.data = [];
     dashboardState.monthLabel = "";
-    dashboardState.page = 1;
     dashboardState.activeInitial = null;
   });
 }
 
 function renderDashboard() {
   const container = document.getElementById("dashboardTable");
+  const filterContainer = document.getElementById("dashboardFilters");
+  const indexContainer = document.getElementById("dashboardIndex");
+  const statusEl = document.getElementById("dashboardStatus");
   if (!container) return;
+
   const sortedData = getSortedDashboardData();
-  if (!sortedData.length) {
-    container.innerHTML = "<div class=\"muted\">データがありません</div>";
-    return;
+  const careManagerOptions = getDashboardCareManagerOptions(sortedData);
+  if (!dashboardState.filters || typeof dashboardState.filters !== "object") {
+    dashboardState.filters = { status: "all", careManagers: [] };
   }
-  const pageSize = dashboardState.pageSize || 50;
-  const total = sortedData.length;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  if (!Number.isFinite(dashboardState.page) || dashboardState.page < 1) {
-    dashboardState.page = 1;
+  const validStatus = ["all", "pending", "completed"];
+  if (!validStatus.includes(dashboardState.filters.status)) {
+    dashboardState.filters.status = "all";
   }
-  if (dashboardState.page > pageCount) {
-    dashboardState.page = pageCount;
+  if (!Array.isArray(dashboardState.filters.careManagers)) {
+    dashboardState.filters.careManagers = [];
   }
-  const page = dashboardState.page;
-  const offset = (page - 1) * pageSize;
-  const currentItems = sortedData.slice(offset, offset + pageSize);
-  const rangeStart = offset + 1;
-  const rangeEnd = offset + currentItems.length;
-  const showIndex = dashboardState.sortKey === "name";
-  let activeInitial = showIndex ? (dashboardState.activeInitial || "") : "";
-  if (showIndex) {
-    if (!activeInitial && currentItems.length) {
-      activeInitial = getInitialGroupFromName(currentItems[0] && (currentItems[0].name || currentItems[0].id));
+  const normalizedCare = dashboardState.filters.careManagers.filter(name => careManagerOptions.includes(name));
+  if (normalizedCare.length !== dashboardState.filters.careManagers.length) {
+    dashboardState.filters.careManagers = normalizedCare;
+  }
+
+  const filteredData = applyDashboardFilters(sortedData);
+  const showIndexNav = dashboardState.sortKey === "name";
+  const indexGroups = showIndexNav ? getDashboardIndexGroups(filteredData) : [];
+  const sections = buildDashboardSections(filteredData);
+
+  if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
+    dashboardState.collapsedSections = {};
+  }
+  let collapseChanged = false;
+  sections.forEach(section => {
+    if (!(section.label in dashboardState.collapsedSections)) {
+      dashboardState.collapsedSections[section.label] = true;
+      collapseChanged = true;
     }
-    dashboardState.activeInitial = activeInitial || null;
-  } else {
-    dashboardState.activeInitial = null;
-    activeInitial = "";
-  }
-  const indexGroups = showIndex ? getDashboardIndexGroups(sortedData) : [];
-  const rows = currentItems.map(entry => {
-    const statusOk = Number(entry.countThisMonth || 0) > 0;
-    const rowClass = statusOk ? "status-ok" : "status-alert";
-    const selected = memberId && entry.id === memberId ? " selected" : "";
-    const statusLabel = statusOk ? "✅ 今月入力あり" : "⚠️ 今月未入力";
-    const latest = entry.latestDateText ? escapeHtml(entry.latestDateText) : "---";
-    const safeId = escapeHtml(entry.id || "");
-    const safeName = escapeHtml(entry.name || "");
-    const link = "?id=" + encodeURIComponent(entry.id || "");
-    return [
-      "<tr class=\"" + rowClass + selected + "\">",
-      "<td>" + safeId + "</td>",
-      "<td>" + safeName + "</td>",
-      "<td>" + (entry.countThisMonth || 0) + "</td>",
-      "<td>" + latest + "</td>",
-      "<td><span class=\"status-label\">" + statusLabel + "</span></td>",
-      "<td class=\"actions\">",
-      "<button class=\"secondary btn-compact dashboard-select\" data-id=\"" + safeId + "\" data-name=\"" + safeName + "\">表示</button>",
-      " <a class=\"link-button\" href=\"" + link + "\">詳細</a>",
-      "</td>",
-      "</tr>"
-    ].join("");
-  }).join("");
-  const sortOptions = [
-    { value: "name:asc", label: "氏名（あ→ん順）" },
-    { value: "name:desc", label: "氏名（ん→あ順）" },
-    { value: "latest:desc", label: "最新記録日（新しい順）" },
-    { value: "latest:asc", label: "最新記録日（古い順）" },
-    { value: "id:asc", label: "ID（昇順）" },
-    { value: "id:desc", label: "ID（降順）" }
-  ];
-  const sortValue = `${dashboardState.sortKey}:${dashboardState.sortDir}`;
-  const sortHtml = sortOptions.map(opt => `<option value="${opt.value}"${opt.value === sortValue ? " selected" : ""}>${opt.label}</option>`).join("");
-  let indexSection = "";
-  if (showIndex && indexGroups.length) {
-    const buttons = indexGroups.map(label => `<button type="button" class="dashboard-index-btn${label === activeInitial ? " active" : ""}" data-index="${label}">${label}</button>`).join("");
-    indexSection = `<div class="dashboard-index" role="navigation" aria-label="イニシャルジャンプ">${buttons}</div>`;
-  } else if (!showIndex) {
-    indexSection = `<div class="dashboard-index muted">氏名順ソート時にジャンプが利用できます</div>`;
-  }
-  const paginationHtml = (() => {
-    if (pageCount <= 1) {
-      return `<div class="dashboard-pagination"><span>${rangeStart}〜${rangeEnd}件 / 全${total}件</span></div>`;
+  });
+  Object.keys(dashboardState.collapsedSections).forEach(label => {
+    if (!sections.some(section => section.label === label)) {
+      delete dashboardState.collapsedSections[label];
+      collapseChanged = true;
     }
-    const options = Array.from({ length: pageCount }, (_, i) => `<option value="${i + 1}"${i + 1 === page ? " selected" : ""}>${i + 1}</option>`).join("");
-    return `
-      <div class="dashboard-pagination">
-        <button type="button" class="btn-compact dashboard-page-prev"${page <= 1 ? " disabled" : ""}>前へ</button>
-        <span>ページ</span>
-        <select id="dashboardPageSelect">${options}</select>
-        <span>/ ${pageCount}</span>
-        <button type="button" class="btn-compact dashboard-page-next"${page >= pageCount ? " disabled" : ""}>次へ</button>
-        <span>${rangeStart}〜${rangeEnd}件 / 全${total}件</span>
+  });
+  if (memberId) {
+    const targetSection = sections.find(section => section.entries.some(entry => entry && entry.id === memberId));
+    if (targetSection) {
+      if (dashboardState.collapsedSections[targetSection.label] !== false) {
+        dashboardState.collapsedSections[targetSection.label] = false;
+        collapseChanged = true;
+      }
+      if (!dashboardState.pendingScrollLabel && dashboardState.activeInitial !== targetSection.label) {
+        dashboardState.activeInitial = targetSection.label;
+      }
+    }
+  }
+  if (collapseChanged) {
+    saveDashboardCollapsedSections();
+  }
+
+  if (!dashboardState.activeInitial || !sections.some(section => section.label === dashboardState.activeInitial)) {
+    dashboardState.activeInitial = sections.length ? sections[0].label : null;
+  }
+
+  if (statusEl) {
+    const monthLabel = dashboardState.monthLabel ? `対象月：${dashboardState.monthLabel}` : "";
+    const countLabel = `${filteredData.length}名 / 全${sortedData.length}名`;
+    statusEl.textContent = monthLabel ? `${monthLabel}（${countLabel}）` : countLabel;
+  }
+
+  if (filterContainer) {
+    const sortOptions = [
+      { value: "name:asc", label: "氏名（あ→ん順）" },
+      { value: "name:desc", label: "氏名（ん→あ順）" },
+      { value: "latest:desc", label: "最新記録日（新しい順）" },
+      { value: "latest:asc", label: "最新記録日（古い順）" },
+      { value: "id:asc", label: "ID（昇順）" },
+      { value: "id:desc", label: "ID（降順）" }
+    ];
+    const sortValue = `${dashboardState.sortKey}:${dashboardState.sortDir}`;
+    const sortHtml = sortOptions.map(opt => `<option value="${opt.value}"${opt.value === sortValue ? " selected" : ""}>${opt.label}</option>`).join("");
+
+    const statusOptions = [
+      { value: "all", label: "すべて" },
+      { value: "pending", label: "モニタリング未実施" },
+      { value: "completed", label: "モニタリング実施済み" }
+    ];
+    const statusHtml = statusOptions.map(opt => `<option value="${opt.value}"${opt.value === dashboardState.filters.status ? " selected" : ""}>${opt.label}</option>`).join("");
+
+    const chipsHtml = careManagerOptions.length
+      ? careManagerOptions.map(name => {
+          const active = dashboardState.filters.careManagers.includes(name);
+          return `<button type="button" class="dashboard-chip${active ? " active" : ""}" data-care="${escapeHtml(name)}" aria-pressed="${active}">${escapeHtml(name)}</button>`;
+        }).join("")
+      : `<div class="dashboard-index-note">担当者情報が未登録です</div>`;
+
+    filterContainer.innerHTML = `
+      <div class="dashboard-filter-row">
+        <div class="dashboard-filter">
+          <label for="dashboardSortSelect">並び替え</label>
+          <select id="dashboardSortSelect">${sortHtml}</select>
+        </div>
+        <div class="dashboard-filter">
+          <label for="dashboardStatusFilter">モニタリング状況</label>
+          <select id="dashboardStatusFilter">${statusHtml}</select>
+        </div>
+        <div class="dashboard-filter">
+          <label>担当ケアマネ</label>
+          <div class="dashboard-care-chips">
+            ${chipsHtml}
+          </div>
+        </div>
+        <button type="button" id="dashboardClearFilters" class="secondary btn-compact">フィルタをクリア</button>
       </div>
+      <div class="dashboard-filter-summary">絞り込み：${filteredData.length}名 / 全${sortedData.length}名</div>
     `;
-  })();
-  container.innerHTML = `
-    <div class="dashboard-controls">
-      <div class="dashboard-sort">
-        <label>並び替え
-          <select id="dashboardSort">${sortHtml}</select>
-        </label>
-      </div>
-      ${indexSection || ""}
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>氏名</th>
-          <th>今月の記録件数</th>
-          <th>最新記録日</th>
-          <th>ステータス</th>
-          <th class="actions">操作</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-    ${paginationHtml}
-  `;
+  }
+
+  if (!filteredData.length) {
+    container.innerHTML = '<div class="muted">該当する利用者がいません。</div>';
+  } else {
+    container.innerHTML = sections.map(section => {
+      const sectionId = getDashboardSectionDomId(section.label);
+      const collapsed = dashboardState.collapsedSections[section.label] !== false;
+      const isOpen = !collapsed;
+      const headerHtml = `
+        <button type="button" class="dashboard-section-toggle${isOpen ? " is-open" : ""}" data-section="${escapeHtml(section.label)}" aria-expanded="${isOpen}" aria-controls="${sectionId}-body">
+          <span>${escapeHtml(section.label)}</span>
+          <span class="dashboard-section-count">${section.entries.length}名</span>
+        </button>
+      `;
+      const rows = section.entries.map(entry => {
+        const statusKey = entry && entry.monitoringStatus === "completed" ? "completed" : "pending";
+        const statusText = statusKey === "completed" ? "モニタリング実施済み" : "モニタリング未実施";
+        const statusIcon = statusKey === "completed" ? "✅" : "⚠️";
+        const safeId = escapeHtml(entry.id || "");
+        const safeNameAttr = escapeHtml(entry.name || "");
+        const displayName = entry.name ? escapeHtml(entry.name) : "（氏名未登録）";
+        const latest = entry.latestDateText ? escapeHtml(entry.latestDateText) : "---";
+        const careRaw = String(entry.careManager || "").trim();
+        const careParts = parseCareManagerList(careRaw);
+        const careLabel = careParts.length
+          ? careParts.map(part => escapeHtml(part)).join('／')
+          : '<span class="muted">担当未設定</span>';
+        const count = Number(entry.countThisMonth || 0);
+        const link = `?id=${encodeURIComponent(entry.id || "")}`;
+        const selected = memberId && entry.id === memberId ? " selected" : "";
+        return `
+          <div class="dashboard-entry status-${statusKey}${selected}">
+            <div class="dashboard-entry-main">
+              <div class="dashboard-entry-name">
+                <span>${displayName}</span>
+                <span class="dashboard-entry-id">${safeId}</span>
+              </div>
+              <div class="dashboard-entry-meta">
+                <span>担当：${careLabel}</span>
+                <span>最新記録：${latest}</span>
+                <span>今月：${count}件</span>
+              </div>
+            </div>
+            <div class="dashboard-entry-actions">
+              <span class="dashboard-status-badge ${statusKey}">${statusIcon} ${statusText}</span>
+              <button class="secondary btn-compact dashboard-select" data-id="${safeId}" data-name="${safeNameAttr}">表示</button>
+              <a class="link-button" href="${link}">詳細</a>
+            </div>
+          </div>
+        `;
+      }).join("");
+      return `
+        <section class="dashboard-section" id="${sectionId}" data-section-label="${escapeHtml(section.label)}">
+          ${headerHtml}
+          <div class="dashboard-section-body${isOpen ? " is-open" : ""}" id="${sectionId}-body">
+            ${rows}
+          </div>
+        </section>
+      `;
+    }).join("");
+  }
+
+  if (indexContainer) {
+    if (!showIndexNav) {
+      indexContainer.innerHTML = `<div class="dashboard-index-note">氏名順ソート時にジャンプが利用できます</div>`;
+    } else if (!indexGroups.length) {
+      indexContainer.innerHTML = `<div class="dashboard-index-empty">該当なし</div>`;
+    } else {
+      indexContainer.innerHTML = indexGroups.map(label => {
+        const sectionId = getDashboardSectionDomId(label);
+        const active = dashboardState.activeInitial === label ? " active" : "";
+        return `<button type="button" class="dashboard-index-btn${active}" data-index="${escapeHtml(label)}" data-target="${sectionId}">${escapeHtml(label)}</button>`;
+      }).join("");
+    }
+  }
+
   bindDashboardActions();
-  bindDashboardControlEvents(pageCount);
+  bindDashboardUi();
+  updateDashboardFilterQueryParams();
+
+  if (dashboardState.pendingScrollLabel) {
+    const scrollId = getDashboardSectionDomId(dashboardState.pendingScrollLabel);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(scrollId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+    dashboardState.pendingScrollLabel = null;
+  }
 }
 
-function bindDashboardControlEvents(pageCount) {
+function bindDashboardUi() {
+  const filterContainer = document.getElementById("dashboardFilters");
+  if (filterContainer) {
+    if (!dashboardState.filters || typeof dashboardState.filters !== "object") {
+      dashboardState.filters = { status: "all", careManagers: [] };
+    }
+    const validStatus = ["all", "pending", "completed"];
+    const sortSelect = filterContainer.querySelector("#dashboardSortSelect");
+    if (sortSelect) {
+      sortSelect.onchange = (event) => {
+        const raw = String(event.target.value || "");
+        const [key, dir] = raw.split(":");
+        dashboardState.sortKey = key || "name";
+        dashboardState.sortDir = dir === "desc" ? "desc" : "asc";
+        dashboardState.activeInitial = null;
+        renderDashboard();
+      };
+    }
+    const statusSelect = filterContainer.querySelector("#dashboardStatusFilter");
+    if (statusSelect) {
+      statusSelect.onchange = (event) => {
+        const value = String(event.target.value || "all");
+        dashboardState.filters.status = validStatus.includes(value) ? value : "all";
+        renderDashboard();
+      };
+    }
+    filterContainer.querySelectorAll(".dashboard-chip").forEach(btn => {
+      const name = btn.dataset.care || "";
+      btn.onclick = () => {
+        if (!name) return;
+        const current = Array.isArray(dashboardState.filters.careManagers) ? dashboardState.filters.careManagers.slice() : [];
+        const idx = current.indexOf(name);
+        if (idx >= 0) {
+          current.splice(idx, 1);
+        } else {
+          current.push(name);
+        }
+        dashboardState.filters.careManagers = current;
+        renderDashboard();
+      };
+    });
+    const clearBtn = filterContainer.querySelector("#dashboardClearFilters");
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        dashboardState.filters = { status: "all", careManagers: [] };
+        renderDashboard();
+      };
+    }
+  }
+
   const container = document.getElementById("dashboardTable");
-  if (!container) return;
-  const sortSelect = container.querySelector("#dashboardSort");
-  if (sortSelect) {
-    sortSelect.onchange = (event) => {
-      const raw = String(event.target.value || "");
-      const [key, dir] = raw.split(":");
-      dashboardState.sortKey = key || "name";
-      dashboardState.sortDir = dir === "desc" ? "desc" : "asc";
-      dashboardState.page = 1;
-      dashboardState.activeInitial = null;
-      renderDashboard();
-    };
+  if (container) {
+    container.querySelectorAll(".dashboard-section-toggle").forEach(btn => {
+      const label = btn.dataset.section || "";
+      btn.onclick = () => {
+        if (!label) return;
+        if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
+          dashboardState.collapsedSections = {};
+        }
+        const collapsed = dashboardState.collapsedSections[label] !== false;
+        if (collapsed) {
+          dashboardState.collapsedSections[label] = false;
+          dashboardState.activeInitial = label;
+        } else {
+          dashboardState.collapsedSections[label] = true;
+        }
+        saveDashboardCollapsedSections();
+        renderDashboard();
+      };
+    });
   }
-  container.querySelectorAll(".dashboard-index-btn").forEach(btn => {
-    const label = btn.dataset.index || "";
-    btn.onclick = () => { jumpToDashboardInitial(label); };
-  });
-  const prevBtn = container.querySelector(".dashboard-page-prev");
-  if (prevBtn) {
-    prevBtn.onclick = () => {
-      if (dashboardState.page <= 1) return;
-      dashboardState.page -= 1;
-      dashboardState.activeInitial = null;
-      renderDashboard();
-    };
-  }
-  const nextBtn = container.querySelector(".dashboard-page-next");
-  if (nextBtn) {
-    nextBtn.onclick = () => {
-      if (dashboardState.page >= pageCount) return;
-      dashboardState.page += 1;
-      dashboardState.activeInitial = null;
-      renderDashboard();
-    };
-  }
-  const pageSelect = container.querySelector("#dashboardPageSelect");
-  if (pageSelect) {
-    pageSelect.value = String(dashboardState.page || 1);
-    pageSelect.onchange = (event) => {
-      const value = Number(event.target.value || 1);
-      const clamped = Math.min(Math.max(Math.round(value) || 1, 1), pageCount);
-      dashboardState.page = clamped;
-      dashboardState.activeInitial = null;
-      renderDashboard();
-    };
+
+  const nav = document.getElementById("dashboardIndex");
+  if (nav) {
+    nav.querySelectorAll(".dashboard-index-btn").forEach(btn => {
+      const label = btn.dataset.index || "";
+      btn.onclick = () => { jumpToDashboardInitial(label); };
+    });
   }
 }
 
