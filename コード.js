@@ -246,7 +246,10 @@ function getDashboardSummary() {
         const half = rawId.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
         const id = ('0000' + half).slice(-4);
         if (!id) continue;
-        memberMap[id] = String(mVals[i][1] || '').trim();
+        const name = mVals[i].length > 1 ? String(mVals[i][1] || '').trim() : '';
+        const careRaw = mVals[i].length > 2 ? mVals[i][2] : '';
+        const careManager = careRaw == null ? '' : String(careRaw).trim();
+        memberMap[id] = { name, careManager };
       }
     }
 
@@ -254,13 +257,18 @@ function getDashboardSummary() {
     if (!sh) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
     const vals = sh.getDataRange().getValues();
     if (!vals || vals.length === 0) {
-      const emptyData = Object.keys(memberMap).map(id => ({
-        id,
-        name: memberMap[id] || '',
-        countThisMonth: 0,
-        latestTimestamp: null,
-        latestDateText: ''
-      }));
+      const emptyData = Object.keys(memberMap).map(id => {
+        const info = memberMap[id] || {};
+        return {
+          id,
+          name: info.name || '',
+          careManager: info.careManager || '',
+          countThisMonth: 0,
+          latestTimestamp: null,
+          latestDateText: '',
+          monitoringStatus: 'pending'
+        };
+      });
       return { status: 'success', data: emptyData, monthLabel, debug: dbg };
     }
 
@@ -273,13 +281,19 @@ function getDashboardSummary() {
 
     const summaryMap = new Map();
     const ensureEntry = (id) => {
+      const info = memberMap[id] || {};
       if (!summaryMap.has(id)) {
         summaryMap.set(id, {
           id,
-          name: memberMap[id] || '',
+          name: info.name || '',
+          careManager: info.careManager || '',
           countThisMonth: 0,
           latestTimestamp: null,
         });
+      } else {
+        const entry = summaryMap.get(id);
+        if (info.name && !entry.name) entry.name = info.name;
+        if (info.careManager) entry.careManager = info.careManager;
       }
       return summaryMap.get(id);
     };
@@ -307,15 +321,23 @@ function getDashboardSummary() {
 
     Object.keys(memberMap).forEach(id => ensureEntry(id));
 
-    const data = Array.from(summaryMap.values()).map(entry => ({
-      id: entry.id,
-      name: entry.name,
-      countThisMonth: entry.countThisMonth,
-      latestTimestamp: entry.latestTimestamp || null,
-      latestDateText: entry.latestTimestamp
-        ? Utilities.formatDate(new Date(entry.latestTimestamp), tz, 'yyyy/MM/dd HH:mm')
-        : ''
-    }));
+    const data = Array.from(summaryMap.values()).map(entry => {
+      const info = memberMap[entry.id] || {};
+      const name = entry.name || info.name || '';
+      const careManager = entry.careManager || info.careManager || '';
+      const latestTimestamp = entry.latestTimestamp || null;
+      return {
+        id: entry.id,
+        name,
+        careManager,
+        countThisMonth: entry.countThisMonth,
+        latestTimestamp,
+        latestDateText: latestTimestamp
+          ? Utilities.formatDate(new Date(latestTimestamp), tz, 'yyyy/MM/dd HH:mm')
+          : '',
+        monitoringStatus: entry.countThisMonth > 0 ? 'completed' : 'pending'
+      };
+    });
 
     data.sort((a, b) => {
       if (a.name && b.name && a.name !== b.name) return a.name.localeCompare(b.name, 'ja');
