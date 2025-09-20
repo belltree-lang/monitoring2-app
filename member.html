@@ -363,26 +363,41 @@ const isExternalMode = !!externalToken;
 
 const DASHBOARD_COLLAPSE_STORAGE_KEY = "monitoringDashboardCollapsed";
 
+function getAvailableStorages() {
+  const list = [];
+  if (typeof localStorage !== "undefined") list.push(localStorage);
+  if (typeof sessionStorage !== "undefined") list.push(sessionStorage);
+  return list;
+}
+
 function loadDashboardCollapsedSections() {
-  try {
-    const raw = sessionStorage.getItem(DASHBOARD_COLLAPSE_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
+  const storages = getAvailableStorages();
+  for (const storage of storages) {
+    try {
+      const raw = storage.getItem(DASHBOARD_COLLAPSE_STORAGE_KEY);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("collapse-state-load", err);
     }
-  } catch (err) {
-    console.warn("collapse-state-load", err);
   }
   return {};
 }
 
 function saveDashboardCollapsedSections() {
-  try {
-    const snapshot = dashboardState && dashboardState.collapsedSections ? dashboardState.collapsedSections : {};
-    sessionStorage.setItem(DASHBOARD_COLLAPSE_STORAGE_KEY, JSON.stringify(snapshot));
-  } catch (err) {
-    console.warn("collapse-state-save", err);
+  const storages = getAvailableStorages();
+  const snapshot = dashboardState && dashboardState.collapsedSections ? dashboardState.collapsedSections : {};
+  const json = JSON.stringify(snapshot);
+  for (const storage of storages) {
+    try {
+      storage.setItem(DASHBOARD_COLLAPSE_STORAGE_KEY, json);
+      return;
+    } catch (err) {
+      console.warn("collapse-state-save", err);
+    }
   }
 }
 
@@ -400,8 +415,6 @@ function getInitialDashboardFiltersFromQuery() {
 let dashboardState = {
   data: [],
   monthLabel: "",
-  sortKey: "name",
-  sortDir: "asc",
   activeInitial: null,
   filters: getInitialDashboardFiltersFromQuery(),
   collapsedSections: loadDashboardCollapsedSections(),
@@ -574,47 +587,29 @@ function getEntryLatestTimestamp(entry) {
 
 function getSortedDashboardData() {
   const data = Array.isArray(dashboardState.data) ? dashboardState.data.slice() : [];
-  const dir = dashboardState.sortDir === "desc" ? -1 : 1;
-  const sortKey = dashboardState.sortKey || "name";
   data.sort((a, b) => {
     const nameA = String(a && a.name || "").trim();
     const nameB = String(b && b.name || "").trim();
     const idA = String(a && a.id || "").trim();
     const idB = String(b && b.id || "").trim();
-    if (sortKey === "latest") {
-      const tsA = getEntryLatestTimestamp(a);
-      const tsB = getEntryLatestTimestamp(b);
-      const safeA = Number.isFinite(tsA) ? tsA : (dir === -1 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
-      const safeB = Number.isFinite(tsB) ? tsB : (dir === -1 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
-      if (safeA !== safeB) {
-        return (safeA - safeB) * dir;
-      }
-      const cmpName = DASHBOARD_COLLATOR.compare(nameA, nameB);
-      if (cmpName !== 0) return cmpName;
-      return DASHBOARD_COLLATOR.compare(idA, idB);
-    }
-    if (sortKey === "id") {
-      const cmpId = DASHBOARD_COLLATOR.compare(idA, idB);
-      if (cmpId !== 0) return cmpId * dir;
-      return DASHBOARD_COLLATOR.compare(nameA, nameB);
-    }
     const cmpName = DASHBOARD_COLLATOR.compare(nameA, nameB);
-    if (cmpName !== 0) return cmpName * dir;
+    if (cmpName !== 0) return cmpName;
     const cmpId = DASHBOARD_COLLATOR.compare(idA, idB);
-    if (cmpId !== 0) return cmpId * dir;
+    if (cmpId !== 0) return cmpId;
     return 0;
   });
   return data;
 }
 
 function jumpToDashboardInitial(label) {
-  if (!label || dashboardState.sortKey !== "name") return;
-  dashboardState.activeInitial = label;
+  const safeLabel = String(label || "").trim();
+  if (!safeLabel) return;
+  dashboardState.activeInitial = safeLabel;
   if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
     dashboardState.collapsedSections = {};
   }
-  dashboardState.collapsedSections[label] = false;
-  dashboardState.pendingScrollLabel = label;
+  dashboardState.collapsedSections[safeLabel] = false;
+  dashboardState.pendingScrollLabel = safeLabel;
   saveDashboardCollapsedSections();
   renderDashboard();
 }
@@ -771,8 +766,7 @@ function renderDashboard() {
   }
 
   const filteredData = applyDashboardFilters(sortedData);
-  const showIndexNav = dashboardState.sortKey === "name";
-  const indexGroups = showIndexNav ? getDashboardIndexGroups(filteredData) : [];
+  const indexGroups = getDashboardIndexGroups(filteredData);
   const sections = buildDashboardSections(filteredData);
 
   if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
@@ -818,17 +812,6 @@ function renderDashboard() {
   }
 
   if (filterContainer) {
-    const sortOptions = [
-      { value: "name:asc", label: "氏名（あ→ん順）" },
-      { value: "name:desc", label: "氏名（ん→あ順）" },
-      { value: "latest:desc", label: "最新記録日（新しい順）" },
-      { value: "latest:asc", label: "最新記録日（古い順）" },
-      { value: "id:asc", label: "ID（昇順）" },
-      { value: "id:desc", label: "ID（降順）" }
-    ];
-    const sortValue = `${dashboardState.sortKey}:${dashboardState.sortDir}`;
-    const sortHtml = sortOptions.map(opt => `<option value="${opt.value}"${opt.value === sortValue ? " selected" : ""}>${opt.label}</option>`).join("");
-
     const statusOptions = [
       { value: "all", label: "すべて" },
       { value: "pending", label: "モニタリング未実施" },
@@ -845,10 +828,6 @@ function renderDashboard() {
 
     filterContainer.innerHTML = `
       <div class="dashboard-filter-row">
-        <div class="dashboard-filter">
-          <label for="dashboardSortSelect">並び替え</label>
-          <select id="dashboardSortSelect">${sortHtml}</select>
-        </div>
         <div class="dashboard-filter">
           <label for="dashboardStatusFilter">モニタリング状況</label>
           <select id="dashboardStatusFilter">${statusHtml}</select>
@@ -927,9 +906,7 @@ function renderDashboard() {
   }
 
   if (indexContainer) {
-    if (!showIndexNav) {
-      indexContainer.innerHTML = `<div class="dashboard-index-note">氏名順ソート時にジャンプが利用できます</div>`;
-    } else if (!indexGroups.length) {
+    if (!indexGroups.length) {
       indexContainer.innerHTML = `<div class="dashboard-index-empty">該当なし</div>`;
     } else {
       indexContainer.innerHTML = indexGroups.map(label => {
@@ -963,17 +940,6 @@ function bindDashboardUi() {
       dashboardState.filters = { status: "all", careManagers: [] };
     }
     const validStatus = ["all", "pending", "completed"];
-    const sortSelect = filterContainer.querySelector("#dashboardSortSelect");
-    if (sortSelect) {
-      sortSelect.onchange = (event) => {
-        const raw = String(event.target.value || "");
-        const [key, dir] = raw.split(":");
-        dashboardState.sortKey = key || "name";
-        dashboardState.sortDir = dir === "desc" ? "desc" : "asc";
-        dashboardState.activeInitial = null;
-        renderDashboard();
-      };
-    }
     const statusSelect = filterContainer.querySelector("#dashboardStatusFilter");
     if (statusSelect) {
       statusSelect.onchange = (event) => {
