@@ -225,6 +225,100 @@ function fetchRecordsWithIndex_(memberId, days) {
 }
 
 /***** ── ダッシュボード要約 ─────────────────*****/
+function normalizeMemberId_(value) {
+  if (value == null) return '';
+  const normalized = String(value).normalize('NFKC').replace(/[^0-9]/g, '');
+  if (!normalized) return '';
+  return ('0000' + normalized).slice(-4);
+}
+
+function normalizeMemberHeaderLabel_(label) {
+  if (label == null) return '';
+  return String(label)
+    .normalize('NFKC')
+    .replace(/[\s　]+/g, '')
+    .replace(/[()（）]/g, '')
+    .toLowerCase();
+}
+
+function findMemberSheetColumnIndex_(headerNormalized, candidates) {
+  if (!Array.isArray(headerNormalized)) return -1;
+  for (const candidate of candidates) {
+    const idx = headerNormalized.findIndex(label => label === candidate || label.includes(candidate));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function getMemberSheetColumnInfo_(values) {
+  const info = { header: [], headerNormalized: [], width: 0, idCol: -1, nameCol: -1, yomiCol: -1, careCol: -1 };
+  if (!Array.isArray(values) || !values.length) return info;
+
+  const header = Array.isArray(values[0]) ? values[0].map(v => String(v || '').trim()) : [];
+  const headerNormalized = header.map(normalizeMemberHeaderLabel_);
+  const width = header.length;
+
+  info.header = header;
+  info.headerNormalized = headerNormalized;
+  info.width = width;
+
+  const idCandidates = ['id', '利用者id', 'りようしゃid', 'ご利用者id', 'モニタリングid'];
+  let idCol = findMemberSheetColumnIndex_(headerNormalized, idCandidates);
+  if (idCol < 0) {
+    idCol = width > 0 ? 0 : -1;
+  }
+
+  const nameCandidates = ['氏名', '利用者名', '名前', '氏名漢字', 'しめい', 'なまえ'];
+  let nameCol = findMemberSheetColumnIndex_(headerNormalized, nameCandidates);
+  if (nameCol < 0) {
+    if (width > 1) {
+      nameCol = 1;
+      if (nameCol === idCol && width > nameCol + 1) {
+        nameCol = nameCol + 1;
+      }
+    } else if (width > 0) {
+      nameCol = 0;
+    }
+  }
+
+  const yomiCandidates = [
+    'ふりがな', 'よみ', 'よみがな', 'しめいふりがな', 'しめいよみ', 'しめいかな',
+    'かな', 'かなめい', 'ふりかな', 'めいかな', '氏名かな', '氏名ｶﾅ', '氏名カナ', 'しめいかな'
+  ];
+  const careCandidates = ['担当ケアマネ', '担当けあまね', 'ケアマネ', 'けあまね', '担当者', 'たんとうしゃ', '担当', 'たんとう'];
+
+  const yomiCol = findMemberSheetColumnIndex_(headerNormalized, yomiCandidates);
+  const careCol = findMemberSheetColumnIndex_(headerNormalized, careCandidates);
+
+  info.idCol = idCol;
+  info.nameCol = nameCol;
+  info.yomiCol = yomiCol;
+  info.careCol = careCol;
+  return info;
+}
+
+const SMALL_KANA_MAP_ = {
+  'ぁ':'あ','ぃ':'い','ぅ':'う','ぇ':'え','ぉ':'お',
+  'っ':'つ','ゃ':'や','ゅ':'ゆ','ょ':'よ','ゎ':'わ','ゕ':'か','ゖ':'け'
+};
+
+function toHiragana_(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/[ァ-ン]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+}
+
+function buildDashboardSortKey_(entry) {
+  if (!entry || typeof entry !== 'object') return '';
+  const primary = entry.yomi || entry.name || '';
+  const fallback = primary || entry.id || '';
+  const base = primary || fallback;
+  if (!base) return '';
+  return toHiragana_(base)
+    .replace(/[ぁ-ん]/g, ch => SMALL_KANA_MAP_[ch] || ch)
+    .replace(/[\s　]+/g, '');
+}
+
 function getDashboardSummary() {
   const dbg = { spreadsheetId: SPREADSHEET_ID, sheetName: SHEET_NAME };
   try {
@@ -240,16 +334,18 @@ function getDashboardSummary() {
     const memberSheet = ss.getSheetByName('ほのぼのID');
     if (memberSheet) {
       const mVals = memberSheet.getDataRange().getValues();
+      const layout = getMemberSheetColumnInfo_(mVals);
       for (let i = 1; i < mVals.length; i++) {
-        const rawId = String(mVals[i][0] || '').replace(/[^0-9０-９]/g, '');
-        if (!rawId) continue;
-        const half = rawId.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-        const id = ('0000' + half).slice(-4);
+        const row = mVals[i];
+        const idValue = (layout.idCol >= 0 && layout.idCol < row.length) ? row[layout.idCol] : '';
+        const id = normalizeMemberId_(idValue);
         if (!id) continue;
-        const name = mVals[i].length > 1 ? String(mVals[i][1] || '').trim() : '';
-        const careRaw = mVals[i].length > 2 ? mVals[i][2] : '';
+        const name = (layout.nameCol >= 0 && layout.nameCol < row.length) ? String(row[layout.nameCol] || '').trim() : '';
+        const rawYomi = (layout.yomiCol >= 0 && layout.yomiCol < row.length) ? row[layout.yomiCol] : '';
+        const yomi = rawYomi == null ? '' : String(rawYomi).normalize('NFKC').trim();
+        const careRaw = (layout.careCol >= 0 && layout.careCol < row.length) ? row[layout.careCol] : '';
         const careManager = careRaw == null ? '' : String(careRaw).trim();
-        memberMap[id] = { name, careManager };
+        memberMap[id] = { name, yomi, careManager };
       }
     }
 
@@ -286,6 +382,7 @@ function getDashboardSummary() {
         summaryMap.set(id, {
           id,
           name: info.name || '',
+          yomi: info.yomi || '',
           careManager: info.careManager || '',
           countThisMonth: 0,
           latestTimestamp: null,
@@ -293,6 +390,7 @@ function getDashboardSummary() {
       } else {
         const entry = summaryMap.get(id);
         if (info.name && !entry.name) entry.name = info.name;
+        if (info.yomi && !entry.yomi) entry.yomi = info.yomi;
         if (info.careManager) entry.careManager = info.careManager;
       }
       return summaryMap.get(id);
@@ -324,11 +422,13 @@ function getDashboardSummary() {
     const data = Array.from(summaryMap.values()).map(entry => {
       const info = memberMap[entry.id] || {};
       const name = entry.name || info.name || '';
+      const yomi = entry.yomi || info.yomi || '';
       const careManager = entry.careManager || info.careManager || '';
       const latestTimestamp = entry.latestTimestamp || null;
       return {
         id: entry.id,
         name,
+        yomi,
         careManager,
         countThisMonth: entry.countThisMonth,
         latestTimestamp,
@@ -340,9 +440,14 @@ function getDashboardSummary() {
     });
 
     data.sort((a, b) => {
-      if (a.name && b.name && a.name !== b.name) return a.name.localeCompare(b.name, 'ja');
-      if (a.name && !b.name) return -1;
-      if (!a.name && b.name) return 1;
+      const keyA = buildDashboardSortKey_(a);
+      const keyB = buildDashboardSortKey_(b);
+      const cmpKey = keyA.localeCompare(keyB, 'ja');
+      if (cmpKey !== 0) return cmpKey;
+      const nameA = String(a.name || '');
+      const nameB = String(b.name || '');
+      const cmpName = nameA.localeCompare(nameB, 'ja');
+      if (cmpName !== 0) return cmpName;
       return String(a.id || '').localeCompare(String(b.id || ''));
     });
 
@@ -673,21 +778,20 @@ function getMemberList() {
   const sh = ss.getSheetByName('ほのぼのID');
   if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
   const vals = sh.getDataRange().getValues();
+  const layout = getMemberSheetColumnInfo_(vals);
   const out = [];
 
   for (let i=1; i<vals.length; i++) {
-    let id   = String(vals[i][0] || '').trim();
-    let name = String(vals[i][1] || '').trim();
-
-    // ✅ 全角数字 → 半角数字に変換
-    id = id.replace(/[０-９]/g, function(s) {
-      return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-    });
-
-    // 4桁ゼロ埋め
-    id = ('0000' + id).slice(-4);
-
-    if (id) out.push({ id, name });
+    const row = vals[i];
+    const idValue = (layout.idCol >= 0 && layout.idCol < row.length) ? row[layout.idCol] : '';
+    const id = normalizeMemberId_(idValue);
+    if (!id) continue;
+    const name = (layout.nameCol >= 0 && layout.nameCol < row.length) ? String(row[layout.nameCol] || '').trim() : '';
+    const rawYomi = (layout.yomiCol >= 0 && layout.yomiCol < row.length) ? row[layout.yomiCol] : '';
+    const yomi = rawYomi == null ? '' : String(rawYomi).normalize('NFKC').trim();
+    const careRaw = (layout.careCol >= 0 && layout.careCol < row.length) ? row[layout.careCol] : '';
+    const careManager = careRaw == null ? '' : String(careRaw).trim();
+    out.push({ id, name, yomi, careManager });
   }
   return out;
 }

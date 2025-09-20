@@ -361,6 +361,37 @@ const queryParams = new URLSearchParams(window.location.search);
 const externalToken = queryParams.get("share") || queryParams.get("token") || "";
 const isExternalMode = !!externalToken;
 
+const DASHBOARD_OTHER_LABEL = "その他";
+const DASHBOARD_DIGIT_LABEL = "0-9";
+const DASHBOARD_LEGACY_LABEL_MAP = {
+  "あ": "あ行",
+  "か": "か行",
+  "さ": "さ行",
+  "た": "た行",
+  "な": "な行",
+  "は": "は行",
+  "ま": "ま行",
+  "や": "や行",
+  "ら": "ら行",
+  "わ": "わ行",
+  "#": DASHBOARD_OTHER_LABEL
+};
+
+const DASHBOARD_SMALL_KANA_MAP = {
+  "ぁ": "あ",
+  "ぃ": "い",
+  "ぅ": "う",
+  "ぇ": "え",
+  "ぉ": "お",
+  "っ": "つ",
+  "ゃ": "や",
+  "ゅ": "ゆ",
+  "ょ": "よ",
+  "ゎ": "わ",
+  "ゕ": "か",
+  "ゖ": "け"
+};
+
 const DASHBOARD_COLLAPSE_STORAGE_KEY = "monitoringDashboardCollapsed";
 
 function getAvailableStorages() {
@@ -368,6 +399,16 @@ function getAvailableStorages() {
   if (typeof localStorage !== "undefined") list.push(localStorage);
   if (typeof sessionStorage !== "undefined") list.push(sessionStorage);
   return list;
+}
+
+function normalizeDashboardCollapsedKeys(map) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return {};
+  const normalized = {};
+  Object.keys(map).forEach(key => {
+    const mapped = DASHBOARD_LEGACY_LABEL_MAP[key] || key;
+    normalized[mapped] = map[key];
+  });
+  return normalized;
 }
 
 function loadDashboardCollapsedSections() {
@@ -378,7 +419,7 @@ function loadDashboardCollapsedSections() {
       if (!raw) continue;
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed;
+        return normalizeDashboardCollapsedKeys(parsed);
       }
     } catch (err) {
       console.warn("collapse-state-load", err);
@@ -424,63 +465,123 @@ let externalShares = [];
 let shareFormOpen = false;
 
 const DASHBOARD_KANA_GROUPS = [
-  { label: "あ", members: ["ア", "イ", "ウ", "エ", "オ", "ァ", "ィ", "ゥ", "ェ", "ォ"] },
-  { label: "か", members: ["カ", "キ", "ク", "ケ", "コ", "ガ", "ギ", "グ", "ゲ", "ゴ"] },
-  { label: "さ", members: ["サ", "シ", "ス", "セ", "ソ", "ザ", "ジ", "ズ", "ゼ", "ゾ"] },
-  { label: "た", members: ["タ", "チ", "ツ", "テ", "ト", "ダ", "ヂ", "ヅ", "デ", "ド", "ッ"] },
-  { label: "な", members: ["ナ", "ニ", "ヌ", "ネ", "ノ"] },
-  { label: "は", members: ["ハ", "ヒ", "フ", "ヘ", "ホ", "バ", "ビ", "ブ", "ベ", "ボ", "パ", "ピ", "プ", "ペ", "ポ"] },
-  { label: "ま", members: ["マ", "ミ", "ム", "メ", "モ"] },
-  { label: "や", members: ["ヤ", "ユ", "ヨ", "ャ", "ュ", "ョ"] },
-  { label: "ら", members: ["ラ", "リ", "ル", "レ", "ロ"] },
-  { label: "わ", members: ["ワ", "ヲ", "ン"] }
+  { label: "あ行", chars: ["あ", "い", "う", "え", "お"] },
+  { label: "か行", chars: ["か", "き", "く", "け", "こ"] },
+  { label: "さ行", chars: ["さ", "し", "す", "せ", "そ"] },
+  { label: "た行", chars: ["た", "ち", "つ", "て", "と"] },
+  { label: "な行", chars: ["な", "に", "ぬ", "ね", "の"] },
+  { label: "は行", chars: ["は", "ひ", "ふ", "へ", "ほ"] },
+  { label: "ま行", chars: ["ま", "み", "む", "め", "も"] },
+  { label: "や行", chars: ["や", "ゆ", "よ"] },
+  { label: "ら行", chars: ["ら", "り", "る", "れ", "ろ"] },
+  { label: "わ行", chars: ["わ", "ゐ", "ゑ", "を", "ん", "ゎ"] }
 ];
 const DASHBOARD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const DASHBOARD_KANA_CHAR_TO_LABEL = (() => {
+  const map = new Map();
+  DASHBOARD_KANA_GROUPS.forEach(group => {
+    group.chars.forEach(ch => {
+      map.set(ch, group.label);
+    });
+  });
+  return map;
+})();
+const DASHBOARD_GROUP_ORDER = [
+  ...DASHBOARD_KANA_GROUPS.map(g => g.label),
+  ...DASHBOARD_ALPHABET,
+  DASHBOARD_DIGIT_LABEL,
+  DASHBOARD_OTHER_LABEL
+];
 const DASHBOARD_COLLATOR = new Intl.Collator(["ja", "en"], { sensitivity: "base", numeric: true, caseFirst: "false" });
 
-function toKatakanaChar(ch) {
-  if (!ch) return "";
-  const code = ch.charCodeAt(0);
-  if (code >= 0x3041 && code <= 0x3096) {
-    return String.fromCharCode(code + 0x60);
-  }
-  return ch;
+function toHiragana(value = "") {
+  return String(value)
+    .normalize("NFKC")
+    .replace(/[ァ-ン]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
 }
 
-function getInitialGroupFromName(name) {
-  const base = String(name || "").trim();
-  if (!base) return "#";
-  const firstChar = base[0].normalize("NFKC");
-  if (!firstChar) return "#";
-  const katakana = toKatakanaChar(firstChar);
-  for (const group of DASHBOARD_KANA_GROUPS) {
-    if (group.members.includes(katakana)) {
-      return group.label;
+function normalizeHiraganaBaseChar(ch) {
+  if (!ch) return "";
+  const base = ch.normalize("NFD")[0] || "";
+  return DASHBOARD_SMALL_KANA_MAP[base] || base;
+}
+
+function extractHeadChar(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const normalized = text.normalize("NFKC");
+  for (const ch of normalized) {
+    if (!ch) continue;
+    if (/[ぁ-んァ-ン]/.test(ch)) {
+      const hira = toHiragana(ch);
+      return normalizeHiraganaBaseChar(hira);
+    }
+    if (/[A-Za-z]/.test(ch)) {
+      return ch.toUpperCase();
+    }
+    if (/\d/.test(ch)) {
+      return ch;
     }
   }
-  const upper = firstChar.toUpperCase();
-  if (DASHBOARD_ALPHABET.includes(upper)) {
-    return upper;
+  return "";
+}
+
+function getEntryReadingCandidates(entry) {
+  if (!entry || typeof entry !== "object") return [];
+  const candidates = [
+    entry.yomi,
+    entry.reading,
+    entry.furigana,
+    entry.kana,
+    entry.nameKana,
+    entry.name
+  ];
+  return candidates.filter(value => typeof value === "string" && value.trim());
+}
+
+function getDashboardGroupLabel(entry) {
+  const candidates = [...getEntryReadingCandidates(entry), entry && entry.id];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const head = extractHeadChar(candidate);
+    if (!head) continue;
+    if (/[ぁ-ん]/.test(head)) {
+      const label = DASHBOARD_KANA_CHAR_TO_LABEL.get(head) || DASHBOARD_KANA_CHAR_TO_LABEL.get(normalizeHiraganaBaseChar(head));
+      return label || DASHBOARD_OTHER_LABEL;
+    }
+    if (/[A-Z]/.test(head)) {
+      return head;
+    }
+    if (/\d/.test(head)) {
+      return DASHBOARD_DIGIT_LABEL;
+    }
   }
-  if (/\d/.test(firstChar)) {
-    return "0-9";
+  return DASHBOARD_OTHER_LABEL;
+}
+
+function getEntryPreferredReading(entry) {
+  const candidates = getEntryReadingCandidates(entry);
+  if (candidates.length) {
+    return candidates[0];
   }
-  return "#";
+  return entry && entry.id ? String(entry.id) : "";
+}
+
+function getEntrySortKey(entry) {
+  const reading = getEntryPreferredReading(entry);
+  if (reading) {
+    return toHiragana(reading).replace(/[\s　]+/g, "");
+  }
+  return String(entry && entry.id || "").trim();
 }
 
 function getDashboardIndexGroups(sortedData) {
   const exists = new Set();
   (Array.isArray(sortedData) ? sortedData : []).forEach(entry => {
-    const label = getInitialGroupFromName(entry && (entry.name || entry.id));
+    const label = getDashboardGroupLabel(entry);
     exists.add(label);
   });
-  const order = [
-    ...DASHBOARD_KANA_GROUPS.map(g => g.label),
-    ...DASHBOARD_ALPHABET,
-    "0-9",
-    "#"
-  ];
-  return order.filter(label => exists.has(label));
+  return DASHBOARD_GROUP_ORDER.filter(label => exists.has(label));
 }
 
 function parseCareManagerList(value) {
@@ -525,7 +626,7 @@ function buildDashboardSections(data) {
   const sections = [];
   const groups = new Map();
   (Array.isArray(data) ? data : []).forEach(entry => {
-    const label = getInitialGroupFromName(entry && (entry.name || entry.id));
+    const label = getDashboardGroupLabel(entry);
     if (!groups.has(label)) {
       groups.set(label, []);
     }
@@ -540,7 +641,7 @@ function buildDashboardSections(data) {
 
 function getDashboardSectionDomId(label) {
   const base = String(label || "").trim();
-  const safe = base.replace(/[^0-9A-Za-z\u3040-\u30FF]/g, "").toLowerCase();
+  const safe = base.replace(/[^0-9A-Za-z\u3040-\u30FF\u3400-\u9FFF]/g, "").toLowerCase();
   return `dashboard-section-${safe || "misc"}`;
 }
 
@@ -588,15 +689,17 @@ function getEntryLatestTimestamp(entry) {
 function getSortedDashboardData() {
   const data = Array.isArray(dashboardState.data) ? dashboardState.data.slice() : [];
   data.sort((a, b) => {
+    const keyA = getEntrySortKey(a);
+    const keyB = getEntrySortKey(b);
+    const cmpKey = DASHBOARD_COLLATOR.compare(keyA, keyB);
+    if (cmpKey !== 0) return cmpKey;
     const nameA = String(a && a.name || "").trim();
     const nameB = String(b && b.name || "").trim();
-    const idA = String(a && a.id || "").trim();
-    const idB = String(b && b.id || "").trim();
     const cmpName = DASHBOARD_COLLATOR.compare(nameA, nameB);
     if (cmpName !== 0) return cmpName;
-    const cmpId = DASHBOARD_COLLATOR.compare(idA, idB);
-    if (cmpId !== 0) return cmpId;
-    return 0;
+    const idA = String(a && a.id || "").trim();
+    const idB = String(b && b.id || "").trim();
+    return DASHBOARD_COLLATOR.compare(idA, idB);
   });
   return data;
 }
@@ -698,7 +801,17 @@ function buildAttachmentThumbnailUrl(att) {
 
 function refreshMemberList() {
   google.script.run.withSuccessHandler(list => {
-    memberList = Array.isArray(list) ? list : [];
+    memberList = Array.isArray(list)
+      ? list.map(item => {
+          const entry = item && typeof item === "object" ? item : {};
+          const id = String(entry.id || "").trim();
+          const name = entry.name != null ? String(entry.name).trim() : "";
+          const yomi = entry.yomi != null ? String(entry.yomi).trim() : "";
+          const careManager = entry.careManager != null ? String(entry.careManager).trim() : "";
+          const yomiNormalized = yomi ? toHiragana(yomi).replace(/[\s　]+/g, "") : "";
+          return { id, name, yomi, careManager, yomiNormalized };
+        })
+      : [];
     if (initialMemberId && !memberId) {
       const hit = memberList.find(m => m.id === initialMemberId);
       if (hit) {
@@ -1022,9 +1135,18 @@ function setupSearchBox() {
     const qRaw = input.value.trim();
     if (!qRaw) { listBox.style.display = "none"; return; }
     const q = toHalfDigits(qRaw);
-    const hits = memberList.filter(m => m.id.includes(q) || m.name.includes(qRaw));
+    const qHira = toHiragana(qRaw).replace(/[\s　]+/g, "");
+    const hits = memberList.filter(m => {
+      const idMatch = m.id && q ? m.id.includes(q) : false;
+      const nameMatch = m.name && m.name.includes(qRaw);
+      const yomiMatch = qHira && m.yomiNormalized ? m.yomiNormalized.includes(qHira) : false;
+      return idMatch || nameMatch || yomiMatch;
+    });
     if (!hits.length) { listBox.style.display = "none"; return; }
-    listBox.innerHTML = hits.map(m => `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}</div>`).join("");
+    listBox.innerHTML = hits.map(m => {
+      const yomiLabel = m.yomi ? ` <span class="muted">(${escapeHtml(m.yomi)})</span>` : "";
+      return `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}${yomiLabel}</div>`;
+    }).join("");
     listBox.style.display = "block";
   });
   listBox.addEventListener("click", e => {
@@ -1042,7 +1164,14 @@ function resolveInput() {
   const val = input.value.trim();
   if (!val) return;
   const half = toHalfDigits(val);
-  const hit = memberList.find(m => m.id === half || m.name === val);
+  const hiraVal = toHiragana(val).replace(/[\s　]+/g, "");
+  const hit = memberList.find(m => {
+    if (m.id === half) return true;
+    if (m.name === val) return true;
+    if (m.yomi && m.yomi === val) return true;
+    if (hiraVal && m.yomiNormalized === hiraVal) return true;
+    return false;
+  });
   if (hit) { selectMember(hit.id, hit.name); return; }
   if (/^\d{4}$/.test(half)) { selectMember(half, ""); return; }
   document.getElementById("idStatus").textContent = "候補が見つかりません";
