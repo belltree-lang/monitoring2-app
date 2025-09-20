@@ -2,21 +2,24 @@ name: Claude Auto UI Fix
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   claude-auto-fix:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-      pull-requests: write
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repo with full history
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           ref: ${{ github.head_ref }}
 
       - name: Setup Node.js
@@ -27,49 +30,141 @@ jobs:
       - name: Install Claude CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Run Claude to refactor UI code
+      - name: Resolve changed files in PR (only UI-like files)
+        id: diff
+        run: |
+          # 変更ファイル一覧（追加/変更のみ）
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git diff --name-only --diff-filter=AM origin/${{ github.base_ref }}...HEAD > changed.txt
+
+          # 対象拡張子のみ抽出（.js/.jsx/.tsx/.css/.scss/.html などは必要に応じ調整）
+          awk '
+            /\.jsx$|\.js$|\.tsx$|\.css$|\.scss$|\.html$/ { print }
+          ' changed.txt > targets.txt || true
+
+          echo "Changed files:"
+          cat changed.txt || true
+          echo "Claude targets:"
+          cat targets.txt || true
+
+          # 出力（後続ステップで使えるように）
+          if [ -s targets.txt ]; then
+            echo "has_targets=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_targets=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Short-circuit if no target files
+        if: steps.diff.outputs.has_targets == 'false'
+        run: |
+          echo "No target UI files in this PR. Skipping Claude."
+          # 空の要約でも本文には最低限の説明を入れるため生成
+          printf "この自動PRはスキップされました。対象UIファイル（.js/.jsx/.tsx/.css/.scss/.html）の変更が検出されませんでした。\n" > claude-summary.md
+
+      - name: Run Claude to refactor and summarize (with retry)
+        if: steps.diff.outputs.has_targets == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          mkdir -p claude-changes
-          SUMMARY=""
+          set -euo pipefail
 
-          for file in $(find src/components -name "*.jsx"); do
-            echo "Refactoring $file..."
-            claude "以下のコードをモダンUIに改善してください。改善後のコードのみ出力してください:" < $file > $file.new
-            mv $file.new $file
+          # NUL区切りで安全にループ
+          # 非ASCIIパスも扱えるようにロケールは上で設定済み
+          python3 - <<'PY'
+import subprocess, shlex, os, sys, time, pathlib
 
-            # 改善内容の要約を生成
-            DESC=$(claude "次のコード変更について、UI/UX改善の観点から要約してください（100字以内、日本語で簡潔に）:" < $file)
-            SUMMARY="$SUMMARY\n- **$file**: $DESC"
-          done
+def run_claude(prompt, input_text, retries=3):
+    for i in range(retries):
+        try:
+            p = subprocess.run(
+                ["claude", prompt],
+                input=input_text.encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            return p.stdout.decode("utf-8", errors="replace")
+        except subprocess.CalledProcessError as e:
+            if i == retries - 1:
+                sys.stderr.write(f"Claude failed: {e.stderr.decode('utf-8', 'replace')}\n")
+                raise
+            time.sleep(2 * (i + 1))
+    return ""
 
-          echo -e "$SUMMARY" > claude-summary.md
+targets = []
+with open("targets.txt", "r", encoding="utf-8", errors="ignore") as f:
+    targets = [line.strip() for line in f if line.strip()]
 
-      - name: Create new branch
+summary_lines = []
+for fpath in targets:
+    try:
+        with open(fpath, "r", encoding="utf-8", errors="replace") as rf:
+            original = rf.read()
+
+        # 1) コード変換（コードのみ返す指示）
+        new_code = run_claude(
+            "次のコードをモダンなUI/UX・可読性・アクセシビリティの観点で改善してください。\
+改善後のコードのみを出力してください。不要な説明は出力しないでください。",
+            original
+        )
+        if new_code.strip():
+            with open(fpath, "w", encoding="utf-8") as wf:
+                wf.write(new_code)
+
+        # 2) 要約（短く要点）
+        desc = run_claude(
+            "次の変更点をUI/UX観点で100字以内の日本語で簡潔に要約してください。箇条書き不可、1文で。",
+            new_code if new_code.strip() else original
+        ).strip()
+        if not desc:
+            desc = "コードの整形または軽微な改善を実施しました。"
+
+        summary_lines.append(f"- **{fpath}**: {desc}")
+
+    except Exception as e:
+        summary_lines.append(f"- **{fpath}**: 要約生成に失敗しました（{e}）。")
+
+# 要約本文の生成
+pathlib.Path("claude-summary.md").write_text(
+    "🤖 Claude が自動で UI 改善を行いました。\n\n"
+    "### 改善内容の要約\n"
+    + ("\n".join(summary_lines) if summary_lines else "対象ファイルはありませんでした。")
+    + "\n\n---\n本PRはGitHub Actionsにより自動生成されています。\n",
+    encoding="utf-8"
+)
+PY
+
+      - name: Commit Claude-changed files to new branch
         run: |
           BRANCH_NAME="claude-auto-fix-${{ github.run_id }}"
-          git checkout -b $BRANCH_NAME
-          git config user.name "github-actions[bot]"
+          git checkout -b "$BRANCH_NAME"
+
+          git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "chore: auto UI refactor with Claude"
-          git push origin $BRANCH_NAME
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit (Claude produced no modifications)."
+          else
+            git commit -m "chore: auto UI refactor with Claude"
+          fi
+          git push origin "$BRANCH_NAME" || true
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
-      - name: Create Pull Request
+      - name: Create Pull Request with body-path
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ env.BRANCH_NAME }}
           base: main
           title: "Auto UI Fix by Claude"
-          body: |
-            🤖 Claude が自動で UI 改善を行いました。
-            
-            ### 改善内容の要約
-            $(cat claude-summary.md)
+          body-path: "claude-summary.md"
 
-            ---
-
-            この PR は GitHub Actions によって自動生成されました。
+      - name: Upload artifacts (summary & diff)
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-report-${{ github.run_id }}
+          path: |
+            claude-summary.md
+            changed.txt
+            targets.txt
