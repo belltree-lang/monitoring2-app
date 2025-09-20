@@ -37,7 +37,7 @@ jobs:
           git fetch origin ${{ github.base_ref }} --depth=1
           git diff --name-only --diff-filter=AM origin/${{ github.base_ref }}...HEAD > changed.txt
 
-          # 対象拡張子のみ抽出（.js/.jsx/.tsx/.css/.scss/.html などは必要に応じ調整）
+          # 対象拡張子のみ抽出
           awk '
             /\.jsx$|\.js$|\.tsx$|\.css$|\.scss$|\.html$/ { print }
           ' changed.txt > targets.txt || true
@@ -47,7 +47,6 @@ jobs:
           echo "Claude targets:"
           cat targets.txt || true
 
-          # 出力（後続ステップで使えるように）
           if [ -s targets.txt ]; then
             echo "has_targets=true" >> $GITHUB_OUTPUT
           else
@@ -58,7 +57,6 @@ jobs:
         if: steps.diff.outputs.has_targets == 'false'
         run: |
           echo "No target UI files in this PR. Skipping Claude."
-          # 空の要約でも本文には最低限の説明を入れるため生成
           printf "この自動PRはスキップされました。対象UIファイル（.js/.jsx/.tsx/.css/.scss/.html）の変更が検出されませんでした。\n" > claude-summary.md
 
       - name: Run Claude to refactor and summarize (with retry)
@@ -68,10 +66,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # NUL区切りで安全にループ
-          # 非ASCIIパスも扱えるようにロケールは上で設定済み
           python3 - <<'PY'
-import subprocess, shlex, os, sys, time, pathlib
+import subprocess, sys, time, pathlib
 
 def run_claude(prompt, input_text, retries=3):
     for i in range(retries):
@@ -103,8 +99,12 @@ for fpath in targets:
 
         # 1) コード変換（コードのみ返す指示）
         new_code = run_claude(
-            "次のコードをモダンなUI/UX・可読性・アクセシビリティの観点で改善してください。\
-改善後のコードのみを出力してください。不要な説明は出力しないでください。",
+            "既存の機能や要素は保持しつつ、より良いUIに改善してください。\
+- 見やすいレイアウト（レスポンシブ対応）\
+- ボタンや入力フォームの一貫性\
+- 色や余白を整理してアクセシビリティ向上\
+- ARIAラベルや代替テキストを追加\
+改善後のコードのみを出力してください。説明は不要です。",
             original
         )
         if new_code.strip():
