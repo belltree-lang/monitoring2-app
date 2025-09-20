@@ -68,10 +68,61 @@ button:hover { opacity:0.9;}
 .media-item a:hover { text-decoration:underline; }
 .media-missing { color:#777; font-weight:600; word-break:break-all; }
 .media-meta { margin-top:4px; font-size:0.78rem; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; }
+.share-card .toolbar { justify-content:flex-start; }
+.share-list { display:flex; flex-direction:column; gap:10px; }
+.share-item { border:1px solid #dbe6f6; border-radius:8px; padding:10px; background:#f8fbff; position:relative; }
+.share-item.expired { background:#fff3f3; border-color:#f5c2c2; }
+.share-item .share-item-header { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.share-item .share-url { flex:1; display:flex; gap:6px; align-items:center; }
+.share-item .share-url input { flex:1; font-size:0.78rem; padding:4px 6px; border-radius:6px; border:1px solid #c7d7ef; background:#fff; }
+.share-item .share-meta { display:flex; flex-wrap:wrap; gap:10px; font-size:0.75rem; color:#546079; margin-top:6px; }
+.share-item .share-actions { display:flex; gap:6px; margin-top:8px; }
+.share-form { border-top:1px dashed #c7d7ef; padding-top:10px; margin-top:10px; }
+.share-form .share-field { margin-bottom:10px; }
+.share-form label { font-size:0.82rem; color:#445; display:flex; flex-direction:column; gap:4px; }
+.share-form input[type="text"], .share-form input[type="datetime-local"] { font-size:0.85rem; padding:6px 8px; border:1px solid #c7d7ef; border-radius:6px; }
+.share-attachments { display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; padding:6px; background:#f2f7ff; border-radius:6px; border:1px solid #d2def5; }
+.share-attachments .share-attachment { display:flex; align-items:center; gap:6px; font-size:0.8rem; color:#334; }
+.share-attachments .share-attachment .muted { margin-left:auto; }
+.share-attachments .share-attachment-info { display:flex; flex-direction:column; }
+.share-attachments .share-attachment-info span { font-size:0.76rem; color:#667; }
+.share-empty { font-size:0.8rem; color:#666; padding:6px 4px; }
+.share-helper { font-size:0.75rem; color:#6a7a93; margin-top:4px; }
+.share-item .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:999px; background:#e3f2fd; color:#1957a3; font-size:0.7rem; }
+.share-item.expired .badge { background:#ffe6e6; color:#b71c1c; }
+.share-item .tag-group { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.share-form .toolbar { gap:8px; }
+.share-attachments-all { font-size:0.82rem; display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.external-wrapper { max-width:800px; margin:0 auto; }
+.external-card { background:#fff; border-radius:16px; padding:20px; box-shadow:0 6px 24px rgba(25,118,210,0.16); margin-top:30px; }
+.external-header { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+.external-title { font-size:1.4rem; color:var(--brand); margin:0; }
+.external-member { font-size:1rem; color:#40566f; }
+.external-intro { font-size:0.92rem; color:#4f5b6c; line-height:1.6; background:#f1f7ff; padding:12px; border-radius:12px; border:1px solid #d3e4ff; }
+.external-alert { margin-top:12px; padding:10px; border-radius:10px; font-size:0.88rem; display:none; }
+.external-alert.error { background:#ffe4e4; color:#b71c1c; border:1px solid #f5b5b5; display:block; }
+.external-alert.warning { background:#fff7e0; color:#8d6e02; border:1px solid #f4d67a; display:block; }
+.external-auth { margin-top:16px; padding:16px; border-radius:12px; background:#f9fbff; border:1px solid #dfe8fb; }
+.external-auth label { font-size:0.85rem; color:#445; display:flex; flex-direction:column; gap:6px; }
+.external-auth input[type="password"] { padding:8px; border-radius:6px; border:1px solid #c1ceeb; font-size:0.95rem; }
+.external-auth button { margin-top:12px; }
+.external-records { margin-top:20px; display:flex; flex-direction:column; gap:14px; }
+.external-record { background:#f6f9ff; border:1px solid #d8e4ff; border-radius:12px; padding:14px; box-shadow:0 2px 6px rgba(25,118,210,0.08); }
+.external-record .meta { font-size:0.85rem; color:#386087; margin-bottom:6px; display:flex; gap:6px; flex-wrap:wrap; }
+.external-record .text { font-size:0.95rem; line-height:1.6; color:#223; white-space:pre-wrap; }
+.external-record .attachments { margin-top:10px; display:flex; flex-wrap:wrap; gap:8px; }
+.external-record .attachments a { padding:6px 10px; background:#fff; border-radius:999px; border:1px solid #b7cef5; color:#1a56a3; font-size:0.82rem; text-decoration:none; }
+.external-record .attachments a:hover { background:#e8f1ff; }
+.external-footer { font-size:0.78rem; color:#718096; margin-top:24px; text-align:center; }
+.external-muted { font-size:0.85rem; color:#6b7b92; }
+body.external-mode { background:#f0f4ff; }
+.external-mode #internalApp { display:none !important; }
+.external-mode #externalApp { display:block !important; }
 </style>
 </head>
 <body>
-<h1>ケアマネ・モニタリング 
+<div id="internalApp">
+<h1>ケアマネ・モニタリング
   <span class="pill" id="memberTag">未選択</span>
 </h1>
 
@@ -194,7 +245,68 @@ button:hover { opacity:0.9;}
         <div id="dashboardStatus" class="muted">読込中…</div>
         <div id="dashboardTable" class="dashboard-table"></div>
       </div>
+      <div class="card share-card">
+        <h2>外部共有</h2>
+        <div id="shareList" class="share-list muted">利用者を選択すると共有リンクが表示されます</div>
+        <div class="toolbar">
+          <button id="btnOpenShareForm" class="secondary btn-compact">共有リンクを作成</button>
+        </div>
+        <div id="shareForm" class="share-form" style="display:none;">
+          <div class="share-field">
+            <label>閲覧期限（未設定の場合は無期限）
+              <input type="datetime-local" id="shareExpires">
+            </label>
+          </div>
+          <div class="share-field">
+            <label>閲覧用パスワード（任意）
+              <input type="text" id="sharePassword" placeholder="未入力の場合はパスワードなし">
+            </label>
+            <div class="share-helper">安全のため、英数字を組み合わせた8文字以上を推奨します。</div>
+          </div>
+          <div class="share-field">
+            <label><input type="checkbox" id="shareMaskCheckbox" checked> 本文をやさしくマスキングする</label>
+          </div>
+          <div class="share-field">
+            <div class="share-attachments-all">
+              <label><input type="checkbox" id="shareAttachmentAll"> すべての添付ファイルを共有する</label>
+            </div>
+            <div id="shareAttachments" class="share-attachments muted">記録を読み込み中です…</div>
+          </div>
+          <div class="toolbar">
+            <button id="btnCreateShare">共有リンクを発行</button>
+            <button type="button" id="btnCancelShare" class="secondary">キャンセル</button>
+          </div>
+          <div id="shareFormStatus" class="muted"></div>
+        </div>
+      </div>
     </aside>
+  </div>
+</div>
+
+<div id="externalApp" style="display:none;">
+  <div class="external-wrapper">
+    <div class="external-card">
+      <div class="external-header">
+        <h1 class="external-title">モニタリング共有ビュー</h1>
+        <div id="externalMember" class="external-member"></div>
+        <div id="externalExpiry" class="external-muted"></div>
+      </div>
+      <div id="externalIntro" class="external-intro">
+        大切なご家族や関係者の皆さまと状況を共有するためのページです。必要な情報だけをまとめていますので、安心してご覧ください。
+      </div>
+      <div id="externalAlert" class="external-alert"></div>
+      <div id="externalAuth" class="external-auth" style="display:none;">
+        <form id="externalAuthForm">
+          <label>閲覧パスワード
+            <input type="password" id="externalPassword" autocomplete="one-time-code" placeholder="パスワードを入力してください">
+          </label>
+          <button type="submit">表示する</button>
+          <div id="externalAuthStatus" class="external-muted" style="margin-top:8px;"></div>
+        </form>
+      </div>
+      <div id="externalRecords" class="external-records"></div>
+      <div id="externalFooter" class="external-footer"></div>
+    </div>
   </div>
 </div>
 
@@ -203,12 +315,16 @@ let memberId = null, memberName = "";
 let memberList = [];
 let recordsCache = [];
 let dashboardState = { data: [], monthLabel: "" };
+let externalShares = [];
+let shareFormOpen = false;
+const queryParams = new URLSearchParams(window.location.search);
+const externalToken = queryParams.get("share") || queryParams.get("token") || "";
+const isExternalMode = !!externalToken;
 
 function toHalfDigits(s) {
   return String(s || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
 }
 
-const queryParams = new URLSearchParams(window.location.search);
 let initialMemberId = (() => {
   const raw = queryParams.get("id") || "";
   if (!raw) return "";
@@ -376,24 +492,27 @@ function bindDashboardActions() {
 const input = document.getElementById("memberIdInput");
 const listBox = document.getElementById("autocompleteList");
 
-input.addEventListener("input", () => {
-  const qRaw = input.value.trim();
-  if (!qRaw) { listBox.style.display = "none"; return; }
-  const q = toHalfDigits(qRaw);
-  const hits = memberList.filter(m => m.id.includes(q) || m.name.includes(qRaw));
-  if (!hits.length) { listBox.style.display = "none"; return; }
-  listBox.innerHTML = hits.map(m => `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}</div>`).join("");
-  listBox.style.display = "block";
-});
-listBox.addEventListener("click", e => {
-  const item = e.target.closest(".autocomplete-item");
-  if (!item) return;
-  selectMember(item.dataset.id, item.dataset.name);
-});
-input.addEventListener("keydown", e => {
-  if (e.key === "Enter") { e.preventDefault(); resolveInput(); }
-});
-input.addEventListener("blur", () => { setTimeout(resolveInput, 100); });
+function setupSearchBox() {
+  if (!input || !listBox) return;
+  input.addEventListener("input", () => {
+    const qRaw = input.value.trim();
+    if (!qRaw) { listBox.style.display = "none"; return; }
+    const q = toHalfDigits(qRaw);
+    const hits = memberList.filter(m => m.id.includes(q) || m.name.includes(qRaw));
+    if (!hits.length) { listBox.style.display = "none"; return; }
+    listBox.innerHTML = hits.map(m => `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}</div>`).join("");
+    listBox.style.display = "block";
+  });
+  listBox.addEventListener("click", e => {
+    const item = e.target.closest(".autocomplete-item");
+    if (!item) return;
+    selectMember(item.dataset.id, item.dataset.name);
+  });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); resolveInput(); }
+  });
+  input.addEventListener("blur", () => { setTimeout(resolveInput, 100); });
+}
 
 function resolveInput() {
   const val = input.value.trim();
@@ -408,8 +527,8 @@ function resolveInput() {
 function selectMember(id, name) {
   memberId = id;
   memberName = name || "";
-  input.value = `${id}${memberName ? "　" + memberName : ""}`;
-  listBox.style.display = "none";
+  if (input) input.value = `${id}${memberName ? "　" + memberName : ""}`;
+  if (listBox) listBox.style.display = "none";
   document.getElementById("idStatus").textContent = `選択中: ${id}${memberName ? "　" + memberName : ""}`;
   document.getElementById("memberTag").textContent = `${id}${memberName ? "　" + memberName : ""}`;
   document.getElementById("mainArea").style.display = "";
@@ -420,33 +539,88 @@ function selectMember(id, name) {
   document.getElementById("summaryOutput").textContent = "ここに要約が表示されます";
   document.getElementById("adviceOutput").textContent = "ここに提案が表示されます";
   updateMediaGallery([]);
+  closeShareForm();
+  resetShareListPlaceholder();
   renderDashboard();
   loadRecords();
+  fetchExternalShareList();
 }
 
-document.getElementById("btnAddMember").onclick = () => {
-  const idInput = document.getElementById("newMemberId");
-  const nameInput = document.getElementById("newMemberName");
-  const id = idInput.value.trim();
-  const name = nameInput.value.trim();
-  const status = document.getElementById("addMemberStatus");
-  if (!id || !name) { status.textContent = "IDと氏名を入力してください"; return; }
-  google.script.run.withSuccessHandler(res => {
-    if (res.status === "success") {
-      status.textContent = `登録しました: ${res.id} ${res.name}`;
-      idInput.value = "";
-      nameInput.value = "";
-      refreshMemberList();
-      loadDashboard();
-    } else {
-      status.textContent = "失敗: " + res.message;
-    }
-  }).withFailureHandler(err => {
-    status.textContent = "エラー: " + (err && err.message ? err.message : err);
-  }).addMember(id, name);
-};
+function setupMemberUi() {
+  const btnAddMember = document.getElementById("btnAddMember");
+  if (btnAddMember) {
+    btnAddMember.onclick = () => {
+      const idInput = document.getElementById("newMemberId");
+      const nameInput = document.getElementById("newMemberName");
+      const id = idInput.value.trim();
+      const name = nameInput.value.trim();
+      const status = document.getElementById("addMemberStatus");
+      if (!id || !name) { status.textContent = "IDと氏名を入力してください"; return; }
+      google.script.run.withSuccessHandler(res => {
+        if (res.status === "success") {
+          status.textContent = `登録しました: ${res.id} ${res.name}`;
+          idInput.value = "";
+          nameInput.value = "";
+          refreshMemberList();
+          loadDashboard();
+        } else {
+          status.textContent = "失敗: " + res.message;
+        }
+      }).withFailureHandler(err => {
+        status.textContent = "エラー: " + (err && err.message ? err.message : err);
+      }).addMember(id, name);
+    };
+  }
 
-document.getElementById("btnSave").addEventListener("click", handleSave);
+  const btnSave = document.getElementById("btnSave");
+  if (btnSave) {
+    btnSave.addEventListener("click", handleSave);
+  }
+
+  const btnSummary = document.getElementById("btnSummary");
+  if (btnSummary) {
+    btnSummary.onclick = () => {
+      if (!memberId) { alert("利用者を選択してください"); return; }
+      const fmt = document.getElementById("summaryFormat").value;
+      const days = document.getElementById("recordRange").value;
+      const out = document.getElementById("summaryOutput");
+      out.textContent = "生成中…";
+      google.script.run.withSuccessHandler(res => {
+        out.textContent = (res.status === "success") ? res.summary : ("失敗:" + res.message);
+      }).withFailureHandler(err => {
+        out.textContent = "失敗: " + (err && err.message ? err.message : err);
+      }).generateAISummaryForDays(memberId, fmt, days);
+    };
+  }
+
+  const btnAdvice = document.getElementById("btnAdvice");
+  if (btnAdvice) {
+    btnAdvice.onclick = () => {
+      if (!memberId) { alert("利用者を選択してください"); return; }
+      const horizon = document.getElementById("adviceHorizonSelect").value;
+      const days = document.getElementById("recordRange").value;
+      const out = document.getElementById("adviceOutput");
+      out.textContent = "生成中…";
+      google.script.run.withSuccessHandler(res => {
+        out.textContent = (res.status === "success") ? res.advice : ("失敗:" + res.message);
+      }).withFailureHandler(err => {
+        out.textContent = "失敗: " + (err && err.message ? err.message : err);
+      }).generateCareAdviceWithHorizon(memberId, days, horizon);
+    };
+  }
+
+  const btnReload = document.getElementById("btnReload");
+  if (btnReload) {
+    btnReload.onclick = () => loadRecords();
+  }
+
+  const range = document.getElementById("recordRange");
+  if (range) {
+    range.addEventListener("change", () => {
+      if (memberId) loadRecords();
+    });
+  }
+}
 
 async function handleSave() {
   const text = document.getElementById("inputText").value.trim();
@@ -483,65 +657,37 @@ async function handleSave() {
   }
 }
 
-document.getElementById("btnSummary").onclick = () => {
-  if (!memberId) { alert("利用者を選択してください"); return; }
-  const fmt = document.getElementById("summaryFormat").value;
-  const days = document.getElementById("recordRange").value;
-  const out = document.getElementById("summaryOutput");
-  out.textContent = "生成中…";
-  google.script.run.withSuccessHandler(res => {
-    out.textContent = (res.status === "success") ? res.summary : ("失敗:" + res.message);
-  }).withFailureHandler(err => {
-    out.textContent = "失敗: " + (err && err.message ? err.message : err);
-  }).generateAISummaryForDays(memberId, fmt, days);
-};
-
-document.getElementById("btnAdvice").onclick = () => {
-  if (!memberId) { alert("利用者を選択してください"); return; }
-  const horizon = document.getElementById("adviceHorizonSelect").value;
-  const days = document.getElementById("recordRange").value;
-  const out = document.getElementById("adviceOutput");
-  out.textContent = "生成中…";
-  google.script.run.withSuccessHandler(res => {
-    out.textContent = (res.status === "success") ? res.advice : ("失敗:" + res.message);
-  }).withFailureHandler(err => {
-    out.textContent = "失敗: " + (err && err.message ? err.message : err);
-  }).generateCareAdviceWithHorizon(memberId, days, horizon);
-};
-
-
-function loadRecords() {
-  const days = document.getElementById("recordRange").value;
-  const list = document.getElementById("recordList");
-  if (!memberId) {
-    list.textContent = "利用者を選択してください";
-    recordsCache = [];
-    updateMediaGallery([]);
-    return;
-  }
-  list.textContent = "読込中…";
-  google.script.run.withSuccessHandler(res => {
-    if (!res || res.status !== "success") {
-      list.textContent = "エラー:" + (res && res.message ? res.message : "取得に失敗しました");
+  function loadRecords() {
+    const days = document.getElementById("recordRange").value;
+    const list = document.getElementById("recordList");
+    if (!memberId) {
+      list.textContent = "利用者を選択してください";
       recordsCache = [];
       updateMediaGallery([]);
+      updateShareAttachmentOptions([]);
       return;
     }
-    recordsCache = (res.records || []).map(normalizeRecord);
-    renderRecords();
-  }).withFailureHandler(err => {
-    list.textContent = "エラー: " + (err && err.message ? err.message : err);
-    recordsCache = [];
-    updateMediaGallery([]);
-  }).getRecordsByMemberId_v3(memberId, days);
-}
+    list.textContent = "読込中…";
+    google.script.run.withSuccessHandler(res => {
+      if (!res || res.status !== "success") {
+        list.textContent = "エラー:" + (res && res.message ? res.message : "取得に失敗しました");
+        recordsCache = [];
+        updateMediaGallery([]);
+        updateShareAttachmentOptions([]);
+        return;
+      }
+      recordsCache = (res.records || []).map(normalizeRecord);
+      renderRecords();
+      updateShareAttachmentOptions(recordsCache);
+    }).withFailureHandler(err => {
+      list.textContent = "エラー: " + (err && err.message ? err.message : err);
+      recordsCache = [];
+      updateMediaGallery([]);
+      updateShareAttachmentOptions([]);
+    }).getRecordsByMemberId_v3(memberId, days);
+  }
 
-document.getElementById("btnReload").onclick = () => loadRecords();
-document.getElementById("recordRange").addEventListener("change", () => {
-  if (memberId) loadRecords();
-});
-
-function renderRecords() {
+  function renderRecords() {
   const list = document.getElementById("recordList");
   if (!memberId) {
     list.textContent = "利用者を選択してください";
@@ -719,23 +865,32 @@ function bindRecordActions() {
 }
 
 
-["filterKind", "filterDateFrom", "filterDateTo"].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) {
-    el.addEventListener("change", () => { renderRecords(); });
+  function setupFilters() {
+    ["filterKind", "filterDateFrom", "filterDateTo"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("change", () => { renderRecords(); });
+      }
+    });
+    const text = document.getElementById("filterText");
+    if (text) {
+      text.addEventListener("input", () => { renderRecords(); });
+    }
+    const clear = document.getElementById("btnClearFilters");
+    if (clear) {
+      clear.addEventListener("click", () => {
+        const kindEl = document.getElementById("filterKind");
+        const fromEl = document.getElementById("filterDateFrom");
+        const toEl = document.getElementById("filterDateTo");
+        const textEl = document.getElementById("filterText");
+        if (kindEl) kindEl.value = "all";
+        if (fromEl) fromEl.value = "";
+        if (toEl) toEl.value = "";
+        if (textEl) textEl.value = "";
+        renderRecords();
+      });
+    }
   }
-});
-document.getElementById("filterText").addEventListener("input", () => { renderRecords(); });
-document.getElementById("btnClearFilters").addEventListener("click", () => {
-  document.getElementById("filterKind").value = "all";
-  document.getElementById("filterDateFrom").value = "";
-  document.getElementById("filterDateTo").value = "";
-  document.getElementById("filterText").value = "";
-  renderRecords();
-});
-
-refreshMemberList();
-loadDashboard();
 
 function setGalleryMessage(message){
   const gallery=document.getElementById("mediaGallery");
@@ -831,6 +986,482 @@ function formatDateTime(value){
   const d=new Date(t);
   const pad=n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function collectAttachmentOptions(records){
+  const map=new Map();
+  (Array.isArray(records)?records:[]).forEach(record=>{
+    if(!record) return;
+    const ts=getRecordTimestamp(record);
+    const files=Array.isArray(record.attachments)?record.attachments:[];
+    files.forEach(att=>{
+      if(!att || typeof att!=="object" || Array.isArray(att)) return;
+      const fileId=String(att.fileId||att.id||"").trim();
+      if(!fileId || map.has(fileId)) return;
+      map.set(fileId,{
+        fileId,
+        name:att.name||att.fileName||att.title||"添付ファイル",
+        recordDate:record.dateText||"",
+        uploadedAt:att.uploadedAt||att.createdAt||att.timestamp||"",
+        mimeType:att.mimeType||"",
+        timestamp:ts||toTime(att.uploadedAt||att.createdAt||att.timestamp)
+      });
+    });
+  });
+  return Array.from(map.values()).sort((a,b)=>{
+    const tb=Number.isFinite(b.timestamp)?b.timestamp:0;
+    const ta=Number.isFinite(a.timestamp)?a.timestamp:0;
+    if(tb!==ta) return tb-ta;
+    return String(a.name||"").localeCompare(String(b.name||""),"ja");
+  });
+}
+
+function updateShareAttachmentOptions(records){
+  if(isExternalMode) return;
+  const container=document.getElementById("shareAttachments");
+  if(!container) return;
+  const data=collectAttachmentOptions(typeof records!=='undefined'?records:recordsCache);
+  const shareAll=document.getElementById("shareAttachmentAll");
+  if(!data.length){
+    container.classList.add("muted");
+    container.innerHTML='<div class="share-empty">共有できる添付ファイルはまだありません</div>';
+    if(shareAll) shareAll.checked=false;
+    return;
+  }
+  container.classList.remove("muted");
+  container.innerHTML=data.map(att=>{
+    const detailParts=[];
+    if(att.recordDate) detailParts.push(`記録日: ${escapeHtml(att.recordDate)}`);
+    const uploadedLabel=att.uploadedAt?formatDateTime(att.uploadedAt):"";
+    if(uploadedLabel) detailParts.push(`アップロード: ${escapeHtml(uploadedLabel)}`);
+    if(att.mimeType) detailParts.push(escapeHtml(att.mimeType));
+    const detail=detailParts.length?`<span>${detailParts.join(' ｜ ')}</span>`:"";
+    return `<label class="share-attachment"><input type="checkbox" data-file-id="${escapeHtml(att.fileId)}"><div class="share-attachment-info"><strong>${escapeHtml(att.name||'添付ファイル')}</strong>${detail}</div></label>`;
+  }).join("\n");
+  applyShareAllState();
+}
+
+function applyShareAllState(){
+  if(isExternalMode) return;
+  const shareAll=document.getElementById("shareAttachmentAll");
+  const container=document.getElementById("shareAttachments");
+  if(!container) return;
+  const checkboxes=container.querySelectorAll('input[type="checkbox"][data-file-id]');
+  const disable=!!(shareAll && shareAll.checked);
+  checkboxes.forEach(cb=>{
+    cb.disabled=disable;
+    if(disable) cb.checked=false;
+  });
+}
+
+function setupShareUi(){
+  if(isExternalMode) return;
+  const openBtn=document.getElementById("btnOpenShareForm");
+  if(openBtn){
+    openBtn.onclick=()=>toggleShareForm(true);
+  }
+  const cancelBtn=document.getElementById("btnCancelShare");
+  if(cancelBtn){
+    cancelBtn.onclick=()=>toggleShareForm(false);
+  }
+  const createBtn=document.getElementById("btnCreateShare");
+  if(createBtn){
+    createBtn.addEventListener("click",handleCreateShare);
+  }
+  const shareAll=document.getElementById("shareAttachmentAll");
+  if(shareAll){
+    shareAll.addEventListener("change",applyShareAllState);
+  }
+  const list=document.getElementById("shareList");
+  if(list){
+    list.addEventListener("click",handleShareListClick);
+  }
+}
+
+function toggleShareForm(open){
+  if(isExternalMode) return;
+  const form=document.getElementById("shareForm");
+  if(!form) return;
+  shareFormOpen=!!open;
+  form.style.display=shareFormOpen?"":"none";
+  const status=document.getElementById("shareFormStatus");
+  if(status) status.textContent="";
+  if(shareFormOpen){
+    updateShareAttachmentOptions(recordsCache);
+  }else{
+    const expires=document.getElementById("shareExpires");
+    const password=document.getElementById("sharePassword");
+    const mask=document.getElementById("shareMaskCheckbox");
+    const shareAll=document.getElementById("shareAttachmentAll");
+    if(expires) expires.value="";
+    if(password) password.value="";
+    if(mask) mask.checked=true;
+    if(shareAll) shareAll.checked=false;
+    applyShareAllState();
+  }
+}
+
+function closeShareForm(){ toggleShareForm(false); }
+
+function resetShareListPlaceholder(){
+  if(isExternalMode) return;
+  const list=document.getElementById("shareList");
+  if(!list) return;
+  list.classList.add("muted");
+  list.innerHTML="利用者を選択すると共有リンクが表示されます";
+}
+
+function fetchExternalShareList(){
+  if(isExternalMode) return;
+  const list=document.getElementById("shareList");
+  if(!memberId){
+    externalShares=[];
+    resetShareListPlaceholder();
+    return;
+  }
+  if(list){
+    list.classList.add("muted");
+    list.innerHTML="共有リンクを取得しています…";
+  }
+  callGoogle("getExternalShares",memberId).then(res=>{
+    if(!res || res.status!=="success"){
+      if(list){
+        const msg=res && res.message ? escapeHtml(res.message) : "取得に失敗しました";
+        list.innerHTML=`エラー: ${msg}`;
+      }
+      return;
+    }
+    externalShares=Array.isArray(res.shares)?res.shares:[];
+    renderShareList();
+  }).catch(err=>{
+    if(list){
+      const msg=err && err.message ? err.message : String(err);
+      list.innerHTML=`エラー: ${escapeHtml(msg)}`;
+    }
+  });
+}
+
+function renderShareList(){
+  if(isExternalMode) return;
+  const list=document.getElementById("shareList");
+  if(!list) return;
+  if(!externalShares.length){
+    list.classList.add("muted");
+    list.innerHTML="共有リンクはまだありません";
+    return;
+  }
+  list.classList.remove("muted");
+  list.innerHTML=externalShares.map(renderShareItem).join("\n");
+}
+
+function renderShareItem(share){
+  const expired=!!share.expired;
+  const itemClass=expired?"share-item expired":"share-item";
+  const badgeLabel=expired?"期限切れ":"共有中";
+  const expiresLabel=share.expiresAtText?`期限: ${escapeHtml(share.expiresAtText)}`:"期限: 設定なし";
+  const attachmentsLabel=share.allowAllAttachments?"添付: すべて共有":`添付: ${share.allowedCount||0}件`;
+  const passwordLabel=share.passwordProtected?"パスワードあり":"パスワードなし";
+  const maskLabel=share.maskMode==='simple'?"本文マスクあり":"本文そのまま";
+  const lastAccess=share.lastAccessText?`最終閲覧: ${escapeHtml(share.lastAccessText)}`:"";
+  const remaining=share.remainingLabel?`有効期間: ${escapeHtml(share.remainingLabel)}`:"";
+  const metaParts=[expiresLabel,attachmentsLabel,passwordLabel,maskLabel].concat([remaining,lastAccess].filter(Boolean));
+  const metaHtml=metaParts.map(p=>`<span>${p}</span>`).join("\n");
+  return `<div class="${itemClass}">`
+    + `<div class="share-item-header"><span class="badge">${badgeLabel}</span>`
+    + `<div class="share-url"><input type="text" readonly value="${escapeHtml(share.url||'')}" onclick="this.select();">`
+    + `<button class="secondary btn-compact" data-action="copy-url" data-url="${escapeHtml(share.url||'')}">URLコピー</button>`
+    + `</div></div>`
+    + `<div class="tag-group">${metaHtml}</div>`
+    + `<div class="share-actions">`
+    + `<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`
+    + `</div>`
+    + `</div>`;
+}
+
+async function handleShareListClick(event){
+  if(isExternalMode) return;
+  const btn=event.target.closest('[data-action]');
+  if(!btn) return;
+  const action=btn.dataset.action;
+  if(action==='copy-url'){
+    const url=btn.dataset.url||"";
+    if(!url) return;
+    const ok=await copyToClipboard(url);
+    if(ok){
+      const original=btn.textContent;
+      btn.textContent="コピーしました";
+      setTimeout(()=>{ btn.textContent=original||"URLコピー"; },1800);
+    }else{
+      alert("コピーできませんでした。手動で選択してください。");
+    }
+    return;
+  }
+  if(action==='revoke'){
+    const token=btn.dataset.token||"";
+    if(!token) return;
+    if(!confirm("この共有リンクを停止しますか？")) return;
+    const status=document.getElementById("shareList");
+    if(status) status.classList.add("muted");
+    try {
+      const res=await callGoogle("revokeExternalShare", token);
+      if(!res || res.status!=="success"){
+        const msg=res && res.message ? res.message : "停止に失敗しました";
+        alert(msg);
+      }
+    } catch(err){
+      alert(err && err.message ? err.message : "共有リンクの停止に失敗しました");
+    }
+    fetchExternalShareList();
+  }
+}
+
+async function handleCreateShare(event){
+  if(event) event.preventDefault();
+  if(isExternalMode) return;
+  if(!memberId){ alert("利用者を選択してください"); return; }
+  const status=document.getElementById("shareFormStatus");
+  if(status) status.textContent="共有リンクを発行しています…";
+  try {
+    const config=collectShareFormConfig();
+    const res=await callGoogle("createExternalShare", memberId, config);
+    if(!res || res.status!=="success"){
+      const msg=res && res.message ? res.message : "共有リンクの発行に失敗しました";
+      throw new Error(msg);
+    }
+    if(status) status.textContent="共有リンクを発行しました。リストからURLをコピーしてください。";
+    toggleShareForm(false);
+    fetchExternalShareList();
+  } catch(err){
+    if(status) status.textContent="失敗: " + (err && err.message ? err.message : err);
+  }
+}
+
+function collectShareFormConfig(){
+  const expires=document.getElementById("shareExpires");
+  const password=document.getElementById("sharePassword");
+  const mask=document.getElementById("shareMaskCheckbox");
+  const shareAll=document.getElementById("shareAttachmentAll");
+  const attachmentsContainer=document.getElementById("shareAttachments");
+  const allowed=[];
+  if(shareAll && shareAll.checked){
+    allowed.push("__ALL__");
+  }else if(attachmentsContainer){
+    attachmentsContainer.querySelectorAll('input[type="checkbox"][data-file-id]').forEach(cb=>{
+      if(cb.checked) allowed.push(cb.dataset.fileId);
+    });
+  }
+  return {
+    expiresAt: expires && expires.value ? convertLocalDateTimeToIso(expires.value) : "",
+    password: password ? password.value.trim() : "",
+    maskMode: mask && mask.checked ? "simple" : "none",
+    allowedAttachmentIds: allowed
+  };
+}
+
+function convertLocalDateTimeToIso(value){
+  if(!value) return "";
+  const m=value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if(!m) return "";
+  const date=new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), Number(m[4]), Number(m[5]));
+  if(Number.isNaN(date.getTime())) return "";
+  return date.toISOString();
+}
+
+function copyToClipboard(text){
+  if(!text) return Promise.resolve(false);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text));
+  }
+  return fallbackCopy(text);
+}
+
+function fallbackCopy(text){
+  try {
+    const textarea=document.createElement("textarea");
+    textarea.value=text;
+    textarea.style.position="fixed";
+    textarea.style.opacity="0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const ok=document.execCommand("copy");
+    document.body.removeChild(textarea);
+    return Promise.resolve(ok);
+  } catch(_err){
+    return Promise.resolve(false);
+  }
+}
+
+function setupExternalAuth(){
+  const form=document.getElementById("externalAuthForm");
+  if(form){
+    form.addEventListener("submit",e=>{
+      e.preventDefault();
+      handleExternalAuthSubmit();
+    });
+  }
+}
+
+function initInternalApp(){
+  document.body.classList.remove("external-mode");
+  setupSearchBox();
+  setupMemberUi();
+  setupFilters();
+  setupShareUi();
+  resetShareListPlaceholder();
+  refreshMemberList();
+  loadDashboard();
+}
+
+function initExternalMode(){
+  document.body.classList.add("external-mode");
+  setupExternalAuth();
+  if(!externalToken){
+    showExternalAlert("error","共有リンクが見つかりません。管理者にお問い合わせください。");
+    return;
+  }
+  fetchExternalShareMeta();
+}
+
+function fetchExternalShareMeta(){
+  setExternalLoading("共有設定を確認しています…");
+  callGoogle("getExternalShareMeta", externalToken).then(res=>{
+    if(!res || res.status!=="success"){
+      const msg=res && res.message ? res.message : "共有情報を取得できませんでした";
+      showExternalAlert("error", msg);
+      setExternalLoading("");
+      return;
+    }
+    const share=res.share||{};
+    updateExternalHeader(share);
+    if(share.expired){
+      showExternalAlert("warning","この共有リンクは期限切れです。最新のリンクを発行してください。");
+      showExternalAuthForm(false);
+      setExternalLoading("この共有リンクは無効になっています。");
+      setExternalFooter(share);
+      return;
+    }
+    showExternalAlert("","");
+    if(share.requirePassword){
+      showExternalAuthForm(true);
+      setExternalLoading("パスワードを入力してください。");
+    }else{
+      showExternalAuthForm(false);
+      loadExternalShareData("");
+    }
+  }).catch(err=>{
+    const msg=err && err.message ? err.message : String(err);
+    showExternalAlert("error", msg);
+    setExternalLoading("");
+  });
+}
+
+function showExternalAuthForm(show){
+  const auth=document.getElementById("externalAuth");
+  if(auth) auth.style.display=show?"":"none";
+}
+
+function setExternalLoading(message){
+  const recordsEl=document.getElementById("externalRecords");
+  if(!recordsEl) return;
+  if(message){
+    recordsEl.innerHTML=`<div class="external-muted">${escapeHtml(message)}</div>`;
+  }else if(!recordsEl.innerHTML.trim()){
+    recordsEl.innerHTML="";
+  }
+}
+
+function showExternalAlert(type,message){
+  const alertEl=document.getElementById("externalAlert");
+  if(!alertEl) return;
+  alertEl.textContent=message?message:"";
+  alertEl.classList.remove("error","warning");
+  if(!message){
+    alertEl.style.display="none";
+    return;
+  }
+  alertEl.style.display="block";
+  if(type==='error') alertEl.classList.add("error");
+  else if(type==='warning') alertEl.classList.add("warning");
+}
+
+function updateExternalHeader(share){
+  const memberEl=document.getElementById("externalMember");
+  if(memberEl){
+    const label=share.memberName?`${share.memberName}（ID: ${share.memberId}）`:`利用者ID: ${share.memberId}`;
+    memberEl.textContent=label;
+  }
+  const expiry=document.getElementById("externalExpiry");
+  if(expiry){
+    expiry.textContent=share.expiresAtText?`閲覧期限：${share.expiresAtText}`:"閲覧期限：設定なし";
+  }
+}
+
+function setExternalFooter(share){
+  const footer=document.getElementById("externalFooter");
+  if(!footer) return;
+  const note=share.expired?"※ このリンクは期限切れです。新しいURLを受け取っていない場合は発行元へご連絡ください。":"※ このページのURLとパスワードは第三者に共有しないようご注意ください。";
+  footer.textContent=note;
+}
+
+function handleExternalAuthSubmit(){
+  const passwordInput=document.getElementById("externalPassword");
+  const status=document.getElementById("externalAuthStatus");
+  const password=passwordInput?passwordInput.value:"";
+  if(status) status.textContent="確認中…";
+  loadExternalShareData(password).finally(()=>{
+    if(passwordInput) passwordInput.value="";
+  });
+}
+
+function loadExternalShareData(password){
+  setExternalLoading("記録を読み込んでいます…");
+  return callGoogle("enterExternalShare", externalToken, password||"").then(res=>{
+    const status=document.getElementById("externalAuthStatus");
+    if(!res || res.status!=="success"){
+      const msg=res && res.message ? res.message : "閲覧に失敗しました";
+      if(status) status.textContent=msg;
+      showExternalAuthForm(true);
+      setExternalLoading("");
+      return;
+    }
+    if(status) status.textContent="";
+    const share=res.share||{};
+    updateExternalHeader(share);
+    showExternalAuthForm(false);
+    showExternalAlert(share.expired?"warning":"", share.expired?"リンクの期限が切れています。再発行を依頼してください。":"");
+    renderExternalRecords(Array.isArray(res.records)?res.records:[]);
+    setExternalFooter(share);
+  }).catch(err=>{
+    const status=document.getElementById("externalAuthStatus");
+    if(status) status.textContent=err && err.message ? err.message : "閲覧に失敗しました";
+    setExternalLoading("");
+  });
+}
+
+function renderExternalRecords(records){
+  const container=document.getElementById("externalRecords");
+  if(!container) return;
+  if(!records.length){
+    container.innerHTML='<div class="external-muted">共有可能な記録はまだありません。</div>';
+    return;
+  }
+  container.innerHTML=records.map(rec=>{
+    const text=escapeHtml(rec.text||"").replace(/\n/g,"<br>") || '<span class="external-muted">（本文なし）</span>';
+    const attachments=Array.isArray(rec.attachments)?rec.attachments:[];
+    const attachmentsHtml=attachments.length?`<div class="attachments">${attachments.map(att=>`<a href="${escapeHtml(att.url||'#')}" target="_blank" rel="noopener">📎 ${escapeHtml(att.name||'添付ファイル')}</a>`).join('')}</div>`:"";
+    return `<div class="external-record">`
+      + `<div class="meta"><span>${escapeHtml(rec.dateText||'---')}</span><span>${escapeHtml(rec.kind||'種別未設定')}</span></div>`
+      + `<div class="text">${text}</div>`
+      + attachmentsHtml
+      + `</div>`;
+  }).join("\n");
+}
+
+if(isExternalMode){
+  initExternalMode();
+}else{
+  initInternalApp();
 }
 </script>
 </body>
