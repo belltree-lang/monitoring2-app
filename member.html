@@ -409,12 +409,6 @@ let dashboardState = {
 };
 let externalShares = [];
 let shareFormOpen = false;
-const queryParams = new URLSearchParams(window.location.search);
-const externalToken = queryParams.get("share") || queryParams.get("token") || "";
-const isExternalMode = !!externalToken;
-
-let externalShares = [];
-let shareFormOpen = false;
 
 const DASHBOARD_KANA_GROUPS = [
   { label: "あ", members: ["ア", "イ", "ウ", "エ", "オ", "ァ", "ィ", "ゥ", "ェ", "ォ"] },
