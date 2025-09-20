@@ -407,6 +407,11 @@ let dashboardState = {
   collapsedSections: loadDashboardCollapsedSections(),
   pendingScrollLabel: null
 };
+let externalShares = [];
+let shareFormOpen = false;
+const queryParams = new URLSearchParams(window.location.search);
+const externalToken = queryParams.get("share") || queryParams.get("token") || "";
+const isExternalMode = !!externalToken;
 
 let externalShares = [];
 let shareFormOpen = false;
