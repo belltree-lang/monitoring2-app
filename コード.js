@@ -2,6 +2,7 @@
 const SPREADSHEET_ID = '1wdHF0txuZtrkMrC128fwUSImyt320JhBVqXloS7FgpU'; // ←ご指定
 const SHEET_NAME      = 'Monitoring'; // ケアマネ用モニタリング
 const OPENAI_MODEL    = 'gpt-4o-mini';
+const SHARE_SHEET_NAME = 'ExternalShares';
 
 // 画像/動画/PDF の既定保存先（利用者IDごとにサブフォルダを自動作成）
 const DEFAULT_FOLDER_ID         = '1glDniVONBBD8hIvRGMPPT1iLXdtHJpEC';
@@ -712,6 +713,316 @@ function updateMemberName(id, newName){
   }
   return { status:'error', message:'IDが見つかりません: '+id };
 }
+
+/***** ── 外部共有リンク ─────────────────*****/
+function createExternalShare(memberId, options){
+  try {
+    const id = String(memberId || '').trim();
+    if (!id) throw new Error('利用者IDが未指定です');
+
+    const shareSheet = ensureShareSheet_();
+    const config = options && typeof options === 'object' ? options : {};
+
+    const maskMode = (config.maskMode === 'none') ? 'none' : 'simple';
+    const passwordHash = hashSharePassword_(config.password);
+    const allowedRaw = Array.isArray(config.allowedAttachmentIds) ? config.allowedAttachmentIds : [];
+    const allowAll = allowedRaw.includes('__ALL__');
+    const allowedAttachmentIds = allowAll ? ['__ALL__'] : Array.from(new Set(allowedRaw.filter(v => v && v !== '__ALL__').map(String)));
+
+    let expiresAtIso = '';
+    if (config.expiresAt) {
+      const expires = new Date(config.expiresAt);
+      if (!isNaN(expires.getTime())) {
+        expiresAtIso = expires.toISOString();
+      }
+    }
+
+    const token = Utilities.getUuid().replace(/-/g, '');
+    const nowIso = new Date().toISOString();
+
+    shareSheet.appendRow([
+      token,
+      id,
+      passwordHash,
+      expiresAtIso,
+      maskMode,
+      JSON.stringify(allowedAttachmentIds),
+      nowIso,
+      '',
+      ''
+    ]);
+
+    const url = ScriptApp.getService().getUrl() + '?share=' + encodeURIComponent(token);
+    return { status:'success', token, url, expiresAt: expiresAtIso, maskMode, allowAllAttachments: allowAll };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function getExternalShares(memberId){
+  try {
+    const id = String(memberId || '').trim();
+    if (!id) throw new Error('利用者IDが未指定です');
+
+    const sheet = ensureShareSheet_();
+    const values = sheet.getDataRange().getValues();
+    if (!values || values.length <= 1) return { status:'success', shares: [] };
+
+    const now = Date.now();
+    const baseUrl = ScriptApp.getService().getUrl();
+    const shares = [];
+
+    for (let i = 1; i < values.length; i++) {
+      const share = parseShareRow_(values[i]);
+      if (!share.token || share.memberId !== id) continue;
+      if (share.revokedAt) continue;
+
+      const allowAll = share.allowedAttachmentIds.includes('__ALL__');
+      const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
+      const expired = !!(share.expiresAt && share.expiresAt.getTime() < now);
+
+      shares.push({
+        token: share.token,
+        url: baseUrl + '?share=' + encodeURIComponent(share.token),
+        createdAtText: formatShareDate_(share.createdAt),
+        createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
+        expiresAtText: formatShareDate_(share.expiresAt),
+        expired,
+        passwordProtected: !!share.passwordHash,
+        maskMode: share.maskMode || 'simple',
+        allowAllAttachments: allowAll,
+        allowedCount,
+        lastAccessText: formatShareDate_(share.lastAccessAt),
+        remainingLabel: computeRemainingLabel_(share.expiresAt)
+      });
+    }
+
+    shares.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+    shares.forEach(s => { if ('createdAtMs' in s) delete s.createdAtMs; });
+
+    return { status:'success', shares };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function revokeExternalShare(token){
+  try {
+    const info = findShareRowByToken_(token);
+    if (!info) throw new Error('対象の共有リンクが見つかりません');
+    const { sheet, rowIndex } = info;
+    sheet.getRange(rowIndex, 8).setValue(new Date()); // RevokedAt
+    return { status:'success' };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function getExternalShareMeta(token){
+  try {
+    const info = findShareRowByToken_(token);
+    if (!info) throw new Error('共有リンクが無効です');
+    const { share } = info;
+    if (share.revokedAt) throw new Error('共有リンクは停止されています');
+
+    const now = Date.now();
+    const expired = !!(share.expiresAt && share.expiresAt.getTime() < now);
+    const allowAll = share.allowedAttachmentIds.includes('__ALL__');
+    const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
+    const summary = {
+      token: share.token,
+      memberId: share.memberId,
+      memberName: lookupMemberName_(share.memberId),
+      expiresAtText: formatShareDate_(share.expiresAt),
+      expired,
+      requirePassword: !!share.passwordHash,
+      maskMode: share.maskMode || 'simple',
+      allowAllAttachments: allowAll,
+      allowedCount,
+      remainingLabel: computeRemainingLabel_(share.expiresAt)
+    };
+    return { status:'success', share: summary };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function enterExternalShare(token, password){
+  try {
+    const info = findShareRowByToken_(token);
+    if (!info) throw new Error('共有リンクが無効です');
+    const { sheet, rowIndex, share } = info;
+    if (share.revokedAt) throw new Error('共有リンクは停止されています');
+
+    const now = Date.now();
+    if (share.expiresAt && share.expiresAt.getTime() < now) {
+      return { status:'error', message:'この共有リンクは期限切れです。' };
+    }
+
+    if (share.passwordHash) {
+      const hash = hashSharePassword_(password);
+      if (!hash || hash !== share.passwordHash) {
+        return { status:'error', message:'パスワードが一致しません。' };
+      }
+    }
+
+    const payload = buildExternalSharePayload_(share);
+    sheet.getRange(rowIndex, 9).setValue(new Date()); // LastAccessAt
+
+    const allowAll = share.allowedAttachmentIds.includes('__ALL__');
+    const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
+    const summary = {
+      token: share.token,
+      memberId: share.memberId,
+      memberName: lookupMemberName_(share.memberId),
+      expiresAtText: formatShareDate_(share.expiresAt),
+      expired: false,
+      requirePassword: !!share.passwordHash,
+      maskMode: share.maskMode || 'simple',
+      allowAllAttachments: allowAll,
+      allowedCount,
+      remainingLabel: computeRemainingLabel_(share.expiresAt)
+    };
+
+    return { status:'success', share: summary, records: payload };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function ensureShareSheet_(){
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHARE_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHARE_SHEET_NAME);
+  }
+  const header = ['Token','MemberID','PasswordHash','ExpiresAt','MaskMode','AllowedAttachments','CreatedAt','RevokedAt','LastAccessAt'];
+  const range = sheet.getRange(1, 1, 1, header.length);
+  range.setValues([header]);
+  return sheet;
+}
+
+function parseShareRow_(row){
+  const safeJson = (value) => {
+    try { return JSON.parse(value); } catch(_e){ return []; }
+  };
+  const toDate = (value) => {
+    if (!value) return null;
+    const d = value instanceof Date ? value : new Date(value);
+    return (d && !isNaN(d.getTime())) ? d : null;
+  };
+  return {
+    token: String(row[0] || '').trim(),
+    memberId: String(row[1] || '').trim(),
+    passwordHash: String(row[2] || '').trim(),
+    expiresAt: toDate(row[3]),
+    maskMode: String(row[4] || 'simple').trim() || 'simple',
+    allowedAttachmentIds: Array.isArray(row[5]) ? row[5] : safeJson(String(row[5] || '[]')),
+    createdAt: toDate(row[6]),
+    revokedAt: toDate(row[7]),
+    lastAccessAt: toDate(row[8])
+  };
+}
+
+function findShareRowByToken_(token){
+  const tok = String(token || '').trim();
+  if (!tok) return null;
+  const sheet = ensureShareSheet_();
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    const share = parseShareRow_(values[i]);
+    if (share.token === tok) {
+      return { sheet, rowIndex: i + 1, share };
+    }
+  }
+  return null;
+}
+
+function buildExternalSharePayload_(share){
+  const records = fetchRecordsWithIndex_(share.memberId, 'all');
+  const allowAll = share.allowedAttachmentIds.includes('__ALL__');
+  const allowedSet = new Set(allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__'));
+  return records.map(rec => {
+    const attachments = filterAttachmentsForShare_(rec.attachments, { allowAll, allowedSet });
+    return {
+      dateText: rec.dateText || '',
+      kind: rec.kind || '',
+      text: maskTextForExternal_(rec.text || '', share.maskMode),
+      attachments
+    };
+  }).filter(rec => rec.text || (rec.attachments && rec.attachments.length));
+}
+
+function filterAttachmentsForShare_(attachments, option){
+  const arr = Array.isArray(attachments) ? attachments : [];
+  if (option.allowAll) {
+    return arr.map(normalizeAttachmentForShare_).filter(Boolean);
+  }
+  if (!option.allowedSet || !option.allowedSet.size) return [];
+  return arr.map(normalizeAttachmentForShare_).filter(att => att && att.fileId && option.allowedSet.has(att.fileId));
+}
+
+function normalizeAttachmentForShare_(att){
+  if (!att || typeof att !== 'object') return null;
+  const fileId = String(att.fileId || att.id || '').trim();
+  const url = String(att.url || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '')).trim();
+  const name = String(att.name || att.fileName || att.title || '添付ファイル');
+  if (!fileId && !url) return null;
+  return { fileId, url, name, mimeType: String(att.mimeType || '') };
+}
+
+function hashSharePassword_(password){
+  const value = String(password || '');
+  if (!value) return '';
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value, Utilities.Charset.UTF_8);
+  return digest.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+}
+
+function maskTextForExternal_(text, mode){
+  if (mode === 'none') return String(text || '');
+  const value = String(text || '');
+  return value
+    .replace(/[0-9０-９]/g, '＊')
+    .replace(/([A-Za-z\u3040-\u30FF\u4E00-\u9FFF]{2,})/g, (m) => m.charAt(0) + '＊'.repeat(m.length - 1));
+}
+
+function formatShareDate_(date){
+  if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+  const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
+  return Utilities.formatDate(date, tz, 'yyyy/MM/dd HH:mm');
+}
+
+function computeRemainingLabel_(expiresAt){
+  if (!(expiresAt instanceof Date) || isNaN(expiresAt.getTime())) return '';
+  const diff = expiresAt.getTime() - Date.now();
+  if (diff <= 0) return '';
+  const hours = Math.floor(diff / (3600 * 1000));
+  if (hours >= 48) {
+    const days = Math.floor(hours / 24);
+    return `残り約${days}日`;
+  }
+  if (hours >= 1) {
+    return `残り約${hours}時間`;
+  }
+  const minutes = Math.floor(diff / (60 * 1000));
+  return minutes > 0 ? `残り約${minutes}分` : '';
+}
+
+function lookupMemberName_(memberId){
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName('ほのぼのID');
+    if (!sh) return '';
+    const vals = sh.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      if (String(vals[i][0]).trim() === String(memberId).trim()) {
+        return String(vals[i][1] || '').trim();
+      }
+    }
+  } catch(_e) {}
+  return '';
+}
+
 function helloWorld() {
   Logger.log("Hello from VS Code!");
 }
