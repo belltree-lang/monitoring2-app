@@ -1,0 +1,75 @@
+name: Claude Auto UI Fix
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  claude-auto-fix:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude to refactor UI code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          mkdir -p claude-changes
+          SUMMARY=""
+
+          for file in $(find src/components -name "*.jsx"); do
+            echo "Refactoring $file..."
+            claude "以下のコードをモダンUIに改善してください。改善後のコードのみ出力してください:" < $file > $file.new
+            mv $file.new $file
+
+            # 改善内容の要約を生成
+            DESC=$(claude "次のコード変更について、UI/UX改善の観点から要約してください（100字以内、日本語で簡潔に）:" < $file)
+            SUMMARY="$SUMMARY\n- **$file**: $DESC"
+          done
+
+          echo -e "$SUMMARY" > claude-summary.md
+
+      - name: Create new branch
+        run: |
+          BRANCH_NAME="claude-auto-fix-${{ github.run_id }}"
+          git checkout -b $BRANCH_NAME
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore: auto UI refactor with Claude"
+          git push origin $BRANCH_NAME
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.BRANCH_NAME }}
+          base: main
+          title: "Auto UI Fix by Claude"
+          body: |
+            🤖 Claude が自動で UI 改善を行いました。
+            
+            ### 改善内容の要約
+            $(cat claude-summary.md)
+
+            ---
+
+            この PR は GitHub Actions によって自動生成されました。
