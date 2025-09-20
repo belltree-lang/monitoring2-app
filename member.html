@@ -325,13 +325,6 @@ body.external-mode { background:#f0f4ff; }
 let memberId = null, memberName = "";
 let memberList = [];
 let recordsCache = [];
-let dashboardState = { data: [], monthLabel: "" };
-let externalShares = [];
-let shareFormOpen = false;
-const queryParams = new URLSearchParams(window.location.search);
-const externalToken = queryParams.get("share") || queryParams.get("token") || "";
-const isExternalMode = !!externalToken;
-=======
 let dashboardState = {
   data: [],
   monthLabel: "",
@@ -341,6 +334,11 @@ let dashboardState = {
   pageSize: 50,
   activeInitial: null
 };
+let externalShares = [];
+let shareFormOpen = false;
+const queryParams = new URLSearchParams(window.location.search);
+const externalToken = queryParams.get("share") || queryParams.get("token") || "";
+const isExternalMode = !!externalToken;
 
 const DASHBOARD_KANA_GROUPS = [
   { label: "あ", members: ["ア", "イ", "ウ", "エ", "オ", "ァ", "ィ", "ゥ", "ェ", "ォ"] },
