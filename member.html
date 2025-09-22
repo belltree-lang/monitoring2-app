@@ -393,6 +393,9 @@ body.external-mode { background:#f0f4ff; }
 <script>
 let memberId = null, memberName = "";
 let memberList = [];
+let memberSearchResults = [];
+let memberListLoading = false;
+let memberListLoaded = false;
 let recordsCache = [];
 const queryParams = new URLSearchParams(window.location.search);
 const externalToken = queryParams.get("share") || queryParams.get("token") || "";
@@ -946,7 +949,18 @@ function buildAttachmentThumbnailUrl(att) {
   return "";
 }
 
+function setMemberStatusMessage(text) {
+  const statusEl = document.getElementById("idStatus");
+  if (statusEl) {
+    statusEl.textContent = text || "";
+  }
+}
+
 function refreshMemberList() {
+  memberListLoading = true;
+  memberListLoaded = false;
+  memberSearchResults = [];
+  setMemberStatusMessage("読み込み中…");
   google.script.run.withSuccessHandler(list => {
     const mapped = Array.isArray(list)
       ? list.map(item => {
@@ -976,6 +990,9 @@ function refreshMemberList() {
         })
       : [];
     memberList = mapped;
+    memberListLoading = false;
+    memberListLoaded = true;
+    setMemberStatusMessage(memberList.length ? `${memberList.length}名の利用者を取得しました` : "利用者情報が見つかりません");
     memberList.sort(compareEntriesByFurigana);
     if (input) {
       const currentValue = input.value || "";
@@ -998,6 +1015,8 @@ function refreshMemberList() {
     }
   }).withFailureHandler(err => {
     console.error("member list error", err);
+    memberListLoading = false;
+    setMemberStatusMessage("利用者情報の取得に失敗しました");
   }).getMemberList();
 }
 
@@ -1307,10 +1326,23 @@ function searchUsers(rawQuery) {
   if (!listBox) return;
   const source = rawQuery == null ? "" : String(rawQuery);
   const query = source.trim();
+  if (memberListLoading && query) {
+    listBox.innerHTML = '<div class="autocomplete-item autocomplete-empty" data-empty="true">読み込み中…</div>';
+    listBox.style.display = "block";
+    listBox.scrollTop = 0;
+    return;
+  }
+  if (!memberListLoaded && !memberListLoading && query) {
+    listBox.innerHTML = '<div class="autocomplete-item autocomplete-empty" data-empty="true">利用者情報が読み込まれていません</div>';
+    listBox.style.display = "block";
+    listBox.scrollTop = 0;
+    return;
+  }
   if (!query) {
     listBox.innerHTML = "";
     listBox.style.display = "none";
     listBox.scrollTop = 0;
+    memberSearchResults = [];
     return;
   }
   const idDigits = extractMemberIdDigits(query);
@@ -1320,6 +1352,7 @@ function searchUsers(rawQuery) {
   const hits = list
     .filter(member => memberMatchesQuery(member, query, idDigits, normalizedQuery, normalizedId))
     .slice(0, 20);
+  memberSearchResults = hits;
   if (!hits.length) {
     listBox.innerHTML = '<div class="autocomplete-item autocomplete-empty" data-empty="true">該当者なし</div>';
     listBox.style.display = "block";
@@ -1354,6 +1387,13 @@ function setupSearchBox() {
 function resolveInput() {
   const val = input.value.trim();
   if (!val) return;
+  if (Array.isArray(memberSearchResults) && memberSearchResults.length === 1) {
+    const only = memberSearchResults[0];
+    if (only && only.id) {
+      selectMember(only.id, only.name || "");
+      return;
+    }
+  }
   const idDigits = extractMemberIdDigits(val);
   const normalizedId = normalizeMemberIdForLookup(val);
   const normalizedQuery = normalizeMemberSearchText(val);
