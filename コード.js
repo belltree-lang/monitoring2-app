@@ -235,8 +235,7 @@ function normalizeMemberId_(value) {
 
 function normalizeMemberHeaderLabel_(label) {
   if (label == null) return '';
-  return String(label)
-    .normalize('NFKC')
+  return toHiragana_(String(label))
     .replace(/[\s　]+/g, '')
     .replace(/[()（）]/g, '')
     .toLowerCase();
@@ -245,7 +244,9 @@ function normalizeMemberHeaderLabel_(label) {
 function findMemberSheetColumnIndex_(headerNormalized, candidates) {
   if (!Array.isArray(headerNormalized)) return -1;
   for (const candidate of candidates) {
-    const idx = headerNormalized.findIndex(label => label === candidate || label.includes(candidate));
+    const normalizedCandidate = normalizeMemberHeaderLabel_(candidate);
+    if (!normalizedCandidate) continue;
+    const idx = headerNormalized.findIndex(label => label === normalizedCandidate || label.includes(normalizedCandidate));
     if (idx >= 0) return idx;
   }
   return -1;
