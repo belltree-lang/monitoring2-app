@@ -180,7 +180,7 @@ body.external-mode { background:#f0f4ff; }
 <div class="card">
   <h2>利用者を選択</h2>
   <div class="toolbar" style="position:relative;">
-    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
+    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;" oninput="searchUsers(this.value)">
     <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
     <select id="recordRange">
       <option value="all">全件</option>
@@ -977,6 +977,15 @@ function refreshMemberList() {
       : [];
     memberList = mapped;
     memberList.sort(compareEntriesByFurigana);
+    if (input) {
+      const currentValue = input.value || "";
+      if (currentValue.trim()) {
+        searchUsers(currentValue);
+      } else if (listBox) {
+        listBox.innerHTML = "";
+        listBox.style.display = "none";
+      }
+    }
     if (initialMemberId && !memberId) {
       const hit = memberList.find(m => m.id === initialMemberId);
       if (hit) {
@@ -1294,33 +1303,43 @@ function bindDashboardActions() {
 const input = document.getElementById("memberIdInput");
 const listBox = document.getElementById("autocompleteList");
 
-function setupSearchBox() {
-  if (!input || !listBox) return;
-  input.addEventListener("input", () => {
-    const qRaw = input.value.trim();
-    if (!qRaw) {
-      listBox.innerHTML = "";
-      listBox.style.display = "none";
-      return;
-    }
-    const idDigits = extractMemberIdDigits(qRaw);
-    const normalizedId = normalizeMemberIdForLookup(qRaw);
-    const normalizedQuery = normalizeMemberSearchText(qRaw);
-    const hits = memberList.filter(m => memberMatchesQuery(m, qRaw, idDigits, normalizedQuery, normalizedId));
-    if (!hits.length) {
-      listBox.innerHTML = '<div class="autocomplete-item autocomplete-empty" data-empty="true">該当者なし</div>';
-      listBox.style.display = "block";
-      listBox.scrollTop = 0;
-      return;
-    }
-    listBox.innerHTML = hits.slice(0, 20).map(m => {
-      const reading = m.yomi || m.kana;
-      const yomiLabel = reading ? ` <span class="muted">(${escapeHtml(reading)})</span>` : "";
-      return `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}${yomiLabel}</div>`;
-    }).join("");
+function searchUsers(rawQuery) {
+  if (!listBox) return;
+  const source = rawQuery == null ? "" : String(rawQuery);
+  const query = source.trim();
+  if (!query) {
+    listBox.innerHTML = "";
+    listBox.style.display = "none";
+    listBox.scrollTop = 0;
+    return;
+  }
+  const idDigits = extractMemberIdDigits(query);
+  const normalizedId = normalizeMemberIdForLookup(query);
+  const normalizedQuery = normalizeMemberSearchText(query);
+  const list = Array.isArray(memberList) ? memberList : [];
+  const hits = list
+    .filter(member => memberMatchesQuery(member, query, idDigits, normalizedQuery, normalizedId))
+    .slice(0, 20);
+  if (!hits.length) {
+    listBox.innerHTML = '<div class="autocomplete-item autocomplete-empty" data-empty="true">該当者なし</div>';
     listBox.style.display = "block";
     listBox.scrollTop = 0;
-  });
+    return;
+  }
+  listBox.innerHTML = hits
+    .map(member => {
+      const reading = member.yomi || member.kana;
+      const yomiLabel = reading ? ` <span class="muted">(${escapeHtml(reading)})</span>` : "";
+      return `<div class="autocomplete-item" data-id="${member.id}" data-name="${escapeHtml(member.name)}">${member.id}　${escapeHtml(member.name)}${yomiLabel}</div>`;
+    })
+    .join("");
+  listBox.style.display = "block";
+  listBox.scrollTop = 0;
+}
+
+function setupSearchBox() {
+  if (!input || !listBox) return;
+  input.addEventListener("input", () => searchUsers(input.value));
   listBox.addEventListener("click", e => {
     const item = e.target.closest(".autocomplete-item");
     if (!item || item.dataset.empty === "true") return;
