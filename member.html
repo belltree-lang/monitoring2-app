@@ -649,12 +649,35 @@ function getEntryPreferredReading(entry) {
   return entry && entry.id ? String(entry.id) : "";
 }
 
+function entryHasFurigana(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  const yomi = typeof entry.yomi === "string" ? entry.yomi.trim() : "";
+  return yomi !== "";
+}
+
 function getEntrySortKey(entry) {
   const reading = getEntryPreferredReading(entry);
   if (reading) {
     return toHiragana(reading).replace(/[\s　]+/g, "");
   }
   return String(entry && entry.id || "").trim();
+}
+
+function compareEntriesByFurigana(a, b) {
+  const aHas = entryHasFurigana(a);
+  const bHas = entryHasFurigana(b);
+  if (aHas !== bHas) return aHas ? -1 : 1;
+  const keyA = getEntrySortKey(a);
+  const keyB = getEntrySortKey(b);
+  const cmpKey = DASHBOARD_COLLATOR.compare(keyA, keyB);
+  if (cmpKey !== 0) return cmpKey;
+  const nameA = String(a && a.name || "").trim();
+  const nameB = String(b && b.name || "").trim();
+  const cmpName = DASHBOARD_COLLATOR.compare(nameA, nameB);
+  if (cmpName !== 0) return cmpName;
+  const idA = String(a && a.id || "").trim();
+  const idB = String(b && b.id || "").trim();
+  return DASHBOARD_COLLATOR.compare(idA, idB);
 }
 
 function getDashboardIndexGroups(sortedData) {
@@ -770,19 +793,7 @@ function getEntryLatestTimestamp(entry) {
 
 function getSortedDashboardData() {
   const data = Array.isArray(dashboardState.data) ? dashboardState.data.slice() : [];
-  data.sort((a, b) => {
-    const keyA = getEntrySortKey(a);
-    const keyB = getEntrySortKey(b);
-    const cmpKey = DASHBOARD_COLLATOR.compare(keyA, keyB);
-    if (cmpKey !== 0) return cmpKey;
-    const nameA = String(a && a.name || "").trim();
-    const nameB = String(b && b.name || "").trim();
-    const cmpName = DASHBOARD_COLLATOR.compare(nameA, nameB);
-    if (cmpName !== 0) return cmpName;
-    const idA = String(a && a.id || "").trim();
-    const idB = String(b && b.id || "").trim();
-    return DASHBOARD_COLLATOR.compare(idA, idB);
-  });
+  data.sort(compareEntriesByFurigana);
   return data;
 }
 
@@ -883,7 +894,7 @@ function buildAttachmentThumbnailUrl(att) {
 
 function refreshMemberList() {
   google.script.run.withSuccessHandler(list => {
-    memberList = Array.isArray(list)
+    const mapped = Array.isArray(list)
       ? list.map(item => {
           const entry = item && typeof item === "object" ? item : {};
           const id = String(entry.id || "").trim();
@@ -894,6 +905,8 @@ function refreshMemberList() {
           return { id, name, yomi, careManager, yomiNormalized };
         })
       : [];
+    memberList = mapped;
+    memberList.sort(compareEntriesByFurigana);
     if (initialMemberId && !memberId) {
       const hit = memberList.find(m => m.id === initialMemberId);
       if (hit) {
@@ -1256,7 +1269,8 @@ function resolveInput() {
   });
   if (hit) { selectMember(hit.id, hit.name); return; }
   if (/^\d{4}$/.test(half)) { selectMember(half, ""); return; }
-  document.getElementById("idStatus").textContent = "候補が見つかりません";
+  const statusEl = document.getElementById("idStatus");
+  if (statusEl) statusEl.textContent = "候補が見つかりません";
 }
 
 function selectMember(id, name) {
@@ -1264,15 +1278,25 @@ function selectMember(id, name) {
   memberName = name || "";
   if (input) input.value = `${id}${memberName ? "　" + memberName : ""}`;
   if (listBox) listBox.style.display = "none";
-  document.getElementById("idStatus").textContent = `選択中: ${id}${memberName ? "　" + memberName : ""}`;
-  document.getElementById("memberTag").textContent = `${id}${memberName ? "　" + memberName : ""}`;
-  document.getElementById("mainArea").style.display = "";
-  document.getElementById("filterKind").value = "all";
-  document.getElementById("filterDateFrom").value = "";
-  document.getElementById("filterDateTo").value = "";
-  document.getElementById("filterText").value = "";
-  document.getElementById("summaryOutput").textContent = "ここに要約が表示されます";
-  document.getElementById("adviceOutput").textContent = "ここに提案が表示されます";
+  const label = `${id}${memberName ? "　" + memberName : ""}`;
+  const statusEl = document.getElementById("idStatus");
+  if (statusEl) statusEl.textContent = `選択中: ${label}`;
+  const tagEl = document.getElementById("memberTag");
+  if (tagEl) tagEl.textContent = label;
+  const mainArea = document.getElementById("mainArea");
+  if (mainArea) mainArea.style.display = "";
+  const filterKindEl = document.getElementById("filterKind");
+  if (filterKindEl) filterKindEl.value = "all";
+  const fromEl = document.getElementById("filterDateFrom");
+  if (fromEl) fromEl.value = "";
+  const toEl = document.getElementById("filterDateTo");
+  if (toEl) toEl.value = "";
+  const textEl = document.getElementById("filterText");
+  if (textEl) textEl.value = "";
+  const summaryEl = document.getElementById("summaryOutput");
+  if (summaryEl) summaryEl.textContent = "ここに要約が表示されます";
+  const adviceEl = document.getElementById("adviceOutput");
+  if (adviceEl) adviceEl.textContent = "ここに提案が表示されます";
   updateMediaGallery([]);
   closeShareForm();
   resetShareListPlaceholder();

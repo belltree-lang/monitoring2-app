@@ -320,6 +320,12 @@ function buildDashboardSortKey_(entry) {
     .replace(/[\s　]+/g, '');
 }
 
+function hasFurigana_(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  const yomi = entry.yomi == null ? '' : String(entry.yomi).trim();
+  return yomi !== '';
+}
+
 function getDashboardSummary() {
   const dbg = { spreadsheetId: SPREADSHEET_ID, sheetName: SHEET_NAME };
   try {
@@ -441,6 +447,9 @@ function getDashboardSummary() {
     });
 
     data.sort((a, b) => {
+      const aHas = hasFurigana_(a);
+      const bHas = hasFurigana_(b);
+      if (aHas !== bHas) return aHas ? -1 : 1;
       const keyA = buildDashboardSortKey_(a);
       const keyB = buildDashboardSortKey_(b);
       const cmpKey = keyA.localeCompare(keyB, 'ja');
@@ -449,7 +458,7 @@ function getDashboardSummary() {
       const nameB = String(b.name || '');
       const cmpName = nameA.localeCompare(nameB, 'ja');
       if (cmpName !== 0) return cmpName;
-      return String(a.id || '').localeCompare(String(b.id || ''));
+      return String(a.id || '').localeCompare(String(b.id || ''), 'ja');
     });
 
     return { status: 'success', data, monthLabel, debug: dbg };
@@ -794,6 +803,22 @@ function getMemberList() {
     const careManager = careRaw == null ? '' : String(careRaw).trim();
     out.push({ id, name, yomi, careManager });
   }
+
+  out.sort((a, b) => {
+    const aHas = hasFurigana_(a);
+    const bHas = hasFurigana_(b);
+    if (aHas !== bHas) return aHas ? -1 : 1;
+    const keyA = buildDashboardSortKey_(a);
+    const keyB = buildDashboardSortKey_(b);
+    const cmpKey = keyA.localeCompare(keyB, 'ja');
+    if (cmpKey !== 0) return cmpKey;
+    const nameA = String(a.name || '');
+    const nameB = String(b.name || '');
+    const cmpName = nameA.localeCompare(nameB, 'ja');
+    if (cmpName !== 0) return cmpName;
+    return String(a.id || '').localeCompare(String(b.id || ''), 'ja');
+  });
+
   return out;
 }
 
