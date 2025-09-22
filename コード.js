@@ -230,6 +230,7 @@ function normalizeMemberId_(value) {
   if (value == null) return '';
   const normalized = String(value).normalize('NFKC').replace(/[^0-9]/g, '');
   if (!normalized) return '';
+  if (normalized.length >= 4) return normalized;
   return ('0000' + normalized).slice(-4);
 }
 

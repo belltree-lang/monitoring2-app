@@ -28,6 +28,7 @@ button:hover { opacity:0.9;}
   max-height:220px; overflow-y:auto; width:260px; box-shadow:0 2px 6px rgba(0,0,0,.1); z-index:100;}
 .autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
 .autocomplete-item:hover { background:var(--accent);}
+.autocomplete-item.autocomplete-empty { color:var(--muted); cursor:default; pointer-events:none; }
 .layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
 @media(max-width:960px){.layout{grid-template-columns:1fr;}}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
@@ -599,15 +600,25 @@ function includesMemberSearchTarget(rawValue, normalizedValue, rawQuery, normali
   return normalized.includes(normalizedQueryText);
 }
 
-function memberMatchesQuery(member, rawQuery, idQuery, normalizedQuery) {
+function memberMatchesQuery(member, rawQuery, idDigits, normalizedQuery, normalizedIdQuery = "") {
   if (!member) return false;
   const safeRawQuery = rawQuery != null ? String(rawQuery) : "";
   const hasText = !!safeRawQuery;
-  const idCandidate = idQuery != null ? String(idQuery) : "";
+  const idCandidate = idDigits != null ? String(idDigits) : "";
+  const normalizedIdCandidate = normalizedIdQuery != null ? String(normalizedIdQuery) : "";
   const normalizedQueryText = normalizedQuery != null ? String(normalizedQuery) : "";
-  if (idCandidate && /^[0-9]+$/.test(idCandidate)) {
-    if (member.id && member.id.includes(idCandidate)) return true;
-    if (member.idNormalized && member.idNormalized.includes(idCandidate)) return true;
+  const memberId = member.id != null ? String(member.id) : "";
+  const memberIdNormalized = member.idNormalized != null ? String(member.idNormalized) : "";
+  if (idCandidate) {
+    if (memberId && memberId.includes(idCandidate)) return true;
+    if (memberIdNormalized && memberIdNormalized.includes(idCandidate)) return true;
+    if (memberIdNormalized && idCandidate.length < memberIdNormalized.length) {
+      const padded = idCandidate.padStart(memberIdNormalized.length, "0");
+      if (memberIdNormalized.includes(padded)) return true;
+    }
+  }
+  if (normalizedIdCandidate && memberIdNormalized) {
+    if (memberIdNormalized === normalizedIdCandidate) return true;
   }
   if (!hasText) return false;
   if (includesMemberSearchTarget(member.name, member.nameNormalized, safeRawQuery, normalizedQueryText)) return true;
@@ -848,13 +859,22 @@ function toHalfDigits(s) {
   return String(s || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
 }
 
+function extractMemberIdDigits(value) {
+  if (value == null) return "";
+  return toHalfDigits(String(value)).replace(/[^0-9]/g, "");
+}
+
+function normalizeMemberIdForLookup(value) {
+  const digits = extractMemberIdDigits(value);
+  if (!digits) return "";
+  if (digits.length >= 4) return digits;
+  return digits.padStart(4, "0");
+}
+
 let initialMemberId = (() => {
   const raw = queryParams.get("id") || "";
   if (!raw) return "";
-  const half = toHalfDigits(raw.trim());
-  if (!half) return "";
-  if (/^\d{1,4}$/.test(half)) return ("0000" + half).slice(-4);
-  return "";
+  return normalizeMemberIdForLookup(raw.trim());
 })();
 
 function escapeHtml(value) {
@@ -932,13 +952,13 @@ function refreshMemberList() {
       ? list.map(item => {
           const entry = item && typeof item === "object" ? item : {};
           const id = String(entry.id || "").trim();
+          const idNormalized = normalizeMemberIdForLookup(id);
           const name = entry.name != null ? String(entry.name).trim() : "";
           const rawYomi = entry.yomi != null ? String(entry.yomi).trim() : "";
           const rawKana = entry.kana != null ? String(entry.kana).trim() : "";
           const yomi = rawYomi || rawKana;
           const kana = rawKana || rawYomi;
           const careManager = entry.careManager != null ? String(entry.careManager).trim() : "";
-          const idNormalized = toHalfDigits(id);
           const nameNormalized = normalizeMemberSearchText(name);
           const kanaNormalized = normalizeMemberSearchText(kana);
           const yomiNormalized = normalizeMemberSearchText(yomi);
@@ -962,7 +982,7 @@ function refreshMemberList() {
       if (hit) {
         selectMember(hit.id, hit.name);
         initialMemberId = "";
-      } else if (/^\d{4}$/.test(initialMemberId)) {
+      } else if (initialMemberId) {
         selectMember(initialMemberId, "");
         initialMemberId = "";
       }
@@ -1278,21 +1298,32 @@ function setupSearchBox() {
   if (!input || !listBox) return;
   input.addEventListener("input", () => {
     const qRaw = input.value.trim();
-    if (!qRaw) { listBox.style.display = "none"; return; }
-    const idQuery = toHalfDigits(qRaw);
+    if (!qRaw) {
+      listBox.innerHTML = "";
+      listBox.style.display = "none";
+      return;
+    }
+    const idDigits = extractMemberIdDigits(qRaw);
+    const normalizedId = normalizeMemberIdForLookup(qRaw);
     const normalizedQuery = normalizeMemberSearchText(qRaw);
-    const hits = memberList.filter(m => memberMatchesQuery(m, qRaw, idQuery, normalizedQuery));
-    if (!hits.length) { listBox.style.display = "none"; return; }
-    listBox.innerHTML = hits.map(m => {
+    const hits = memberList.filter(m => memberMatchesQuery(m, qRaw, idDigits, normalizedQuery, normalizedId));
+    if (!hits.length) {
+      listBox.innerHTML = '<div class="autocomplete-item autocomplete-empty" data-empty="true">該当者なし</div>';
+      listBox.style.display = "block";
+      listBox.scrollTop = 0;
+      return;
+    }
+    listBox.innerHTML = hits.slice(0, 20).map(m => {
       const reading = m.yomi || m.kana;
       const yomiLabel = reading ? ` <span class="muted">(${escapeHtml(reading)})</span>` : "";
       return `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}${yomiLabel}</div>`;
     }).join("");
     listBox.style.display = "block";
+    listBox.scrollTop = 0;
   });
   listBox.addEventListener("click", e => {
     const item = e.target.closest(".autocomplete-item");
-    if (!item) return;
+    if (!item || item.dataset.empty === "true") return;
     selectMember(item.dataset.id, item.dataset.name);
   });
   input.addEventListener("keydown", e => {
@@ -1304,11 +1335,24 @@ function setupSearchBox() {
 function resolveInput() {
   const val = input.value.trim();
   if (!val) return;
-  const idQuery = toHalfDigits(val);
+  const idDigits = extractMemberIdDigits(val);
+  const normalizedId = normalizeMemberIdForLookup(val);
   const normalizedQuery = normalizeMemberSearchText(val);
   let hit = null;
-  if (idQuery && /^[0-9]+$/.test(idQuery)) {
-    hit = memberList.find(m => m.id === idQuery || m.idNormalized === idQuery);
+  if (normalizedId) {
+    hit = memberList.find(m => {
+      const memberId = m.id != null ? String(m.id) : "";
+      const memberIdNormalized = m.idNormalized != null ? String(m.idNormalized) : "";
+      return memberId === normalizedId || memberIdNormalized === normalizedId;
+    });
+  }
+  if (!hit && idDigits) {
+    hit = memberList.find(m => {
+      const memberIdNormalized = m.idNormalized != null ? String(m.idNormalized) : "";
+      if (!memberIdNormalized) return false;
+      if (memberIdNormalized === idDigits) return true;
+      return memberIdNormalized === idDigits.padStart(memberIdNormalized.length, "0");
+    });
   }
   if (!hit) {
     hit = memberList.find(m => m.name === val);
@@ -1324,10 +1368,10 @@ function resolveInput() {
     });
   }
   if (!hit) {
-    hit = memberList.find(m => memberMatchesQuery(m, val, idQuery, normalizedQuery));
+    hit = memberList.find(m => memberMatchesQuery(m, val, idDigits, normalizedQuery, normalizedId));
   }
   if (hit) { selectMember(hit.id, hit.name); return; }
-  if (/^\d{4}$/.test(idQuery)) { selectMember(idQuery, ""); return; }
+  if (normalizedId) { selectMember(normalizedId, ""); return; }
   const statusEl = document.getElementById("idStatus");
   if (statusEl) statusEl.textContent = "候補が見つかりません";
 }
@@ -1336,7 +1380,10 @@ function selectMember(id, name) {
   memberId = id;
   memberName = name || "";
   if (input) input.value = `${id}${memberName ? "　" + memberName : ""}`;
-  if (listBox) listBox.style.display = "none";
+  if (listBox) {
+    listBox.style.display = "none";
+    listBox.innerHTML = "";
+  }
   const label = `${id}${memberName ? "　" + memberName : ""}`;
   const statusEl = document.getElementById("idStatus");
   if (statusEl) statusEl.textContent = `選択中: ${label}`;
