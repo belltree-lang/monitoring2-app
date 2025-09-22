@@ -799,9 +799,10 @@ function getMemberList() {
     const name = (layout.nameCol >= 0 && layout.nameCol < row.length) ? String(row[layout.nameCol] || '').trim() : '';
     const rawYomi = (layout.yomiCol >= 0 && layout.yomiCol < row.length) ? row[layout.yomiCol] : '';
     const yomi = rawYomi == null ? '' : String(rawYomi).normalize('NFKC').trim();
+    const kana = yomi;
     const careRaw = (layout.careCol >= 0 && layout.careCol < row.length) ? row[layout.careCol] : '';
     const careManager = careRaw == null ? '' : String(careRaw).trim();
-    out.push({ id, name, yomi, careManager });
+    out.push({ id, name, yomi, kana, careManager });
   }
 
   out.sort((a, b) => {
