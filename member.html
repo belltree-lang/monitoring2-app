@@ -114,10 +114,17 @@ button:hover { opacity:0.9;}
 .share-item .share-url input { flex:1; font-size:0.78rem; padding:4px 6px; border-radius:6px; border:1px solid #c7d7ef; background:#fff; }
 .share-item .share-meta { display:flex; flex-wrap:wrap; gap:10px; font-size:0.75rem; color:#546079; margin-top:6px; }
 .share-item .share-actions { display:flex; gap:6px; margin-top:8px; }
+.share-item .share-actions .btn-compact { white-space:nowrap; }
+.share-qr { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.share-qr img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+.share-qr .share-qr-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.share-qr .share-qr-url { font-size:0.75rem; color:#334; word-break:break-all; }
+.share-meta-notes { font-size:0.72rem; color:#60708f; margin-top:6px; }
 .share-form { border-top:1px dashed #c7d7ef; padding-top:10px; margin-top:10px; }
 .share-form .share-field { margin-bottom:10px; }
 .share-form label { font-size:0.82rem; color:#445; display:flex; flex-direction:column; gap:4px; }
 .share-form input[type="text"], .share-form input[type="datetime-local"] { font-size:0.85rem; padding:6px 8px; border:1px solid #c7d7ef; border-radius:6px; }
+.share-form select { font-size:0.85rem; padding:6px 8px; border:1px solid #c7d7ef; border-radius:6px; }
 .share-attachments { display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; padding:6px; background:#f2f7ff; border-radius:6px; border:1px solid #d2def5; }
 .share-attachments .share-attachment { display:flex; align-items:center; gap:6px; font-size:0.8rem; color:#334; }
 .share-attachments .share-attachment .muted { margin-left:auto; }
@@ -152,6 +159,11 @@ button:hover { opacity:0.9;}
 .external-record .attachments a:hover { background:#e8f1ff; }
 .external-footer { font-size:0.78rem; color:#718096; margin-top:24px; text-align:center; }
 .external-muted { font-size:0.85rem; color:#6b7b92; }
+.external-flags { display:flex; flex-wrap:wrap; gap:8px; font-size:0.75rem; }
+.external-badge { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:999px; background:#eff5ff; color:#1f3763; font-weight:600; }
+.external-badge.subtle { background:#eef2f8; color:#425169; }
+.external-badge.audience { background:#e4f3ff; color:#145c9f; }
+.external-intro { position:relative; }
 body.external-mode { background:#f0f4ff; }
 .external-mode #internalApp { display:none !important; }
 .external-mode #externalApp { display:block !important; }
@@ -296,9 +308,28 @@ body.external-mode { background:#f0f4ff; }
         </div>
         <div id="shareForm" class="share-form" style="display:none;">
           <div class="share-field">
-            <label>閲覧期限（未設定の場合は無期限）
-              <input type="datetime-local" id="shareExpires">
+            <label>共有先を選択
+              <select id="shareAudience">
+                <option value="family">家族：生活の様子を共有</option>
+                <option value="center">地域包括支援センター：定期確認</option>
+                <option value="medical">医療機関：医師・看護師との連携</option>
+                <option value="service">サービス事業者：ケア実務者と共有</option>
+              </select>
             </label>
+            <div class="share-helper">共有先に応じて表示内容や案内文が自動で切り替わります。</div>
+          </div>
+          <div class="share-field">
+            <label>閲覧期限
+              <select id="shareExpiryPreset">
+                <option value="7">7日間（短期共有）</option>
+                <option value="30" selected>30日間（標準）</option>
+                <option value="90">90日間（長期共有）</option>
+                <option value="none">期限なし</option>
+                <option value="custom">日付を指定する</option>
+              </select>
+            </label>
+            <input type="datetime-local" id="shareExpires" style="display:none; margin-top:6px;">
+            <div class="share-helper">「日付を指定する」を選ぶと任意の期限を設定できます。</div>
           </div>
           <div class="share-field">
             <label>閲覧用パスワード（任意）
@@ -331,6 +362,11 @@ body.external-mode { background:#f0f4ff; }
     <div class="external-card">
       <div class="external-header">
         <h1 class="external-title">モニタリング共有ビュー</h1>
+        <div class="external-flags">
+          <span class="external-badge">閲覧専用</span>
+          <span class="external-badge subtle">個人情報保護中</span>
+          <span class="external-badge audience" id="externalAudienceBadge">共有先を確認中…</span>
+        </div>
         <div id="externalMember" class="external-member"></div>
         <div id="externalExpiry" class="external-muted"></div>
       </div>
@@ -360,6 +396,52 @@ let recordsCache = [];
 const queryParams = new URLSearchParams(window.location.search);
 const externalToken = queryParams.get("share") || queryParams.get("token") || "";
 const isExternalMode = !!externalToken;
+const shareAudienceInfo = {
+  family: {
+    label: "家族向け共有",
+    description: "日々の様子をわかりやすく伝えるシンプルな表示です。",
+    intro: "大切なご家族や関係者の皆さまと状況を共有するためのページです。必要な情報だけをまとめていますので、安心してご覧ください。",
+    manualTips: [
+      "QRコードをスマートフォンのカメラで読み取るとページが開きます。",
+      "閲覧ページでは最新のモニタリング記録を順番に確認できます。"
+    ]
+  },
+  center: {
+    label: "地域包括支援センター向け共有",
+    description: "日付・種別を含めてモニタリング内容を確認できます。",
+    intro: "地域包括支援センターの職員さま向けの共有ページです。必要な記録を簡潔にまとめています。",
+    manualTips: [
+      "QRコードからアクセスし、閲覧専用のページで記録をご確認ください。",
+      "必要に応じてケアマネジャーへフィードバックをお寄せください。"
+    ]
+  },
+  medical: {
+    label: "医療連携向け共有",
+    description: "医師・看護師が経過を把握しやすいよう種別も表示します。",
+    intro: "医療機関の皆さまとの情報連携用ページです。必要事項のみ抜粋しています。",
+    manualTips: [
+      "QRコードを読み取り、モニタリング記録を時系列で確認できます。",
+      "診察や訪問時の参考資料としてご活用ください。"
+    ]
+  },
+  service: {
+    label: "サービス事業者向け共有",
+    description: "ケア実務者が把握しやすいよう構成しています。",
+    intro: "サービス事業者の皆さまとの共有ページです。現場で活用しやすいよう簡潔にまとめています。",
+    manualTips: [
+      "QRコードでアクセスし、必要な記録をいつでも確認できます。",
+      "サービス提供に関する気づきはケアマネジャーまでご連絡ください。"
+    ]
+  }
+};
+const shareAudienceDefault = "family";
+const shareExpiryPresetDefault = "30";
+let currentExternalShare = null;
+
+function getAudienceInfo(audience){
+  const key = String(audience || "").toLowerCase();
+  return shareAudienceInfo[key] || shareAudienceInfo[shareAudienceDefault];
+}
 
 const DASHBOARD_OTHER_LABEL = "その他";
 const DASHBOARD_DIGIT_LABEL = "0-9";
@@ -1707,6 +1789,26 @@ function applyShareAllState(){
   });
 }
 
+function applyShareExpiryPreset(){
+  if(isExternalMode) return;
+  const preset=document.getElementById("shareExpiryPreset");
+  const custom=document.getElementById("shareExpires");
+  if(!preset || !custom) return;
+  if(preset.value==="custom"){
+    custom.style.display="";
+    custom.disabled=false;
+    if(!custom.value){
+      const now=new Date();
+      now.setDate(now.getDate()+7);
+      custom.value=toLocalDateTimeInputValue(now);
+    }
+  }else{
+    custom.style.display="none";
+    custom.value="";
+    custom.disabled=true;
+  }
+}
+
 function setupShareUi(){
   if(isExternalMode) return;
   const openBtn=document.getElementById("btnOpenShareForm");
@@ -1725,10 +1827,15 @@ function setupShareUi(){
   if(shareAll){
     shareAll.addEventListener("change",applyShareAllState);
   }
+  const expiryPreset=document.getElementById("shareExpiryPreset");
+  if(expiryPreset){
+    expiryPreset.addEventListener("change",applyShareExpiryPreset);
+  }
   const list=document.getElementById("shareList");
   if(list){
     list.addEventListener("click",handleShareListClick);
   }
+  applyShareExpiryPreset();
 }
 
 function toggleShareForm(open){
@@ -1741,16 +1848,22 @@ function toggleShareForm(open){
   if(status) status.textContent="";
   if(shareFormOpen){
     updateShareAttachmentOptions(recordsCache);
+    applyShareExpiryPreset();
   }else{
     const expires=document.getElementById("shareExpires");
     const password=document.getElementById("sharePassword");
     const mask=document.getElementById("shareMaskCheckbox");
     const shareAll=document.getElementById("shareAttachmentAll");
+    const audience=document.getElementById("shareAudience");
+    const preset=document.getElementById("shareExpiryPreset");
     if(expires) expires.value="";
     if(password) password.value="";
     if(mask) mask.checked=true;
     if(shareAll) shareAll.checked=false;
+    if(audience) audience.value=shareAudienceDefault;
+    if(preset) preset.value=shareExpiryPresetDefault;
     applyShareAllState();
+    applyShareExpiryPreset();
   }
 }
 
@@ -1811,20 +1924,30 @@ function renderShareItem(share){
   const expired=!!share.expired;
   const itemClass=expired?"share-item expired":"share-item";
   const badgeLabel=expired?"期限切れ":"共有中";
+  const info=getAudienceInfo(share.audience);
+  const safeUrl=escapeHtml(share.url||"");
   const expiresLabel=share.expiresAtText?`期限: ${escapeHtml(share.expiresAtText)}`:"期限: 設定なし";
   const attachmentsLabel=share.allowAllAttachments?"添付: すべて共有":`添付: ${share.allowedCount||0}件`;
   const passwordLabel=share.passwordProtected?"パスワードあり":"パスワードなし";
   const maskLabel=share.maskMode==='simple'?"本文マスクあり":"本文そのまま";
+  const audienceLabel=`共有先: ${escapeHtml(info.label)}`;
   const lastAccess=share.lastAccessText?`最終閲覧: ${escapeHtml(share.lastAccessText)}`:"";
   const remaining=share.remainingLabel?`有効期間: ${escapeHtml(share.remainingLabel)}`:"";
-  const metaParts=[expiresLabel,attachmentsLabel,passwordLabel,maskLabel].concat([remaining,lastAccess].filter(Boolean));
+  const accessLabel=share.accessCount?`閲覧回数: ${share.accessCount}回`:"";
+  const metaParts=[audienceLabel,expiresLabel,attachmentsLabel,passwordLabel,maskLabel,remaining,lastAccess,accessLabel].filter(Boolean);
   const metaHtml=metaParts.map(p=>`<span>${p}</span>`).join("\n");
+  const qrUrl=share.url?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(share.url)}`:"";
+  const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
+    + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div></div>`:"";
+  const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
   return `<div class="${itemClass}">`
     + `<div class="share-item-header"><span class="badge">${badgeLabel}</span>`
-    + `<div class="share-url"><input type="text" readonly value="${escapeHtml(share.url||'')}" onclick="this.select();">`
-    + `<button class="secondary btn-compact" data-action="copy-url" data-url="${escapeHtml(share.url||'')}">URLコピー</button>`
+    + `<div class="share-url"><input type="text" readonly value="${safeUrl}" onclick="this.select();">`
+    + `<button class="secondary btn-compact" data-action="copy-url" data-url="${safeUrl}">URLコピー</button>`
     + `</div></div>`
     + `<div class="tag-group">${metaHtml}</div>`
+    + descriptionHtml
+    + qrHtml
     + `<div class="share-actions">`
     + `<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`
     + `</div>`
@@ -1849,6 +1972,17 @@ async function handleShareListClick(event){
     }
     return;
   }
+  if(action==='print-qr'){
+    const token=btn.dataset.token||"";
+    if(!token) return;
+    const share=externalShares.find(s=>s && s.token===token);
+    if(!share){
+      alert("共有情報が見つかりませんでした");
+      return;
+    }
+    openSharePrintView(share);
+    return;
+  }
   if(action==='revoke'){
     const token=btn.dataset.token||"";
     if(!token) return;
@@ -1868,6 +2002,62 @@ async function handleShareListClick(event){
   }
 }
 
+function openSharePrintView(share){
+  if(isExternalMode) return;
+  if(!share || !share.url){
+    alert("共有URLが見つかりませんでした");
+    return;
+  }
+  const info=getAudienceInfo(share.audience);
+  const qrUrl=`https://chart.googleapis.com/chart?cht=qr&chs=260x260&choe=UTF-8&chl=${encodeURIComponent(share.url)}`;
+  const expiryText=share.expiresAtText?`閲覧期限：${escapeHtml(share.expiresAtText)}`:"閲覧期限：設定なし";
+  const passwordNote=share.passwordProtected?"閲覧時にパスワードが必要です。発行時にお伝えしたパスワードを入力してください。":"パスワード入力は不要です。";
+  const attachmentNote=share.allowAllAttachments?"添付ファイルもすべて閲覧できます。":(share.allowedCount?`選択した添付ファイル（${share.allowedCount}件）が閲覧できます。`:"本文のみが共有されています。");
+  const maskNote=share.maskMode==='simple'?"本文は固有名詞を一部マスキングしています。":"本文は原文のまま表示されます。";
+  const tips=(info.manualTips||[]).concat([passwordNote,attachmentNote,maskNote,"URLやパスワードは第三者に共有しないでください。"]);
+  const manualList=tips.map(t=>`<li>${escapeHtml(t)}</li>`).join("\n");
+  const win=window.open("","_blank");
+  if(!win){
+    alert("ポップアップがブロックされました。ブラウザの設定をご確認ください。");
+    return;
+  }
+  const html=`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${escapeHtml(info.label)}｜共有案内</title>
+<style>
+  body{font-family:'Noto Sans JP',system-ui,sans-serif;background:#f3f6ff;margin:0;padding:24px;}
+  @page{size:A4;margin:20mm;}
+  .sheet{max-width:720px;margin:0 auto;background:#fff;border-radius:18px;padding:28px;box-shadow:0 6px 24px rgba(25,118,210,0.18);}
+  .sheet h1{margin:0 0 12px;font-size:1.6rem;color:#1a3d78;}
+  .sheet .audience{font-size:1rem;color:#1f508b;margin-bottom:16px;font-weight:600;}
+  .sheet .row{display:flex;flex-wrap:wrap;gap:24px;align-items:center;margin-bottom:20px;}
+  .sheet .qr img{width:220px;height:220px;border:1px solid #d0ddf4;border-radius:16px;padding:10px;background:#fff;}
+  .sheet .details{flex:1;min-width:220px;font-size:0.95rem;color:#334;}
+  .sheet .details .url{word-break:break-all;margin:12px 0;padding:10px;border-radius:8px;border:1px dashed #c0d6f5;background:#f5f9ff;font-family:monospace;font-size:0.85rem;}
+  .sheet ol{margin:0 0 16px 18px;padding:0;font-size:0.92rem;color:#324;}
+  .sheet li{margin-bottom:8px;line-height:1.6;}
+  .sheet .footer{font-size:0.8rem;color:#5c6d86;border-top:1px solid #dbe6f8;padding-top:12px;text-align:right;}
+  .meta{font-size:0.85rem;color:#4a5c7a;margin-bottom:6px;}
+</style>
+</head><body>
+<div class="sheet">
+  <h1>モニタリング共有のご案内</h1>
+  <div class="audience">${escapeHtml(info.label)}</div>
+  <div class="row">
+    <div class="qr"><img src="${qrUrl}" alt="共有ページQRコード"></div>
+    <div class="details">
+      <p>${escapeHtml(info.description)}</p>
+      <div class="meta">${expiryText}</div>
+      <div class="url">${escapeHtml(share.url)}</div>
+    </div>
+  </div>
+  <h2 style="font-size:1.1rem;color:#1f3763;margin:0 0 10px;">ご利用方法</h2>
+  <ol>${manualList}</ol>
+  <div class="footer">印刷日：${escapeHtml(formatDateTime(new Date()))}</div>
+</div>
+</body></html>`;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
 async function handleCreateShare(event){
   if(event) event.preventDefault();
   if(isExternalMode) return;
@@ -1881,7 +2071,7 @@ async function handleCreateShare(event){
       const msg=res && res.message ? res.message : "共有リンクの発行に失敗しました";
       throw new Error(msg);
     }
-    if(status) status.textContent="共有リンクを発行しました。リストからURLをコピーしてください。";
+    if(status) status.textContent="共有リンクを発行しました。リストからURLコピーやQR印刷ができます。";
     toggleShareForm(false);
     fetchExternalShareList();
   } catch(err){
@@ -1890,6 +2080,8 @@ async function handleCreateShare(event){
 }
 
 function collectShareFormConfig(){
+  const audienceSelect=document.getElementById("shareAudience");
+  const presetSelect=document.getElementById("shareExpiryPreset");
   const expires=document.getElementById("shareExpires");
   const password=document.getElementById("sharePassword");
   const mask=document.getElementById("shareMaskCheckbox");
@@ -1903,12 +2095,33 @@ function collectShareFormConfig(){
       if(cb.checked) allowed.push(cb.dataset.fileId);
     });
   }
-  return {
-    expiresAt: expires && expires.value ? convertLocalDateTimeToIso(expires.value) : "",
+  const audience=(audienceSelect && audienceSelect.value) ? audienceSelect.value : shareAudienceDefault;
+  const preset=(presetSelect && presetSelect.value) ? presetSelect.value : shareExpiryPresetDefault;
+  const config={
+    audience,
     password: password ? password.value.trim() : "",
     maskMode: mask && mask.checked ? "simple" : "none",
     allowedAttachmentIds: allowed
   };
+  if(preset === "custom"){
+    if(!expires || !expires.value){
+      throw new Error("共有期限の日付を入力してください。");
+    }
+    const iso=convertLocalDateTimeToIso(expires.value);
+    if(!iso){
+      throw new Error("共有期限の形式が正しくありません。");
+    }
+    config.expiresAt=iso;
+  }else if(preset === "none"){
+    // 無期限の場合はexpiresAt/expiresInDaysを設定しない
+  }else{
+    const days=Number(preset);
+    if(!Number.isFinite(days) || days <= 0){
+      throw new Error("共有期限の選択肢が不正です。");
+    }
+    config.expiresInDays=days;
+  }
+  return config;
 }
 
 function convertLocalDateTimeToIso(value){
@@ -1918,6 +2131,12 @@ function convertLocalDateTimeToIso(value){
   const date=new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), Number(m[4]), Number(m[5]));
   if(Number.isNaN(date.getTime())) return "";
   return date.toISOString();
+}
+
+function toLocalDateTimeInputValue(date){
+  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const pad=n=>String(n).padStart(2,"0");
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function copyToClipboard(text){
@@ -1968,6 +2187,7 @@ function initInternalApp(){
 
 function initExternalMode(){
   document.body.classList.add("external-mode");
+  currentExternalShare=null;
   setupExternalAuth();
   if(!externalToken){
     showExternalAlert("error","共有リンクが見つかりません。管理者にお問い合わせください。");
@@ -1986,7 +2206,9 @@ function fetchExternalShareMeta(){
       return;
     }
     const share=res.share||{};
+    currentExternalShare=share;
     updateExternalHeader(share);
+    setExternalIntro(share);
     if(share.expired){
       showExternalAlert("warning","この共有リンクは期限切れです。最新のリンクを発行してください。");
       showExternalAuthForm(false);
@@ -2039,6 +2261,7 @@ function showExternalAlert(type,message){
 }
 
 function updateExternalHeader(share){
+  const info=getAudienceInfo(share && share.audience);
   const memberEl=document.getElementById("externalMember");
   if(memberEl){
     const label=share.memberName?`${share.memberName}（ID: ${share.memberId}）`:`利用者ID: ${share.memberId}`;
@@ -2048,13 +2271,31 @@ function updateExternalHeader(share){
   if(expiry){
     expiry.textContent=share.expiresAtText?`閲覧期限：${share.expiresAtText}`:"閲覧期限：設定なし";
   }
+  const badge=document.getElementById("externalAudienceBadge");
+  if(badge){
+    badge.textContent=info.label;
+  }
 }
 
 function setExternalFooter(share){
   const footer=document.getElementById("externalFooter");
   if(!footer) return;
-  const note=share.expired?"※ このリンクは期限切れです。新しいURLを受け取っていない場合は発行元へご連絡ください。":"※ このページのURLとパスワードは第三者に共有しないようご注意ください。";
-  footer.textContent=note;
+  const info=getAudienceInfo(share && share.audience);
+  const passwordMsg=share.requirePassword?"このページはパスワードで保護されています。":"このページはURLのみで閲覧できます。";
+  const caution=share.expired
+    ? "※ このリンクは期限切れです。新しいURLを受け取っていない場合は発行元へご連絡ください。"
+    : "※ このページのURLやパスワードは第三者に共有しないようご注意ください。";
+  footer.innerHTML=`${escapeHtml(info.label)} ｜ ${escapeHtml(passwordMsg)}<br>${escapeHtml(caution)}`;
+}
+
+function setExternalIntro(share){
+  const intro=document.getElementById("externalIntro");
+  if(!intro) return;
+  const info=getAudienceInfo(share && share.audience);
+  const passwordMsg=share && share.requirePassword
+    ? "閲覧には共有されたパスワードの入力が必要です。"
+    : "閲覧にはパスワード入力は必要ありません。";
+  intro.innerHTML=`${escapeHtml(info.intro)}<br><span class="external-muted">${escapeHtml(passwordMsg)}</span>`;
 }
 
 function handleExternalAuthSubmit(){
@@ -2080,10 +2321,12 @@ function loadExternalShareData(password){
     }
     if(status) status.textContent="";
     const share=res.share||{};
+    currentExternalShare=share;
     updateExternalHeader(share);
+    setExternalIntro(share);
     showExternalAuthForm(false);
     showExternalAlert(share.expired?"warning":"", share.expired?"リンクの期限が切れています。再発行を依頼してください。":"");
-    renderExternalRecords(Array.isArray(res.records)?res.records:[]);
+    renderExternalRecords(Array.isArray(res.records)?res.records:[], share);
     setExternalFooter(share);
   }).catch(err=>{
     const status=document.getElementById("externalAuthStatus");
@@ -2092,19 +2335,24 @@ function loadExternalShareData(password){
   });
 }
 
-function renderExternalRecords(records){
+function renderExternalRecords(records, share){
   const container=document.getElementById("externalRecords");
   if(!container) return;
   if(!records.length){
     container.innerHTML='<div class="external-muted">共有可能な記録はまだありません。</div>';
     return;
   }
+  const showKind=(share && share.audience) ? (share.audience !== 'family') : true;
   container.innerHTML=records.map(rec=>{
     const text=escapeHtml(rec.text||"").replace(/\n/g,"<br>") || '<span class="external-muted">（本文なし）</span>';
     const attachments=Array.isArray(rec.attachments)?rec.attachments:[];
     const attachmentsHtml=attachments.length?`<div class="attachments">${attachments.map(att=>`<a href="${escapeHtml(att.url||'#')}" target="_blank" rel="noopener">📎 ${escapeHtml(att.name||'添付ファイル')}</a>`).join('')}</div>`:"";
+    const metaParts=[`<span>${escapeHtml(rec.dateText||'---')}</span>`];
+    if(showKind){
+      metaParts.push(`<span>${escapeHtml(rec.kind||'種別未設定')}</span>`);
+    }
     return `<div class="external-record">`
-      + `<div class="meta"><span>${escapeHtml(rec.dateText||'---')}</span><span>${escapeHtml(rec.kind||'種別未設定')}</span></div>`
+      + `<div class="meta">${metaParts.join('')}</div>`
       + `<div class="text">${text}</div>`
       + attachmentsHtml
       + `</div>`;

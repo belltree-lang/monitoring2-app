@@ -3,6 +3,7 @@ const SPREADSHEET_ID = '1wdHF0txuZtrkMrC128fwUSImyt320JhBVqXloS7FgpU'; // ←ご
 const SHEET_NAME      = 'Monitoring'; // ケアマネ用モニタリング
 const OPENAI_MODEL    = 'gpt-4o-mini';
 const SHARE_SHEET_NAME = 'ExternalShares';
+const SHARE_LOG_SHEET_NAME = 'ExternalShareAccessLog';
 
 // 画像/動画/PDF の既定保存先（利用者IDごとにサブフォルダを自動作成）
 const DEFAULT_FOLDER_ID         = '1glDniVONBBD8hIvRGMPPT1iLXdtHJpEC';
@@ -849,6 +850,11 @@ function createExternalShare(memberId, options){
     const shareSheet = ensureShareSheet_();
     const config = options && typeof options === 'object' ? options : {};
 
+    const audienceRaw = String(config.audience || '').trim().toLowerCase();
+    const audience = ['family','center','medical','service'].includes(audienceRaw)
+      ? audienceRaw
+      : 'family';
+
     const maskMode = (config.maskMode === 'none') ? 'none' : 'simple';
     const passwordHash = hashSharePassword_(config.password);
     const allowedRaw = Array.isArray(config.allowedAttachmentIds) ? config.allowedAttachmentIds : [];
@@ -859,6 +865,12 @@ function createExternalShare(memberId, options){
     if (config.expiresAt) {
       const expires = new Date(config.expiresAt);
       if (!isNaN(expires.getTime())) {
+        expiresAtIso = expires.toISOString();
+      }
+    } else if (config.expiresInDays) {
+      const days = Number(config.expiresInDays);
+      if (!isNaN(days) && days > 0) {
+        const expires = new Date(Date.now() + days * 24 * 3600 * 1000);
         expiresAtIso = expires.toISOString();
       }
     }
@@ -875,11 +887,21 @@ function createExternalShare(memberId, options){
       JSON.stringify(allowedAttachmentIds),
       nowIso,
       '',
-      ''
+      '',
+      audience,
+      0
     ]);
 
     const url = ScriptApp.getService().getUrl() + '?share=' + encodeURIComponent(token);
-    return { status:'success', token, url, expiresAt: expiresAtIso, maskMode, allowAllAttachments: allowAll };
+    return {
+      status:'success',
+      token,
+      url,
+      audience,
+      expiresAt: expiresAtIso,
+      maskMode,
+      allowAllAttachments: allowAll
+    };
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
@@ -914,12 +936,14 @@ function getExternalShares(memberId){
         createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
         expiresAtText: formatShareDate_(share.expiresAt),
         expired,
+        audience: share.audience,
         passwordProtected: !!share.passwordHash,
         maskMode: share.maskMode || 'simple',
         allowAllAttachments: allowAll,
         allowedCount,
         lastAccessText: formatShareDate_(share.lastAccessAt),
-        remainingLabel: computeRemainingLabel_(share.expiresAt)
+        remainingLabel: computeRemainingLabel_(share.expiresAt),
+        accessCount: share.accessCount || 0
       });
     }
 
@@ -961,6 +985,7 @@ function getExternalShareMeta(token){
       memberName: lookupMemberName_(share.memberId),
       expiresAtText: formatShareDate_(share.expiresAt),
       expired,
+      audience: share.audience,
       requirePassword: !!share.passwordHash,
       maskMode: share.maskMode || 'simple',
       allowAllAttachments: allowAll,
@@ -994,6 +1019,9 @@ function enterExternalShare(token, password){
 
     const payload = buildExternalSharePayload_(share);
     sheet.getRange(rowIndex, 9).setValue(new Date()); // LastAccessAt
+    const nextCount = (share.accessCount || 0) + 1;
+    sheet.getRange(rowIndex, 11).setValue(nextCount);
+    logExternalShareAccess_(share);
 
     const allowAll = share.allowedAttachmentIds.includes('__ALL__');
     const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
@@ -1003,6 +1031,7 @@ function enterExternalShare(token, password){
       memberName: lookupMemberName_(share.memberId),
       expiresAtText: formatShareDate_(share.expiresAt),
       expired: false,
+      audience: share.audience,
       requirePassword: !!share.passwordHash,
       maskMode: share.maskMode || 'simple',
       allowAllAttachments: allowAll,
@@ -1022,7 +1051,10 @@ function ensureShareSheet_(){
   if (!sheet) {
     sheet = ss.insertSheet(SHARE_SHEET_NAME);
   }
-  const header = ['Token','MemberID','PasswordHash','ExpiresAt','MaskMode','AllowedAttachments','CreatedAt','RevokedAt','LastAccessAt'];
+  const header = ['Token','MemberID','PasswordHash','ExpiresAt','MaskMode','AllowedAttachments','CreatedAt','RevokedAt','LastAccessAt','Audience','AccessCount'];
+  if (sheet.getMaxColumns() < header.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
+  }
   const range = sheet.getRange(1, 1, 1, header.length);
   range.setValues([header]);
   return sheet;
@@ -1037,6 +1069,12 @@ function parseShareRow_(row){
     const d = value instanceof Date ? value : new Date(value);
     return (d && !isNaN(d.getTime())) ? d : null;
   };
+  const toNumber = (value) => {
+    const num = Number(value);
+    return isNaN(num) ? 0 : num;
+  };
+  const audienceRaw = String(row[9] || '').trim().toLowerCase();
+  const audience = ['family','center','medical','service'].includes(audienceRaw) ? audienceRaw : 'family';
   return {
     token: String(row[0] || '').trim(),
     memberId: String(row[1] || '').trim(),
@@ -1046,7 +1084,9 @@ function parseShareRow_(row){
     allowedAttachmentIds: Array.isArray(row[5]) ? row[5] : safeJson(String(row[5] || '[]')),
     createdAt: toDate(row[6]),
     revokedAt: toDate(row[7]),
-    lastAccessAt: toDate(row[8])
+    lastAccessAt: toDate(row[8]),
+    audience,
+    accessCount: toNumber(row[10])
   };
 }
 
@@ -1068,15 +1108,46 @@ function buildExternalSharePayload_(share){
   const records = fetchRecordsWithIndex_(share.memberId, 'all');
   const allowAll = share.allowedAttachmentIds.includes('__ALL__');
   const allowedSet = new Set(allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__'));
+  const audience = share.audience || 'family';
   return records.map(rec => {
     const attachments = filterAttachmentsForShare_(rec.attachments, { allowAll, allowedSet });
     return {
       dateText: rec.dateText || '',
       kind: rec.kind || '',
+      audience,
       text: maskTextForExternal_(rec.text || '', share.maskMode),
       attachments
     };
   }).filter(rec => rec.text || (rec.attachments && rec.attachments.length));
+}
+
+function logExternalShareAccess_(share){
+  try {
+    const sheet = ensureShareLogSheet_();
+    sheet.appendRow([
+      new Date(),
+      share.token,
+      share.memberId,
+      share.audience || 'family'
+    ]);
+  } catch (e) {
+    Logger.log('logExternalShareAccess_ error: ' + e);
+  }
+}
+
+function ensureShareLogSheet_(){
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHARE_LOG_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHARE_LOG_SHEET_NAME);
+  }
+  const header = ['AccessedAt','Token','MemberID','Audience'];
+  if (sheet.getMaxColumns() < header.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
+  }
+  const range = sheet.getRange(1, 1, 1, header.length);
+  range.setValues([header]);
+  return sheet;
 }
 
 function filterAttachmentsForShare_(attachments, option){
