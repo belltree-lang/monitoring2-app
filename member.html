@@ -180,7 +180,7 @@ body.external-mode { background:#f0f4ff; }
 <div class="card">
   <h2>利用者を選択</h2>
   <div class="toolbar" style="position:relative;">
-    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;" oninput="searchUsers(this.value)">
+    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
     <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
     <select id="recordRange">
       <option value="all">全件</option>
@@ -1372,7 +1372,9 @@ function searchUsers(rawQuery) {
 
 function setupSearchBox() {
   if (!input || !listBox) return;
-  input.addEventListener("input", () => searchUsers(input.value));
+  const handleInput = () => searchUsers(input.value);
+  input.addEventListener("input", handleInput);
+  input.addEventListener("change", resolveInput);
   listBox.addEventListener("click", e => {
     const item = e.target.closest(".autocomplete-item");
     if (!item || item.dataset.empty === "true") return;
@@ -1436,20 +1438,17 @@ function resolveInput() {
 }
 
 function selectMember(id, name) {
+  console.log("[member] selectMember:start", { id, name });
   memberId = id;
   memberName = name || "";
-  if (input) input.value = `${id}${memberName ? "　" + memberName : ""}`;
+  const label = `${id}${memberName ? "　" + memberName : ""}`;
+  if (input) input.value = label;
   if (listBox) {
     listBox.style.display = "none";
     listBox.innerHTML = "";
   }
-  const label = `${id}${memberName ? "　" + memberName : ""}`;
   const statusEl = document.getElementById("idStatus");
   if (statusEl) statusEl.textContent = `選択中: ${label}`;
-  const tagEl = document.getElementById("memberTag");
-  if (tagEl) tagEl.textContent = label;
-  const mainArea = document.getElementById("mainArea");
-  if (mainArea) mainArea.style.display = "";
   const filterKindEl = document.getElementById("filterKind");
   if (filterKindEl) filterKindEl.value = "all";
   const fromEl = document.getElementById("filterDateFrom");
@@ -1462,12 +1461,39 @@ function selectMember(id, name) {
   if (summaryEl) summaryEl.textContent = "ここに要約が表示されます";
   const adviceEl = document.getElementById("adviceOutput");
   if (adviceEl) adviceEl.textContent = "ここに提案が表示されます";
+  console.log("[member] selectMember:load", { id });
+  loadMemberData(id, { name: memberName, label });
+  console.log("[member] selectMember:complete", { id, name: memberName });
+}
+
+function loadMemberData(userId, options = {}) {
+  const safeId = String(userId || "").trim();
+  const name = options.name != null ? String(options.name) : (memberName || "");
+  const label = options.label || `${safeId}${name ? "　" + name : ""}`;
+  console.log("[member] loadMemberData:start", { userId: safeId, name });
+  if (!safeId) {
+    console.warn("[member] loadMemberData:missing-id", { userId });
+    return;
+  }
+  const mainArea = document.getElementById("mainArea");
+  if (mainArea) {
+    mainArea.style.display = "block";
+  } else {
+    console.warn("[member] loadMemberData:mainArea-not-found");
+  }
+  const tagEl = document.getElementById("memberTag");
+  if (tagEl) {
+    tagEl.textContent = label;
+  } else {
+    console.warn("[member] loadMemberData:memberTag-not-found");
+  }
   updateMediaGallery([]);
   closeShareForm();
   resetShareListPlaceholder();
   renderDashboard();
   loadRecords();
   fetchExternalShareList();
+  console.log("[member] loadMemberData:complete", { userId: safeId, name });
 }
 
 function setupMemberUi() {
@@ -1485,6 +1511,9 @@ function setupMemberUi() {
           status.textContent = `登録しました: ${res.id} ${res.name}`;
           idInput.value = "";
           nameInput.value = "";
+          if (res.id) {
+            selectMember(res.id, res.name || "");
+          }
           refreshMemberList();
           loadDashboard();
         } else {
