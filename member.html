@@ -582,6 +582,40 @@ function toHiragana(value = "") {
     .replace(/[ァ-ン]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
 }
 
+function normalizeMemberSearchText(value) {
+  if (value == null) return "";
+  return toHiragana(String(value))
+    .toLowerCase()
+    .replace(/[\s　]+/g, "");
+}
+
+function includesMemberSearchTarget(rawValue, normalizedValue, rawQuery, normalizedQuery) {
+  if (!rawValue) return false;
+  const text = String(rawValue);
+  if (rawQuery && text.includes(rawQuery)) return true;
+  const normalized = normalizedValue ? String(normalizedValue) : normalizeMemberSearchText(text);
+  const normalizedQueryText = normalizedQuery != null ? String(normalizedQuery) : "";
+  if (!normalizedQueryText) return false;
+  return normalized.includes(normalizedQueryText);
+}
+
+function memberMatchesQuery(member, rawQuery, idQuery, normalizedQuery) {
+  if (!member) return false;
+  const safeRawQuery = rawQuery != null ? String(rawQuery) : "";
+  const hasText = !!safeRawQuery;
+  const idCandidate = idQuery != null ? String(idQuery) : "";
+  const normalizedQueryText = normalizedQuery != null ? String(normalizedQuery) : "";
+  if (idCandidate && /^[0-9]+$/.test(idCandidate)) {
+    if (member.id && member.id.includes(idCandidate)) return true;
+    if (member.idNormalized && member.idNormalized.includes(idCandidate)) return true;
+  }
+  if (!hasText) return false;
+  if (includesMemberSearchTarget(member.name, member.nameNormalized, safeRawQuery, normalizedQueryText)) return true;
+  if (includesMemberSearchTarget(member.kana, member.kanaNormalized, safeRawQuery, normalizedQueryText)) return true;
+  if (includesMemberSearchTarget(member.yomi, member.yomiNormalized, safeRawQuery, normalizedQueryText)) return true;
+  return false;
+}
+
 function normalizeHiraganaBaseChar(ch) {
   if (!ch) return "";
   const base = ch.normalize("NFD")[0] || "";
@@ -899,10 +933,26 @@ function refreshMemberList() {
           const entry = item && typeof item === "object" ? item : {};
           const id = String(entry.id || "").trim();
           const name = entry.name != null ? String(entry.name).trim() : "";
-          const yomi = entry.yomi != null ? String(entry.yomi).trim() : "";
+          const rawYomi = entry.yomi != null ? String(entry.yomi).trim() : "";
+          const rawKana = entry.kana != null ? String(entry.kana).trim() : "";
+          const yomi = rawYomi || rawKana;
+          const kana = rawKana || rawYomi;
           const careManager = entry.careManager != null ? String(entry.careManager).trim() : "";
-          const yomiNormalized = yomi ? toHiragana(yomi).replace(/[\s　]+/g, "") : "";
-          return { id, name, yomi, careManager, yomiNormalized };
+          const idNormalized = toHalfDigits(id);
+          const nameNormalized = normalizeMemberSearchText(name);
+          const kanaNormalized = normalizeMemberSearchText(kana);
+          const yomiNormalized = normalizeMemberSearchText(yomi);
+          return {
+            id,
+            idNormalized,
+            name,
+            nameNormalized,
+            yomi,
+            kana,
+            careManager,
+            kanaNormalized,
+            yomiNormalized
+          };
         })
       : [];
     memberList = mapped;
@@ -1229,17 +1279,13 @@ function setupSearchBox() {
   input.addEventListener("input", () => {
     const qRaw = input.value.trim();
     if (!qRaw) { listBox.style.display = "none"; return; }
-    const q = toHalfDigits(qRaw);
-    const qHira = toHiragana(qRaw).replace(/[\s　]+/g, "");
-    const hits = memberList.filter(m => {
-      const idMatch = m.id && q ? m.id.includes(q) : false;
-      const nameMatch = m.name && m.name.includes(qRaw);
-      const yomiMatch = qHira && m.yomiNormalized ? m.yomiNormalized.includes(qHira) : false;
-      return idMatch || nameMatch || yomiMatch;
-    });
+    const idQuery = toHalfDigits(qRaw);
+    const normalizedQuery = normalizeMemberSearchText(qRaw);
+    const hits = memberList.filter(m => memberMatchesQuery(m, qRaw, idQuery, normalizedQuery));
     if (!hits.length) { listBox.style.display = "none"; return; }
     listBox.innerHTML = hits.map(m => {
-      const yomiLabel = m.yomi ? ` <span class="muted">(${escapeHtml(m.yomi)})</span>` : "";
+      const reading = m.yomi || m.kana;
+      const yomiLabel = reading ? ` <span class="muted">(${escapeHtml(reading)})</span>` : "";
       return `<div class="autocomplete-item" data-id="${m.id}" data-name="${escapeHtml(m.name)}">${m.id}　${escapeHtml(m.name)}${yomiLabel}</div>`;
     }).join("");
     listBox.style.display = "block";
@@ -1258,17 +1304,30 @@ function setupSearchBox() {
 function resolveInput() {
   const val = input.value.trim();
   if (!val) return;
-  const half = toHalfDigits(val);
-  const hiraVal = toHiragana(val).replace(/[\s　]+/g, "");
-  const hit = memberList.find(m => {
-    if (m.id === half) return true;
-    if (m.name === val) return true;
-    if (m.yomi && m.yomi === val) return true;
-    if (hiraVal && m.yomiNormalized === hiraVal) return true;
-    return false;
-  });
+  const idQuery = toHalfDigits(val);
+  const normalizedQuery = normalizeMemberSearchText(val);
+  let hit = null;
+  if (idQuery && /^[0-9]+$/.test(idQuery)) {
+    hit = memberList.find(m => m.id === idQuery || m.idNormalized === idQuery);
+  }
+  if (!hit) {
+    hit = memberList.find(m => m.name === val);
+  }
+  if (!hit) {
+    hit = memberList.find(m => (m.kana && m.kana === val) || (m.yomi && m.yomi === val));
+  }
+  if (!hit && normalizedQuery) {
+    hit = memberList.find(m => {
+      return m.nameNormalized === normalizedQuery ||
+        m.kanaNormalized === normalizedQuery ||
+        m.yomiNormalized === normalizedQuery;
+    });
+  }
+  if (!hit) {
+    hit = memberList.find(m => memberMatchesQuery(m, val, idQuery, normalizedQuery));
+  }
   if (hit) { selectMember(hit.id, hit.name); return; }
-  if (/^\d{4}$/.test(half)) { selectMember(half, ""); return; }
+  if (/^\d{4}$/.test(idQuery)) { selectMember(idQuery, ""); return; }
   const statusEl = document.getElementById("idStatus");
   if (statusEl) statusEl.textContent = "候補が見つかりません";
 }
