@@ -1319,8 +1319,9 @@ function bindDashboardActions() {
   });
 }
 
-const input = document.getElementById("memberIdInput");
-const listBox = document.getElementById("autocompleteList");
+let input = null;
+let listBox = null;
+let searchBoxInitialized = false;
 
 function searchUsers(rawQuery) {
   if (!listBox) return;
@@ -1371,7 +1372,11 @@ function searchUsers(rawQuery) {
 }
 
 function setupSearchBox() {
+  if (!input) input = document.getElementById("memberIdInput");
+  if (!listBox) listBox = document.getElementById("autocompleteList");
   if (!input || !listBox) return;
+  if (searchBoxInitialized) return;
+  searchBoxInitialized = true;
   const handleInput = () => searchUsers(input.value);
   input.addEventListener("input", handleInput);
   input.addEventListener("change", resolveInput);
@@ -2402,12 +2407,10 @@ function setupExternalAuth(){
 
 function initInternalApp(){
   document.body.classList.remove("external-mode");
-  setupSearchBox();
   setupMemberUi();
   setupFilters();
   setupShareUi();
   resetShareListPlaceholder();
-  refreshMemberList();
   loadDashboard();
 }
 
@@ -2585,11 +2588,23 @@ function renderExternalRecords(records, share){
   }).join("\n");
 }
 
-if(isExternalMode){
-  initExternalMode();
-}else{
-  initInternalApp();
+function runAfterDomReady(fn){
+  if(document.readyState === "loading"){
+    window.addEventListener("DOMContentLoaded", fn);
+  }else{
+    fn();
+  }
 }
+
+runAfterDomReady(()=>{
+  if(isExternalMode){
+    initExternalMode();
+  }else{
+    refreshMemberList();
+    setupSearchBox();
+    initInternalApp();
+  }
+});
 </script>
 </body>
 </html>
