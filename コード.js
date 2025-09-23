@@ -920,7 +920,7 @@ function createExternalShare(memberId, options){
       0
     ]);
 
-    const url = ScriptApp.getService().getUrl() + '?share=' + encodeURIComponent(token);
+    const url = ScriptApp.getService().getUrl() + '?shareId=' + encodeURIComponent(token);
     return {
       status:'success',
       token,
@@ -959,7 +959,7 @@ function getExternalShares(memberId){
 
       shares.push({
         token: share.token,
-        url: baseUrl + '?share=' + encodeURIComponent(share.token),
+        url: baseUrl + '?shareId=' + encodeURIComponent(share.token),
         createdAtText: formatShareDate_(share.createdAt),
         createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
         expiresAtText: formatShareDate_(share.expiresAt),

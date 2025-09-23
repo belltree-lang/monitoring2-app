@@ -217,7 +217,7 @@ body.external-mode { background:#f0f4ff; }
             <option value="訪問">訪問</option>
             <option value="電話">電話</option>
             <option value="施設面談">施設面談</option>
-            <option value="通所観察">通所観察</option>
+            <option value="通所先">通所先</option>
             <option value="サービス担当者会議">サービス担当者会議</option>
             <option value="その他" selected>その他</option>
           </select>
@@ -268,7 +268,7 @@ body.external-mode { background:#f0f4ff; }
               <option value="訪問">訪問</option>
               <option value="電話">電話</option>
               <option value="施設面談">施設面談</option>
-              <option value="通所観察">通所観察</option>
+              <option value="通所先">通所先</option>
               <option value="サービス担当者会議">サービス担当者会議</option>
               <option value="その他">その他</option>
             </select>
@@ -398,7 +398,7 @@ let memberListLoading = false;
 let memberListLoaded = false;
 let recordsCache = [];
 const queryParams = new URLSearchParams(window.location.search);
-const externalToken = queryParams.get("share") || queryParams.get("token") || "";
+const externalToken = queryParams.get("shareId") || queryParams.get("share") || queryParams.get("token") || "";
 const isExternalMode = !!externalToken;
 const shareAudienceInfo = {
   family: {
@@ -880,6 +880,15 @@ let initialMemberId = (() => {
   return normalizeMemberIdForLookup(raw.trim());
 })();
 
+function buildMemberDetailUrl(id) {
+  const safeId = String(id || "").trim();
+  const loc = window.location || {};
+  const origin = loc.origin || ((loc.protocol || "") + "//" + (loc.host || ""));
+  const base = origin + (loc.pathname || "");
+  if (!safeId) return base;
+  return `${base}?id=${encodeURIComponent(safeId)}`;
+}
+
 function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
   return String(value ?? "").replace(/[&<>"']/g, ch => map[ch]);
@@ -1177,7 +1186,7 @@ function renderDashboard() {
           ? careParts.map(part => escapeHtml(part)).join('／')
           : '<span class="muted">担当未設定</span>';
         const count = Number(entry.countThisMonth || 0);
-        const link = `?id=${encodeURIComponent(entry.id || "")}`;
+        const link = buildMemberDetailUrl(entry.id || "");
         const selected = memberId && entry.id === memberId ? " selected" : "";
         return `
           <div class="dashboard-entry status-${statusKey}${selected}">
