@@ -1439,16 +1439,24 @@ function resolveInput() {
 
 function selectMember(id, name) {
   console.log("[member] selectMember:start", { id, name });
-  memberId = id;
-  memberName = name || "";
-  const label = `${id}${memberName ? "　" + memberName : ""}`;
+  const rawId = id != null ? String(id) : "";
+  const inputFallback = input && input.value ? input.value : "";
+  const safeId = normalizeMemberIdForLookup(rawId || inputFallback);
+  if (!safeId) {
+    console.warn("[member] selectMember:missing-id", { id, name, inputValue: inputFallback });
+    setMemberStatusMessage("利用者IDを取得できませんでした");
+    return;
+  }
+  const safeName = name != null ? String(name).trim() : "";
+  memberId = safeId;
+  memberName = safeName;
+  const label = `${safeId}${safeName ? "　" + safeName : ""}`;
   if (input) input.value = label;
   if (listBox) {
     listBox.style.display = "none";
     listBox.innerHTML = "";
   }
-  const statusEl = document.getElementById("idStatus");
-  if (statusEl) statusEl.textContent = `選択中: ${label}`;
+  setMemberStatusMessage(`選択中: ${label}`);
   const filterKindEl = document.getElementById("filterKind");
   if (filterKindEl) filterKindEl.value = "all";
   const fromEl = document.getElementById("filterDateFrom");
@@ -1461,9 +1469,9 @@ function selectMember(id, name) {
   if (summaryEl) summaryEl.textContent = "ここに要約が表示されます";
   const adviceEl = document.getElementById("adviceOutput");
   if (adviceEl) adviceEl.textContent = "ここに提案が表示されます";
-  console.log("[member] selectMember:load", { id });
-  loadMemberData(id, { name: memberName, label });
-  console.log("[member] selectMember:complete", { id, name: memberName });
+  console.log("[member] selectMember:load", { id: safeId });
+  loadMemberData(safeId, { name: memberName, label });
+  console.log("[member] selectMember:complete", { id: safeId, name: memberName });
 }
 
 function loadMemberData(userId, options = {}) {
