@@ -2,8 +2,7 @@ name: Deploy to Google Apps Script
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   deploy:
@@ -16,14 +15,17 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Clasp
+      - name: Install clasp
         run: npm install -g @google/clasp@latest
 
-      - name: Create client_secret.json
-        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > client_secret.json
+      # ここで ~/.clasprc.json を復元（ログイン操作はしない）
+      - name: Restore ~/.clasprc.json
+        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > ~/.clasprc.json
 
-      - name: Login with OAuth
-        run: clasp login --creds client_secret.json --no-localhost
+      # 認証確認（ユーザー入力不要）
+      - name: Check auth status
+        run: clasp login --status
 
+      # push 実行
       - name: Push to GAS
         run: clasp push -f
