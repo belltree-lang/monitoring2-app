@@ -1420,7 +1420,9 @@ function setupSearchBox() {
   input.addEventListener("input", handleInput);
   input.addEventListener("change", resolveInput);
   listBox.addEventListener("click", e => {
-    const item = e.target.closest(".autocomplete-item");
+    const rawTarget = e.target;
+    const target = rawTarget instanceof Element ? rawTarget : rawTarget && rawTarget.parentElement;
+    const item = target ? target.closest(".autocomplete-item") : null;
     if (!item || item.dataset.empty === "true") return;
     selectMember(item.dataset.id, item.dataset.name);
   });
