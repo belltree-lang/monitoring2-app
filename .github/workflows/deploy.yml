@@ -8,23 +8,22 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
 
-      - uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - run: npm install -g @google/clasp
+      - name: Install Clasp
+        run: npm install -g @google/clasp@latest
 
-      - name: Restore .clasprc.json
-        env:
-          CLASP_CREDENTIALS: ${{ secrets.CLASP_CREDENTIALS }}
-        run: |
-          echo "$CLASP_CREDENTIALS" | tr -d '\r' | base64 -d > "$HOME/.clasprc.json"
-          echo "=== Restored .clasprc.json ==="
-          cat "$HOME/.clasprc.json"
+      - name: Decode service account key
+        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > ./sa.json
 
-      - name: Push to Google Apps Script
+      - name: Authenticate clasp with service account
+        run: clasp login --creds ./sa.json
+
+      - name: Push to GAS
         run: clasp push -f
