@@ -16,4 +16,14 @@ jobs:
         with:
           node-version: 18
 
-      - nam
+      - name: Install Clasp
+        run: npm install -g @google/clasp@latest
+
+      - name: Create client_secret.json
+        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > client_secret.json
+
+      - name: Login with OAuth
+        run: clasp login --creds client_secret.json --no-localhost
+
+      - name: Push to GAS
+        run: clasp push -f
