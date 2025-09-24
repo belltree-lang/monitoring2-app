@@ -18,14 +18,11 @@ jobs:
       - name: Install clasp
         run: npm install -g @google/clasp@latest
 
-      # ここで ~/.clasprc.json を復元（ログイン操作はしない）
       - name: Restore ~/.clasprc.json
         run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > ~/.clasprc.json
 
-      # 認証確認（ユーザー入力不要）
       - name: Check auth status
         run: clasp login --status
 
-      # push 実行
       - name: Push to GAS
         run: clasp push -f
