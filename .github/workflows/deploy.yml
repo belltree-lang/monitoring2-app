@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
@@ -19,11 +20,10 @@ jobs:
       - name: Install Clasp
         run: npm install -g @google/clasp@latest
 
-      - name: Decode service account key
-        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > ./sa.json
+      # GitHub Secret から OAuth 認証ファイルを生成
+      - name: Create .clasprc.json
+        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > ~/.clasprc.json
 
-      - name: Authenticate clasp with service account
-        run: clasp login --creds ./sa.json
-
+      # clasp push 実行
       - name: Push to GAS
         run: clasp push -f
