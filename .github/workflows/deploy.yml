@@ -2,7 +2,8 @@ name: Deploy to Google Apps Script
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   deploy:
@@ -15,14 +16,15 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install clasp
+      - name: Install Clasp
         run: npm install -g @google/clasp@latest
 
-      - name: Restore ~/.clasprc.json
-        run: echo "${{ secrets.CLASP_CREDENTIALS }}" | base64 -d > ~/.clasprc.json
+      - name: Create .clasp.json
+        run: echo '${{ secrets.CLASP_JSON }}' > .clasp.json
 
-      - name: Check auth status
-        run: clasp login --status
+      - name: Create .clasprc.json
+        run: echo '${{ secrets.CLASP_CREDENTIALS }}' | base64 -d > ~/.clasprc.json
 
       - name: Push to GAS
-        run: clasp push -f
+        run: clasp push
+        working-directory: ./
