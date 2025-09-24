@@ -888,6 +888,8 @@ function createExternalShare(memberId, options){
     const allowedRaw = Array.isArray(config.allowedAttachmentIds) ? config.allowedAttachmentIds : [];
     const allowAll = allowedRaw.includes('__ALL__');
     const allowedAttachmentIds = allowAll ? ['__ALL__'] : Array.from(new Set(allowedRaw.filter(v => v && v !== '__ALL__').map(String)));
+    const rangeSpec = normalizeShareRangeSpec_(config.range || config.rangeSpec || config.recordRange);
+    const rangeLabel = formatShareRangeLabel_(rangeSpec);
 
     let expiresAtIso = '';
     if (config.expiresAt) {
@@ -917,7 +919,8 @@ function createExternalShare(memberId, options){
       '',
       '',
       audience,
-      0
+      0,
+      rangeSpec
     ]);
 
     const url = ScriptApp.getService().getUrl() + '?shareId=' + encodeURIComponent(token);
@@ -928,7 +931,9 @@ function createExternalShare(memberId, options){
       audience,
       expiresAt: expiresAtIso,
       maskMode,
-      allowAllAttachments: allowAll
+      allowAllAttachments: allowAll,
+      range: rangeSpec,
+      rangeLabel
     };
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
@@ -971,7 +976,8 @@ function getExternalShares(memberId){
         allowedCount,
         lastAccessText: formatShareDate_(share.lastAccessAt),
         remainingLabel: computeRemainingLabel_(share.expiresAt),
-        accessCount: share.accessCount || 0
+        accessCount: share.accessCount || 0,
+        rangeLabel: share.rangeLabel
       });
     }
 
@@ -1018,7 +1024,8 @@ function getExternalShareMeta(token){
       maskMode: share.maskMode || 'simple',
       allowAllAttachments: allowAll,
       allowedCount,
-      remainingLabel: computeRemainingLabel_(share.expiresAt)
+      remainingLabel: computeRemainingLabel_(share.expiresAt),
+      rangeLabel: share.rangeLabel
     };
     return { status:'success', share: summary };
   } catch (e) {
@@ -1064,7 +1071,8 @@ function enterExternalShare(token, password){
       maskMode: share.maskMode || 'simple',
       allowAllAttachments: allowAll,
       allowedCount,
-      remainingLabel: computeRemainingLabel_(share.expiresAt)
+      remainingLabel: computeRemainingLabel_(share.expiresAt),
+      rangeLabel: share.rangeLabel
     };
 
     return { status:'success', share: summary, records: payload };
@@ -1079,7 +1087,7 @@ function ensureShareSheet_(){
   if (!sheet) {
     sheet = ss.insertSheet(SHARE_SHEET_NAME);
   }
-  const header = ['Token','MemberID','PasswordHash','ExpiresAt','MaskMode','AllowedAttachments','CreatedAt','RevokedAt','LastAccessAt','Audience','AccessCount'];
+  const header = ['Token','MemberID','PasswordHash','ExpiresAt','MaskMode','AllowedAttachments','CreatedAt','RevokedAt','LastAccessAt','Audience','AccessCount','RangeSpec'];
   if (sheet.getMaxColumns() < header.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
   }
@@ -1103,6 +1111,7 @@ function parseShareRow_(row){
   };
   const audienceRaw = String(row[9] || '').trim().toLowerCase();
   const audience = ['family','center','medical','service'].includes(audienceRaw) ? audienceRaw : 'family';
+  const rangeSpec = normalizeShareRangeSpec_(row[11]);
   return {
     token: String(row[0] || '').trim(),
     memberId: String(row[1] || '').trim(),
@@ -1114,7 +1123,9 @@ function parseShareRow_(row){
     revokedAt: toDate(row[7]),
     lastAccessAt: toDate(row[8]),
     audience,
-    accessCount: toNumber(row[10])
+    accessCount: toNumber(row[10]),
+    rangeSpec,
+    rangeLabel: formatShareRangeLabel_(rangeSpec)
   };
 }
 
@@ -1133,7 +1144,8 @@ function findShareRowByToken_(token){
 }
 
 function buildExternalSharePayload_(share){
-  const records = fetchRecordsWithIndex_(share.memberId, 'all');
+  const rangeArg = shareRangeToFetchArg_(share && (share.rangeSpec || share.rangeLabel || share.range));
+  const records = fetchRecordsWithIndex_(share.memberId, rangeArg);
   const allowAll = share.allowedAttachmentIds.includes('__ALL__');
   const allowedSet = new Set(allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__'));
   const audience = share.audience || 'family';
@@ -1144,7 +1156,8 @@ function buildExternalSharePayload_(share){
       kind: rec.kind || '',
       audience,
       text: maskTextForExternal_(rec.text || '', share.maskMode),
-      attachments
+      attachments,
+      timestamp: (typeof rec.timestamp === 'number') ? rec.timestamp : null
     };
   }).filter(rec => rec.text || (rec.attachments && rec.attachments.length));
 }
@@ -1176,6 +1189,36 @@ function ensureShareLogSheet_(){
   const range = sheet.getRange(1, 1, 1, header.length);
   range.setValues([header]);
   return sheet;
+}
+
+function normalizeShareRangeSpec_(value){
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '30';
+  if (raw === 'all' || raw === 'full' || raw === 'unlimited') return 'all';
+  if (raw === '90' || raw === '90d' || raw === '90days') return '90';
+  if (raw === '30' || raw === '30d' || raw === '30days') return '30';
+  const num = parseInt(raw, 10);
+  if (!isNaN(num)) {
+    if (num >= 90) return '90';
+    if (num >= 30) return '30';
+    if (num <= 0) return '30';
+    return String(num);
+  }
+  return '30';
+}
+
+function formatShareRangeLabel_(spec){
+  const normalized = normalizeShareRangeSpec_(spec);
+  if (normalized === 'all') return '全期間';
+  if (normalized === '90') return '直近90日';
+  return '直近30日';
+}
+
+function shareRangeToFetchArg_(spec){
+  const normalized = normalizeShareRangeSpec_(spec);
+  if (normalized === 'all') return 'all';
+  const days = Number(normalized);
+  return (!isNaN(days) && days > 0) ? days : 'all';
 }
 
 function filterAttachmentsForShare_(attachments, option){
