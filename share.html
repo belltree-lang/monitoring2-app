@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>モニタリング共有ビュー</title>
+<style>
+:root {
+  --fg:#1f2a44; --bg:#eef3fb; --card:#ffffff; --accent:#2b6cb0; --muted:#5a6a85;
+  --border:#d6e2f5; --highlight:#ffe082; --alert:#d32f2f; --warning:#f59e0b;
+}
+* { box-sizing:border-box; }
+body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+.share-app { max-width:840px; margin:0 auto; padding:28px 18px 48px; }
+.share-header { background:var(--card); border-radius:20px; padding:22px; box-shadow:0 12px 30px rgba(24,72,140,0.12); }
+.share-heading { display:flex; flex-direction:column; gap:10px; }
+.share-title { margin:0; font-size:1.6rem; color:var(--accent); }
+.share-badges { display:flex; flex-wrap:wrap; gap:8px; }
+.badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:999px; font-size:0.78rem; background:#e3f2fd; color:#134b93; font-weight:600; }
+.badge.subtle { background:#edf2f9; color:#4a5a75; }
+.badge.audience { background:#dbeafe; color:#1d4ed8; }
+.share-member { font-size:1.05rem; font-weight:600; }
+.share-meta { margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; font-size:0.82rem; color:var(--muted); }
+.share-meta .meta-item { display:inline-flex; align-items:center; gap:4px; }
+.share-intro { margin-top:18px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:16px; padding:16px 18px; line-height:1.6; font-size:0.93rem; color:#2c4674; }
+.share-alert { margin-top:18px; padding:14px; border-radius:14px; font-size:0.9rem; display:none; }
+.share-alert.error { display:block; background:#fde8e8; border:1px solid #f5b5b5; color:#b91c1c; }
+.share-alert.warning { display:block; background:#fff8e1; border:1px solid #f6d481; color:#9a6404; }
+.share-auth { margin-top:18px; background:var(--card); border-radius:16px; padding:18px; border:1px solid var(--border); box-shadow:0 8px 22px rgba(24,72,140,0.08); }
+.share-auth label { display:flex; flex-direction:column; gap:6px; font-size:0.9rem; color:#284066; }
+.share-auth input[type="password"] { padding:10px 12px; border-radius:10px; border:1px solid var(--border); font-size:1rem; }
+.share-auth button { margin-top:12px; align-self:flex-start; padding:8px 14px; border-radius:999px; background:var(--accent); color:#fff; border:none; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(43,108,176,0.25); }
+.share-auth button:hover { opacity:0.92; }
+.share-muted { font-size:0.8rem; color:var(--muted); margin-top:8px; }
+.share-filters { margin-top:24px; background:var(--card); border-radius:18px; padding:20px; border:1px solid var(--border); box-shadow:0 10px 24px rgba(24,72,140,0.08); display:flex; flex-direction:column; gap:12px; }
+.filter-row { display:flex; flex-wrap:wrap; gap:16px; }
+.filter { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#35507a; min-width:160px; }
+.filter input[type="text"], .filter input[type="date"], .filter select { padding:8px 10px; border-radius:10px; border:1px solid var(--border); font-size:0.88rem; background:#f8fbff; color:#1f2a44; }
+.quick-range { display:flex; flex-direction:column; gap:8px; }
+.range-chips { display:flex; gap:8px; flex-wrap:wrap; }
+.range-chip { padding:6px 12px; border-radius:999px; border:1px solid #c7d8f2; background:#f4f8ff; color:#1f3a6d; font-size:0.78rem; cursor:pointer; }
+.range-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); box-shadow:0 4px 10px rgba(43,108,176,0.25); }
+.share-status { margin-top:12px; font-size:0.82rem; color:var(--muted); min-height:20px; }
+.share-records { margin-top:18px; display:flex; flex-direction:column; gap:14px; }
+.share-record { background:var(--card); border-radius:16px; padding:18px; border:1px solid rgba(43,108,176,0.12); box-shadow:0 8px 20px rgba(24,72,140,0.08); }
+.share-record.latest { border-color:#7aa7ff; box-shadow:0 14px 28px rgba(24,72,140,0.18); position:relative; }
+.share-record.latest::before { content:"最新"; position:absolute; top:14px; right:16px; background:var(--accent); color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:999px; letter-spacing:0.04em; }
+.record-meta { font-size:0.85rem; color:#3a5684; display:flex; flex-wrap:wrap; gap:10px; margin-bottom:10px; }
+.record-text { font-size:0.95rem; line-height:1.7; color:#1f2a44; white-space:pre-wrap; word-break:break-word; }
+.keyword-hit { background:var(--highlight); padding:0 4px; border-radius:4px; font-weight:600; }
+.keyword-hit.health { background:#ffe4e6; color:#b91c1c; }
+.keyword-hit.alert { background:#fde68a; color:#92400e; }
+.keyword-hit.new { background:#e0f2f1; color:#047857; }
+.record-attachments { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; }
+.record-attachments a { padding:6px 12px; border-radius:12px; background:#eef4ff; color:#1a56a3; font-size:0.82rem; text-decoration:none; }
+.record-attachments a:hover { background:#d9e6ff; }
+.empty-state { margin-top:28px; text-align:center; color:var(--muted); font-size:0.9rem; }
+.load-more { margin:12px auto 0; display:none; padding:10px 22px; border-radius:999px; border:none; background:var(--accent); color:#fff; font-size:0.9rem; cursor:pointer; box-shadow:0 8px 18px rgba(43,108,176,0.26); }
+.load-more:hover { opacity:0.92; }
+.share-footer { margin-top:40px; font-size:0.8rem; color:var(--muted); text-align:center; line-height:1.6; }
+.share-footer ul { margin:10px auto 0; padding-left:20px; text-align:left; max-width:560px; }
+.share-footer li { margin-bottom:6px; }
+.keyword-legend { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; font-size:0.78rem; color:#4a5a75; }
+.keyword-legend span { display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border-radius:8px; background:#f1f5ff; }
+@media (max-width:640px){
+  .share-app { padding:18px 14px 36px; }
+  .share-header { padding:18px; }
+  .filter-row { flex-direction:column; }
+  .filter { width:100%; }
+  .quick-range { flex-direction:column; }
+}
+</style>
+</head>
+<body>
+<div class="share-app" id="shareApp">
+  <header class="share-header">
+    <div class="share-heading">
+      <h1 class="share-title">モニタリング共有ビュー</h1>
+      <div class="share-badges">
+        <span class="badge">閲覧専用</span>
+        <span class="badge subtle">個人情報は必要最小限のみ表示</span>
+        <span class="badge audience" id="shareAudienceBadge">共有先を確認中…</span>
+      </div>
+    </div>
+    <div class="share-member" id="shareMember">閲覧対象を確認しています…</div>
+    <div class="share-meta">
+      <span class="meta-item" id="shareRange">表示範囲を確認しています…</span>
+      <span class="meta-item" id="shareExpiry"></span>
+      <span class="meta-item" id="shareRemaining"></span>
+      <span class="meta-item" id="shareMask"></span>
+      <span class="meta-item" id="shareAttachmentPolicy"></span>
+    </div>
+  </header>
+  <section id="shareIntro" class="share-intro">
+    共有いただいたモニタリング記録を安全に閲覧できるページです。最新の様子を時系列で確認できます。
+  </section>
+  <div id="shareAlert" class="share-alert"></div>
+  <section id="shareAuth" class="share-auth" style="display:none;">
+    <form id="authForm">
+      <label>閲覧パスワード
+        <input type="password" id="authPassword" autocomplete="one-time-code" placeholder="パスワードを入力してください">
+      </label>
+      <button type="submit">記録を表示</button>
+      <div id="authStatus" class="share-muted"></div>
+    </form>
+  </section>
+  <section id="shareFilters" class="share-filters" style="display:none;">
+    <div class="filter-row">
+      <label class="filter" style="flex:1; min-width:220px;">
+        キーワード検索
+        <input type="text" id="filterSearch" placeholder="本文・添付名で検索">
+      </label>
+      <label class="filter">
+        種別
+        <select id="filterKind">
+          <option value="all">すべて</option>
+        </select>
+      </label>
+      <label class="filter">
+        表示順
+        <select id="filterSort">
+          <option value="desc" selected>日付が新しい順</option>
+          <option value="asc">日付が古い順</option>
+          <option value="kind">区分順</option>
+        </select>
+      </label>
+    </div>
+    <div class="filter-row">
+      <label class="filter">
+        表示期間（開始）
+        <input type="date" id="filterFrom">
+      </label>
+      <label class="filter">
+        表示期間（終了）
+        <input type="date" id="filterTo">
+      </label>
+      <div class="filter quick-range" style="flex:1;">
+        <span>クイック選択</span>
+        <div class="range-chips" id="rangeChips">
+          <button type="button" class="range-chip" data-range="7">直近7日</button>
+          <button type="button" class="range-chip" data-range="30">直近30日</button>
+          <button type="button" class="range-chip" data-range="90">直近90日</button>
+          <button type="button" class="range-chip" data-range="all">全期間</button>
+        </div>
+      </div>
+    </div>
+    <div class="keyword-legend">
+      <span><span class="keyword-hit health">体調変化</span> などの重要ワードを自動で色付けします</span>
+      <span><span class="keyword-hit new">新規追加</span> などの新着キーワードも強調表示します</span>
+    </div>
+  </section>
+  <div id="shareStatus" class="share-status"></div>
+  <div id="recordsContainer" class="share-records"></div>
+  <div id="emptyState" class="empty-state" style="display:none;">共有可能な記録はまだありません。</div>
+  <button id="loadMore" class="load-more">さらに表示</button>
+  <footer class="share-footer" id="shareFooter">
+    閲覧方法や期限についてご不明な点がありましたら、担当のケアマネジャーまでご連絡ください。
+  </footer>
+</div>
+<script>
+const TEMPLATE_TOKEN = <?= typeof shareToken === 'string' ? JSON.stringify(shareToken) : '""' ?>;
+const queryParams = new URLSearchParams(window.location.search);
+const externalToken = TEMPLATE_TOKEN || queryParams.get('shareId') || queryParams.get('share') || queryParams.get('token') || '';
+const shareAudienceInfo = {
+  family: {
+    label: '家族向け共有',
+    description: '日々の様子をわかりやすくまとめています。',
+    intro: '大切なご家族の近況を共有する専用ページです。安心してご覧ください。',
+    manualTips: [
+      'QRコードからアクセスし、最新の記録を順番に確認できます。',
+      '気になる点がありましたら担当ケアマネジャーへご連絡ください。'
+    ]
+  },
+  center: {
+    label: '地域包括支援センター向け共有',
+    description: '日付・区分付きで状況を把握できます。',
+    intro: '地域包括支援センターさまとの情報連携ページです。必要事項のみ抜粋しています。',
+    manualTips: [
+      '検索や期間フィルターで必要な記録を絞り込めます。',
+      '支援が必要な事項は担当ケアマネジャーまでお知らせください。'
+    ]
+  },
+  medical: {
+    label: '医療連携向け共有',
+    description: '体調変化を把握しやすい構成です。',
+    intro: '医療機関のみなさまとの共有ページです。経過の確認にお役立てください。',
+    manualTips: [
+      '強調表示されたワードから急ぎの情報を確認できます。',
+      '必要に応じて診察・訪問時の資料としてご活用ください。'
+    ]
+  },
+  service: {
+    label: 'サービス事業者向け共有',
+    description: '現場スタッフが把握しやすいように整理しています。',
+    intro: 'サービス提供事業者さま向けの共有ページです。日々のケアにご活用ください。',
+    manualTips: [
+      '本文検索や種別フィルターで必要な記録を抽出できます。',
+      '気づきや連絡事項は担当ケアマネジャーまで共有をお願いします。'
+    ]
+  }
+};
+const shareAudienceDefault = 'family';
+const KEYWORD_RULES = [
+  { pattern: '体調変化|発熱|発作|血圧|脈拍|食欲不振|倦怠感|転倒|怪我|受診', className: 'health' },
+  { pattern: '緊急|至急|要連絡|報告必須|注意', className: 'alert' },
+  { pattern: '新規追加|開始|導入|初回|更新', className: 'new' }
+];
+const DISPLAY_LIMIT_DEFAULT = 30;
+const DISPLAY_STEP = 30;
+const rangeButtons = [];
+let currentShare = null;
+let recordsCache = [];
+let filteredRecords = [];
+let displayLimit = DISPLAY_LIMIT_DEFAULT;
+let latestTimestamp = null;
+let searchTimer = null;
+
+function getAudienceInfo(audience){
+  const key = String(audience || '').toLowerCase();
+  return shareAudienceInfo[key] || shareAudienceInfo[shareAudienceDefault];
+}
+
+function escapeHtml(value){
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return String(value ?? '').replace(/[&<>"']/g, ch => map[ch]);
+}
+
+function callGoogle(functionName, ...args){
+  return new Promise((resolve, reject) => {
+    try {
+      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(err => reject(err));
+      runner[functionName](...args);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function setLoading(message){
+  const statusEl = document.getElementById('shareStatus');
+  const recordsEl = document.getElementById('recordsContainer');
+  const emptyEl = document.getElementById('emptyState');
+  if(statusEl) statusEl.textContent = message ? String(message) : '';
+  if(recordsEl) recordsEl.innerHTML = '';
+  if(emptyEl) emptyEl.style.display = 'none';
+  const loadMore = document.getElementById('loadMore');
+  if(loadMore) loadMore.style.display = 'none';
+}
+
+function showAlert(type, message){
+  const alertEl = document.getElementById('shareAlert');
+  if(!alertEl) return;
+  alertEl.className = 'share-alert' + (type ? ' ' + type : '');
+  alertEl.style.display = message ? 'block' : 'none';
+  alertEl.textContent = message || '';
+}
+
+function updateHeader(share){
+  const info = getAudienceInfo(share && share.audience);
+  const audienceBadge = document.getElementById('shareAudienceBadge');
+  if(audienceBadge) audienceBadge.textContent = info.label;
+  const memberEl = document.getElementById('shareMember');
+  if(memberEl){
+    memberEl.textContent = share && share.memberName ? `${share.memberName} 様のモニタリング` : '対象を確認しています…';
+  }
+  const rangeEl = document.getElementById('shareRange');
+  if(rangeEl){
+    const label = share && share.rangeLabel ? share.rangeLabel : '最新記録';
+    rangeEl.textContent = `表示範囲：${label}`;
+  }
+  const expiryEl = document.getElementById('shareExpiry');
+  if(expiryEl){
+    expiryEl.textContent = share && share.expiresAtText ? `閲覧期限：${share.expiresAtText}` : '閲覧期限：設定なし';
+  }
+  const remainingEl = document.getElementById('shareRemaining');
+  if(remainingEl){
+    remainingEl.textContent = share && share.remainingLabel ? share.remainingLabel : '';
+  }
+  const maskEl = document.getElementById('shareMask');
+  if(maskEl){
+    maskEl.textContent = share && share.maskMode === 'none' ? '本文：マスクなし' : '本文：個人情報を自動マスク';
+  }
+  const attachmentEl = document.getElementById('shareAttachmentPolicy');
+  if(attachmentEl){
+    const allowAll = share && share.allowAllAttachments;
+    const count = share && typeof share.allowedCount === 'number' ? share.allowedCount : 0;
+    attachmentEl.textContent = allowAll ? '添付：すべて閲覧可能' : `添付：${count}件のみ共有`;
+  }
+}
+
+function setIntro(share){
+  const info = getAudienceInfo(share && share.audience);
+  const introEl = document.getElementById('shareIntro');
+  if(!introEl) return;
+  const passwordMsg = share && share.requirePassword ? 'パスワード入力後に閲覧できます。' : 'パスワード入力は不要です。';
+  const rangeMsg = share && share.rangeLabel ? `${share.rangeLabel}の記録を表示中です。` : '最新の記録を表示中です。';
+  introEl.innerHTML = `${escapeHtml(info.intro)}<br><span class="share-muted">${escapeHtml(passwordMsg)} ${escapeHtml(rangeMsg)}</span>`;
+}
+
+function setFooter(share){
+  const footer = document.getElementById('shareFooter');
+  if(!footer) return;
+  const info = getAudienceInfo(share && share.audience);
+  const tips = Array.isArray(info.manualTips) ? info.manualTips : [];
+  footer.innerHTML = `閲覧方法や期限についてご不明な点がありましたら、担当のケアマネジャーまでご連絡ください。`;
+  if(tips.length){
+    footer.innerHTML += `<ul>${tips.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>`;
+  }
+}
+
+function decorateText(value){
+  let safe = escapeHtml(value || '');
+  KEYWORD_RULES.forEach(rule => {
+    const regex = new RegExp(rule.pattern, 'gi');
+    safe = safe.replace(regex, match => `<span class="keyword-hit ${rule.className}">${match}</span>`);
+  });
+  return safe.replace(/\n/g, '<br>');
+}
+
+function buildRecordHtml(record, showKind){
+  const metaParts = [];
+  metaParts.push(escapeHtml(record.dateText || '---'));
+  if(showKind){
+    metaParts.push(escapeHtml(record.kind || '種別未設定'));
+  }
+  const metaHtml = metaParts.map(part => `<span>${part}</span>`).join('<span>｜</span>');
+  const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+  const attachmentsHtml = attachments.length
+    ? `<div class="record-attachments">${attachments.map(att => {
+        const name = escapeHtml(att && att.name ? att.name : '添付ファイル');
+        const url = escapeHtml(att && att.url ? att.url : '#');
+        return `<a href="${url}" target="_blank" rel="noopener">📎 ${name}</a>`;
+      }).join('')}</div>`
+    : '';
+  const classes = (latestTimestamp && Number(record.timestamp||0) === latestTimestamp)
+    ? 'share-record latest'
+    : 'share-record';
+  return `<article class="${classes}">
+    <div class="record-meta">${metaHtml}</div>
+    <div class="record-text">${decorateText(record.text || '') || '<span class="share-muted">（本文なし）</span>'}</div>
+    ${attachmentsHtml}
+  </article>`;
+}
+
+function updateKindOptions(){
+  const select = document.getElementById('filterKind');
+  if(!select) return;
+  const kinds = Array.from(new Set(recordsCache.map(rec => rec.kind).filter(Boolean))).sort((a,b) => String(a).localeCompare(String(b), 'ja'));
+  const current = select.value;
+  select.innerHTML = '<option value="all">すべて</option>' + kinds.map(kind => `<option value="${escapeHtml(kind)}">${escapeHtml(kind)}</option>`).join('');
+  if(kinds.includes(current)){
+    select.value = current;
+  }
+}
+
+function updateRangeButtons(active){
+  rangeButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.range === active);
+  });
+}
+
+function formatDateInput(ts){
+  if(!ts) return '';
+  const date = new Date(ts);
+  if(Number.isNaN(date.getTime())) return '';
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth()+1).padStart(2,'0');
+  const dd = String(date.getDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getDefaultQuickRange(share){
+  if(!share) return '30';
+  const label = String(share.rangeLabel || '').toLowerCase();
+  if(label.includes('全期間')) return 'all';
+  if(label.includes('90')) return '90';
+  if(label.includes('7')) return '7';
+  return '30';
+}
+
+function applyQuickRange(range){
+  const fromInput = document.getElementById('filterFrom');
+  const toInput = document.getElementById('filterTo');
+  updateRangeButtons(range);
+  if(range === 'all'){
+    if(fromInput) fromInput.value = '';
+    if(toInput) toInput.value = '';
+    applyFilters(true);
+    return;
+  }
+  const days = Number(range);
+  if(Number.isNaN(days)){
+    applyFilters(true);
+    return;
+  }
+  const endTs = latestTimestamp || Date.now();
+  const startTs = endTs - days * 24 * 3600 * 1000;
+  if(toInput) toInput.value = formatDateInput(endTs);
+  if(fromInput) fromInput.value = formatDateInput(startTs);
+  applyFilters(true);
+}
+
+function getFilterValues(){
+  const searchInput = document.getElementById('filterSearch');
+  const kindSelect = document.getElementById('filterKind');
+  const sortSelect = document.getElementById('filterSort');
+  const fromInput = document.getElementById('filterFrom');
+  const toInput = document.getElementById('filterTo');
+  const searchValue = searchInput ? searchInput.value.trim() : '';
+  const kindValue = kindSelect ? kindSelect.value : 'all';
+  const sortValue = sortSelect ? sortSelect.value : 'desc';
+  const fromValue = fromInput ? fromInput.value : '';
+  const toValue = toInput ? toInput.value : '';
+  const fromTime = fromValue ? new Date(fromValue + 'T00:00:00').getTime() : null;
+  const toTime = toValue ? new Date(toValue + 'T23:59:59').getTime() : null;
+  return { searchValue, kindValue, sortValue, fromTime, toTime };
+}
+
+function applyFilters(resetLimit){
+  if(resetLimit) displayLimit = DISPLAY_LIMIT_DEFAULT;
+  const { searchValue, kindValue, sortValue, fromTime, toTime } = getFilterValues();
+  let results = recordsCache.slice();
+  if(kindValue && kindValue !== 'all'){
+    results = results.filter(rec => String(rec.kind||'') === kindValue);
+  }
+  if(fromTime){
+    results = results.filter(rec => typeof rec.timestamp === 'number' ? rec.timestamp >= fromTime : true);
+  }
+  if(toTime){
+    results = results.filter(rec => typeof rec.timestamp === 'number' ? rec.timestamp <= toTime : true);
+  }
+  if(searchValue){
+    const lower = searchValue.toLowerCase();
+    results = results.filter(rec => rec.searchIndex.includes(lower));
+  }
+  const compareDesc = (a,b) => (Number(b.timestamp||0)||0) - (Number(a.timestamp||0)||0);
+  if(sortValue === 'asc'){
+    results.sort((a,b) => (Number(a.timestamp||0)||0) - (Number(b.timestamp||0)||0));
+  }else if(sortValue === 'kind'){
+    results.sort((a,b) => {
+      const diff = String(a.kind||'').localeCompare(String(b.kind||''), 'ja');
+      if(diff !== 0) return diff;
+      return compareDesc(a,b);
+    });
+  }else{
+    results.sort(compareDesc);
+  }
+  filteredRecords = results;
+  renderRecords();
+  updateStatus(searchValue);
+}
+
+function renderRecords(){
+  const container = document.getElementById('recordsContainer');
+  const emptyEl = document.getElementById('emptyState');
+  const loadMore = document.getElementById('loadMore');
+  if(!container) return;
+  if(!filteredRecords.length){
+    container.innerHTML = '';
+    if(emptyEl) emptyEl.style.display = 'block';
+    if(loadMore) loadMore.style.display = 'none';
+    return;
+  }
+  if(emptyEl) emptyEl.style.display = 'none';
+  const showKind = currentShare ? (currentShare.audience !== 'family') : true;
+  const items = filteredRecords.slice(0, displayLimit).map(rec => buildRecordHtml(rec, showKind)).join('\n');
+  container.innerHTML = items;
+  if(loadMore){
+    loadMore.style.display = filteredRecords.length > displayLimit ? 'block' : 'none';
+  }
+}
+
+function updateStatus(searchValue){
+  const statusEl = document.getElementById('shareStatus');
+  if(!statusEl) return;
+  if(!filteredRecords.length){
+    if(searchValue){
+      statusEl.textContent = `該当する記録はありません（キーワード「${searchValue}」）。`;
+    }else{
+      statusEl.textContent = '';
+    }
+    return;
+  }
+  const total = recordsCache.length;
+  const shown = Math.min(displayLimit, filteredRecords.length);
+  const base = filteredRecords.length === total ? `${filteredRecords.length}件表示` : `${shown}件表示（全${total}件中）`;
+  statusEl.textContent = searchValue ? `${base} ｜ キーワード「${searchValue}」` : base;
+}
+
+function handleSearchInput(){
+  if(searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => applyFilters(true), 180);
+}
+
+function handleLoadMore(){
+  displayLimit += DISPLAY_STEP;
+  renderRecords();
+  const searchInput = document.getElementById('filterSearch');
+  updateStatus(searchInput ? searchInput.value.trim() : '');
+}
+
+function prepareRangeButtons(){
+  const chips = document.querySelectorAll('#rangeChips .range-chip');
+  chips.forEach(btn => {
+    rangeButtons.push(btn);
+    btn.addEventListener('click', () => applyQuickRange(btn.dataset.range));
+  });
+}
+
+function normalizeRecords(records){
+  const audience = currentShare ? currentShare.audience : 'family';
+  return records.map(rec => {
+    const timestamp = Number(rec.timestamp || 0) || 0;
+    const textValue = String(rec.text || '');
+    const attachments = Array.isArray(rec.attachments) ? rec.attachments : [];
+    const attachmentNames = attachments.map(att => String(att && att.name || '')).join(' ');
+    const searchIndex = `${textValue} ${attachmentNames}`.toLowerCase();
+    return { ...rec, timestamp, searchIndex, audience };
+  });
+}
+
+function onAuthSubmit(event){
+  event.preventDefault();
+  const input = document.getElementById('authPassword');
+  const status = document.getElementById('authStatus');
+  const password = input ? input.value : '';
+  if(status) status.textContent = '照合中です…';
+  loadShareData(password).finally(() => {
+    if(input) input.value = '';
+  });
+}
+
+function fetchShareMeta(){
+  if(!externalToken){
+    showAlert('error', '共有リンクが見つかりません。担当のケアマネジャーにお問い合わせください。');
+    setLoading('共有リンクが無効です。');
+    return Promise.resolve(null);
+  }
+  setLoading('共有設定を確認しています…');
+  return callGoogle('getExternalShareMeta', externalToken).then(res => {
+    if(!res || res.status !== 'success'){
+      const msg = res && res.message ? res.message : '共有設定の取得に失敗しました。';
+      showAlert('error', msg);
+      setLoading('閲覧を開始できませんでした。');
+      return null;
+    }
+    const share = res.share || {};
+    currentShare = share;
+    updateHeader(share);
+    setIntro(share);
+    setFooter(share);
+    if(share.expired){
+      showAlert('warning', 'この共有リンクは期限切れです。最新のリンクを発行してください。');
+      setLoading('期限切れのため閲覧できません。');
+      return null;
+    }
+    showAlert('', '');
+    return share;
+  }).catch(err => {
+    const msg = err && err.message ? err.message : '共有設定の取得に失敗しました。';
+    showAlert('error', msg);
+    setLoading('閲覧を開始できませんでした。');
+    return null;
+  });
+}
+
+function loadShareData(password){
+  setLoading('記録を読み込んでいます…');
+  return callGoogle('enterExternalShare', externalToken, password || '').then(res => {
+    if(!res || res.status !== 'success'){
+      const msg = res && res.message ? res.message : '閲覧に失敗しました。';
+      showAlert('error', msg);
+      const status = document.getElementById('authStatus');
+      if(status) status.textContent = msg;
+      const auth = document.getElementById('shareAuth');
+      if(auth) auth.style.display = 'block';
+      setLoading('閲覧できませんでした。');
+      return;
+    }
+    const status = document.getElementById('authStatus');
+    if(status) status.textContent = '';
+    currentShare = res.share || currentShare;
+    updateHeader(currentShare);
+    setIntro(currentShare);
+    setFooter(currentShare);
+    const auth = document.getElementById('shareAuth');
+    if(auth) auth.style.display = 'none';
+    const filters = document.getElementById('shareFilters');
+    if(filters) filters.style.display = 'flex';
+    showAlert(currentShare.expired ? 'warning' : '', currentShare.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
+    recordsCache = normalizeRecords(Array.isArray(res.records) ? res.records : []);
+    latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
+    updateKindOptions();
+    applyQuickRange(getDefaultQuickRange(currentShare));
+    if(!recordsCache.length){
+      setLoading('共有可能な記録はまだありません。');
+      const emptyEl = document.getElementById('emptyState');
+      if(emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    applyFilters(true);
+  }).catch(err => {
+    const msg = err && err.message ? err.message : '閲覧に失敗しました。';
+    showAlert('error', msg);
+    const status = document.getElementById('authStatus');
+    if(status) status.textContent = msg;
+    setLoading('閲覧できませんでした。');
+  });
+}
+
+function initSharePage(){
+  if(!externalToken){
+    showAlert('error', '共有リンクが見つかりません。URLをご確認ください。');
+    return;
+  }
+  prepareRangeButtons();
+  const search = document.getElementById('filterSearch');
+  if(search) search.addEventListener('input', handleSearchInput);
+  const kind = document.getElementById('filterKind');
+  if(kind) kind.addEventListener('change', () => applyFilters(true));
+  const sort = document.getElementById('filterSort');
+  if(sort) sort.addEventListener('change', () => applyFilters(true));
+  const fromInput = document.getElementById('filterFrom');
+  if(fromInput) fromInput.addEventListener('change', () => { updateRangeButtons(''); applyFilters(true); });
+  const toInput = document.getElementById('filterTo');
+  if(toInput) toInput.addEventListener('change', () => { updateRangeButtons(''); applyFilters(true); });
+  const loadMore = document.getElementById('loadMore');
+  if(loadMore) loadMore.addEventListener('click', handleLoadMore);
+  const authForm = document.getElementById('authForm');
+  if(authForm) authForm.addEventListener('submit', onAuthSubmit);
+
+  fetchShareMeta().then(share => {
+    if(!share) return;
+    if(share.requirePassword){
+      const auth = document.getElementById('shareAuth');
+      if(auth) auth.style.display = 'block';
+      setLoading('パスワードを入力してください。');
+    }else{
+      loadShareData('');
+    }
+  });
+}
+
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', initSharePage);
+}else{
+  initSharePage();
+}
+</script>
+</body>
+</html>

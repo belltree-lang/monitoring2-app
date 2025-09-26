@@ -17,9 +17,16 @@ const DOC_TEMPLATE_ID_FAMILY_PROP = PropertiesService.getScriptProperties().getP
 
 /***** ── Webエントリ ───────────────────────────*****/
 function doGet(e) {
-  const tmpl = HtmlService.createTemplateFromFile('member'); // ファイル名: member.html
+  const params = (e && e.parameter) || {};
+  const shareToken = params.shareId || params.share || params.token || '';
+  const templateName = shareToken ? 'share' : 'member';
+  const tmpl = HtmlService.createTemplateFromFile(templateName);
+  if (shareToken) {
+    tmpl.shareToken = shareToken;
+  }
+  const title = shareToken ? 'モニタリング共有ビュー' : 'ケアマネ・モニタリング';
   return tmpl.evaluate()
-    .setTitle('ケアマネ・モニタリング')
+    .setTitle(title)
     .addMetaTag('viewport','width=device-width, initial-scale=1.0');
 }
 
