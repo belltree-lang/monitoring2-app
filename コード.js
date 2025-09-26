@@ -18,6 +18,14 @@ const DOC_TEMPLATE_ID_FAMILY_PROP = PropertiesService.getScriptProperties().getP
 /***** ── Webエントリ ───────────────────────────*****/
 function doGet(e) {
   const params = (e && e.parameter) || {};
+  const shareApi = String(params.shareApi || params.api || '').trim().toLowerCase();
+  if (shareApi === 'meta') {
+    const token = params.shareId || params.share || params.token || '';
+    const result = getExternalShareMeta(token);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeader('Access-Control-Allow-Origin','*');
+  }
   const shareToken = params.shareId || params.share || params.token || '';
   const templateName = shareToken ? 'share' : 'member';
   const tmpl = HtmlService.createTemplateFromFile(templateName);
@@ -56,6 +64,34 @@ function saveRecordFromBrowser(memberId, content, isoTimestamp, attachmentsJson,
 function doPost(e) {
   try {
     var action = (e.parameter && e.parameter.action) || '';
+    var jsonPayload = null;
+    if (!action && e && e.postData && e.postData.contents) {
+      var postType = (e.postData && e.postData.type) || '';
+      if (postType === 'application/json') {
+        try {
+          jsonPayload = JSON.parse(e.postData.contents);
+          if (jsonPayload && jsonPayload.action) {
+            action = jsonPayload.action;
+          }
+        } catch(_err) {
+          jsonPayload = null;
+        }
+      }
+    }
+    if (action === 'shareEnter') {
+      var tokenParam = (e.parameter && (e.parameter.shareId || e.parameter.share || e.parameter.token)) || '';
+      if (!tokenParam && jsonPayload) {
+        tokenParam = jsonPayload.shareId || jsonPayload.share || jsonPayload.token || '';
+      }
+      var passwordParam = (e.parameter && e.parameter.password) || '';
+      if (!passwordParam && jsonPayload) {
+        passwordParam = jsonPayload.password || '';
+      }
+      var shareResult = enterExternalShare(tokenParam, passwordParam);
+      return ContentService.createTextOutput(JSON.stringify(shareResult))
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeader('Access-Control-Allow-Origin','*');
+    }
     if (action !== 'upload') {
       return ContentService.createTextOutput(JSON.stringify({ status:'error', message:'unknown action' }))
         .setMimeType(ContentService.MimeType.JSON)
