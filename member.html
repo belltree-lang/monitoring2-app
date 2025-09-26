@@ -1579,74 +1579,6 @@ async function handleSave() {
   }
 }
 
-  function loadRecords() {
-    const days = document.getElementById("recordRange").value;
-    const list = document.getElementById("recordList");
-    if (!memberId) {
-      list.textContent = "利用者を選択してください";
-      recordsCache = [];
-      updateMediaGallery([]);
-      updateShareAttachmentOptions([]);
-      return;
-    }
-    list.textContent = "読込中…";
-    google.script.run.withSuccessHandler(res => {
-      if (!res || res.status !== "success") {
-        list.textContent = "エラー:" + (res && res.message ? res.message : "取得に失敗しました");
-        recordsCache = [];
-        updateMediaGallery([]);
-        updateShareAttachmentOptions([]);
-        return;
-      }
-      recordsCache = (res.records || []).map(normalizeRecord);
-      renderRecords();
-      updateShareAttachmentOptions(recordsCache);
-    }).withFailureHandler(err => {
-      list.textContent = "エラー: " + (err && err.message ? err.message : err);
-      recordsCache = [];
-      updateMediaGallery([]);
-      updateShareAttachmentOptions([]);
-    }).getRecordsByMemberId_v3(memberId, days);
-  }
-
-  function renderRecords() {
-  const list = document.getElementById("recordList");
-  if (!memberId) {
-    list.textContent = "利用者を選択してください";
-    updateMediaGallery([]);
-    return;
-  }
-  if (!recordsCache.length) {
-    list.textContent = "記録なし";
-    updateMediaGallery([]);
-    return;
-  }
-  const filtered = filterRecords(recordsCache);
-  if (!filtered.length) {
-    list.textContent = "条件に一致する記録がありません";
-    updateMediaGallery([]);
-    return;
-  }
-  const html = filtered.map((r, idx) => {
-    const text = escapeHtml(r.text || "").replace(/\n/g, "<br>");
-    const attachmentsHtml = (r.attachments && r.attachments.length)
-      ? `<div class="attachments">${r.attachments.map((att, i) => renderAttachment(att, r, i)).join("")}</div>`
-      : "";
-    return `<div class="record" data-row="${r.rowIndex}">
-      <div><b>${escapeHtml(r.dateText || "")}</b>【${escapeHtml(r.kind || "")}】</div>
-      <div class="text">${text || '<span class="muted">（本文なし）</span>'}</div>
-      ${attachmentsHtml}
-      <div class="toolbar">
-        <button class="secondary btnEdit">編集</button>
-        <button class="danger btnDelete">削除</button>
-      </div>
-    </div>`;
-  }).join("");
-  list.innerHTML = html;
-  bindRecordActions();
-  updateMediaGallery(filtered);
-}
-
 function renderAttachment(att, record, index) {
   const url = escapeHtml(buildAttachmentViewUrl(att));
   const label = escapeHtml(att && att.name ? att.name : `添付${index + 1}`);
@@ -1675,6 +1607,7 @@ function filterRecords(records) {
 
 function updateMediaGallery(records) {
   const gallery = document.getElementById("mediaGallery");
+  if (!gallery) return;
   if (!records || !records.length) {
     gallery.textContent = "添付ファイルはありません";
     return;
@@ -1712,45 +1645,93 @@ function updateMediaGallery(records) {
   gallery.innerHTML = `<div class="media-grid">${cards}</div>`;
 }
 
+function toTime(value){
+  if(!value) return NaN;
+  const d = value instanceof Date ? value : new Date(value);
+  const t = d.getTime();
+  return Number.isNaN(t) ? NaN : t;
+}
+
+function formatDateTime(value){
+  const t = toTime(value);
+  if(Number.isNaN(t)) return '';
+  const d = new Date(t);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // ===== 過去記録（編集・削除付き） =====
 function loadRecords(){
-  const days=document.getElementById("recordRange").value;
-  const list=document.getElementById("recordList");
+  const list = document.getElementById("recordList");
+  const rangeEl = document.getElementById("recordRange");
+  const gallery = document.getElementById("mediaGallery");
+  const days = rangeEl ? rangeEl.value : 'all';
   if(!memberId){
-    list.textContent="利用者を選択してください";
-    setGalleryMessage("利用者を選択してください");
+    if(list) list.textContent = "利用者を選択してください";
+    recordsCache = [];
+    updateMediaGallery([]);
+    updateShareAttachmentOptions([]);
     return;
   }
-  list.textContent="読込中…";
-  setGalleryMessage("添付を読み込んでいます…");
+  if(list) list.textContent = "読込中…";
+  if(gallery) gallery.textContent = "添付を読み込んでいます…";
   google.script.run.withSuccessHandler(res=>{
-    if(res.status!=="success"){
-      list.textContent="エラー:"+(res.message||"不明なエラー");
-      setGalleryMessage("添付ファイルを読み込めませんでした");
+    if(!res || res.status!=="success"){
+      if(list) list.textContent = "エラー:" + (res && res.message ? res.message : "取得に失敗しました");
+      recordsCache = [];
+      updateMediaGallery([]);
+      updateShareAttachmentOptions([]);
       return;
     }
-    const records=Array.isArray(res.records)?res.records:[];
-    renderMediaGallery(records);
-    if(!records.length){
-      list.textContent="記録なし";
-      return;
-    }
-    list.innerHTML=records.map(r=>
-      `<div class="record" data-row="${r.rowIndex}">
-        <div><b>${r.dateText}</b>【${r.kind}】</div>
-        <div class="text">${r.text}</div>
-        <div class="toolbar">
-          <button class="secondary btnEdit">編集</button>
-          <button class="danger btnDelete">削除</button>
-        </div>
-      </div>`
-    ).join("");
-    bindRecordActions();
+    recordsCache = (Array.isArray(res.records)?res.records:[]).map(normalizeRecord);
+    renderRecords();
+    updateShareAttachmentOptions(recordsCache);
   }).withFailureHandler(err=>{
-    const msg=(err&&err.message)||err||"不明なエラー";
-    list.textContent="エラー:"+msg;
-    setGalleryMessage("添付ファイルを読み込めませんでした");
-  }).getRecordsByMemberId_v3(memberId,days);
+    const msg = err && err.message ? err.message : err;
+    if(list) list.textContent = "エラー:" + msg;
+    recordsCache = [];
+    updateMediaGallery([]);
+    updateShareAttachmentOptions([]);
+  }).getRecordsByMemberId_v3(memberId, days);
+}
+
+function renderRecords(){
+  const list = document.getElementById("recordList");
+  if(!list) return;
+  if(!memberId){
+    list.textContent = "利用者を選択してください";
+    updateMediaGallery([]);
+    return;
+  }
+  if(!recordsCache.length){
+    list.textContent = "記録なし";
+    updateMediaGallery([]);
+    return;
+  }
+  const filtered = filterRecords(recordsCache);
+  if(!filtered.length){
+    list.textContent = "条件に一致する記録がありません";
+    updateMediaGallery([]);
+    return;
+  }
+  const html = filtered.map(record => {
+    const safeText = escapeHtml(record.text || '').replace(/\n/g, '<br>');
+    const attachmentsHtml = (record.attachments && record.attachments.length)
+      ? `<div class="attachments">${record.attachments.map((att, i) => renderAttachment(att, record, i)).join('')}</div>`
+      : '';
+    return `<div class="record" data-row="${record.rowIndex}">
+      <div><b>${escapeHtml(record.dateText || '')}</b>【${escapeHtml(record.kind || '')}】</div>
+      <div class="text">${safeText || '<span class="muted">（本文なし）</span>'}</div>
+      ${attachmentsHtml}
+      <div class="toolbar">
+        <button class="secondary btnEdit">編集</button>
+        <button class="danger btnDelete">削除</button>
+      </div>
+    </div>`;
+  }).join('');
+  list.innerHTML = html;
+  bindRecordActions();
+  updateMediaGallery(filtered);
 }
 
 function bindRecordActions() {
@@ -1813,102 +1794,6 @@ function bindRecordActions() {
       });
     }
   }
-
-function setGalleryMessage(message){
-  const gallery=document.getElementById("mediaGallery");
-  if(!gallery) return;
-  gallery.classList.add("muted");
-  gallery.innerHTML="";
-  gallery.textContent=message;
-}
-
-function renderMediaGallery(records){
-  const gallery=document.getElementById("mediaGallery");
-  if(!gallery) return;
-  gallery.innerHTML="";
-  const attachments=[];
-  (Array.isArray(records)?records:[]).forEach(record=>{
-    if(!record) return;
-    const files=Array.isArray(record.attachments)?record.attachments:[];
-    files.forEach(att=>{
-      if(att==null) return;
-      const normalized=(typeof att==="object" && !Array.isArray(att))?{...att}:{ name:String(att)};
-      normalized.recordDate=record.dateText;
-      attachments.push(normalized);
-    });
-  });
-  if(!attachments.length){
-    setGalleryMessage("添付ファイルはありません");
-    return;
-  }
-  gallery.classList.remove("muted");
-  const container=document.createElement("div");
-  container.className="media-grid";
-  attachments.sort((a,b)=>{
-    const tb=getAttachmentTime(b);
-    const ta=getAttachmentTime(a);
-    if(isNaN(ta) && isNaN(tb)) return 0;
-    if(isNaN(ta)) return 1;
-    if(isNaN(tb)) return -1;
-    return tb-ta;
-  });
-  attachments.forEach(att=>{
-    const item=document.createElement("div");
-    item.className="media-item";
-    const label=att.name||att.fileName||att.title||att.displayName||"名称未設定のファイル";
-    if(att.url){
-      const link=document.createElement("a");
-      link.href=att.url;
-      link.target="_blank";
-      link.rel="noopener noreferrer";
-      link.textContent=label;
-      item.appendChild(link);
-    }else{
-      const span=document.createElement("span");
-      span.className="media-missing";
-      span.textContent=label;
-      item.appendChild(span);
-    }
-    const metaParts=[];
-    const uploadedLabel=formatDateTime(att.uploadedAt||att.createdAt||att.timestamp);
-    if(uploadedLabel){
-      metaParts.push(`アップロード: ${uploadedLabel}`);
-    }else if(att.recordDate){
-      metaParts.push(`記録日: ${att.recordDate}`);
-    }
-    if(att.mimeType) metaParts.push(att.mimeType);
-    if(!att.url) metaParts.push("リンク情報なし");
-    if(metaParts.length){
-      const meta=document.createElement("div");
-      meta.className="media-meta";
-      meta.textContent=metaParts.join(" ｜ ");
-      item.appendChild(meta);
-    }
-    container.appendChild(item);
-  });
-  gallery.appendChild(container);
-}
-
-function getAttachmentTime(att){
-  if(!att) return NaN;
-  const candidate=att.uploadedAt||att.createdAt||att.timestamp||att.recordDate;
-  return toTime(candidate);
-}
-
-function toTime(value){
-  if(!value) return NaN;
-  const d=new Date(value);
-  const t=d.getTime();
-  return Number.isNaN(t)?NaN:t;
-}
-
-function formatDateTime(value){
-  const t=toTime(value);
-  if(Number.isNaN(t)) return "";
-  const d=new Date(t);
-  const pad=n=>String(n).padStart(2,"0");
-  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 function collectAttachmentOptions(records){
   const map=new Map();

@@ -236,6 +236,48 @@ function callGoogle(functionName, ...args){
   });
 }
 
+const EXEC_BASE_URL = window.location.href.split('#')[0].split('?')[0];
+
+async function callShareApi(action, options = {}){
+  const token = options.token || externalToken;
+  if (!token) throw new Error('共有リンクが見つかりません。');
+  const canUseGoogleRun = typeof google !== 'undefined' && google.script && google.script.run;
+  if (canUseGoogleRun) {
+    if (action === 'meta') {
+      return callGoogle('getExternalShareMeta', token);
+    }
+    if (action === 'enter') {
+      return callGoogle('enterExternalShare', token, options.password || '');
+    }
+  }
+  if (action === 'meta') {
+    const params = new URLSearchParams({ shareApi: 'meta', shareId: token });
+    const res = await fetch(`${EXEC_BASE_URL}?${params.toString()}`, { credentials: 'include' });
+    if (!res.ok) throw new Error('共有設定の取得に失敗しました。');
+    try {
+      return await res.json();
+    } catch (err) {
+      throw new Error('共有設定の解析に失敗しました。');
+    }
+  }
+  if (action === 'enter') {
+    const body = new URLSearchParams({ action: 'shareEnter', shareId: token, password: options.password || '' });
+    const res = await fetch(EXEC_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: body.toString(),
+      credentials: 'include'
+    });
+    if (!res.ok) throw new Error('閲覧に失敗しました。');
+    try {
+      return await res.json();
+    } catch (err) {
+      throw new Error('閲覧レスポンスの解析に失敗しました。');
+    }
+  }
+  throw new Error('未知の共有APIアクションです');
+}
+
 function setLoading(message){
   const statusEl = document.getElementById('shareStatus');
   const recordsEl = document.getElementById('recordsContainer');
@@ -537,7 +579,7 @@ function fetchShareMeta(){
     return Promise.resolve(null);
   }
   setLoading('共有設定を確認しています…');
-  return callGoogle('getExternalShareMeta', externalToken).then(res => {
+  return callShareApi('meta', { token: externalToken }).then(res => {
     if(!res || res.status !== 'success'){
       const msg = res && res.message ? res.message : '共有設定の取得に失敗しました。';
       showAlert('error', msg);
@@ -566,7 +608,7 @@ function fetchShareMeta(){
 
 function loadShareData(password){
   setLoading('記録を読み込んでいます…');
-  return callGoogle('enterExternalShare', externalToken, password || '').then(res => {
+  return callShareApi('enter', { token: externalToken, password: password || '' }).then(res => {
     if(!res || res.status !== 'success'){
       const msg = res && res.message ? res.message : '閲覧に失敗しました。';
       showAlert('error', msg);
