@@ -4,6 +4,7 @@ const SHEET_NAME      = 'Monitoring'; // ケアマネ用モニタリング
 const OPENAI_MODEL    = 'gpt-4o-mini';
 const SHARE_SHEET_NAME = 'ExternalShares';
 const SHARE_LOG_SHEET_NAME = 'ExternalShareAccessLog';
+const SHARE_QR_SIZE = '220x220';
 
 // 画像/動画/PDF の既定保存先（利用者IDごとにサブフォルダを自動作成）
 const DEFAULT_FOLDER_ID         = '1glDniVONBBD8hIvRGMPPT1iLXdtHJpEC';
@@ -913,6 +914,34 @@ function updateMemberName(id, newName){
 }
 
 /***** ── 外部共有リンク ─────────────────*****/
+function getExecUrlSafe_(){
+  try {
+    const url = ScriptApp.getService().getUrl();
+    if (url) return url;
+  } catch(_e) {}
+  try {
+    const prop = PropertiesService.getScriptProperties().getProperty('EXEC_URL_FALLBACK');
+    if (prop) return prop;
+  } catch(_e) {}
+  return '';
+}
+
+function buildExternalShareUrl_(token){
+  const base = getExecUrlSafe_();
+  if (!base) return '';
+  const tok = String(token || '').trim();
+  if (!tok) return '';
+  return `${base}?shareId=${encodeURIComponent(tok)}`;
+}
+
+function buildExternalShareQrUrl_(shareUrl, size){
+  const url = String(shareUrl || '').trim();
+  if (!url) return '';
+  const dim = size ? String(size) : SHARE_QR_SIZE;
+  const safeSize = /^\d+x\d+$/.test(dim) ? dim : SHARE_QR_SIZE;
+  return `https://chart.googleapis.com/chart?cht=qr&chs=${safeSize}&choe=UTF-8&chl=${encodeURIComponent(url)}`;
+}
+
 function createExternalShare(memberId, options){
   try {
     const id = String(memberId || '').trim();
@@ -966,11 +995,13 @@ function createExternalShare(memberId, options){
       rangeSpec
     ]);
 
-    const url = ScriptApp.getService().getUrl() + '?shareId=' + encodeURIComponent(token);
+    const url = buildExternalShareUrl_(token);
+    const qrUrl = buildExternalShareQrUrl_(url);
     return {
       status:'success',
       token,
       url,
+      qrUrl,
       audience,
       expiresAt: expiresAtIso,
       maskMode,
@@ -993,7 +1024,6 @@ function getExternalShares(memberId){
     if (!values || values.length <= 1) return { status:'success', shares: [] };
 
     const now = Date.now();
-    const baseUrl = ScriptApp.getService().getUrl();
     const shares = [];
 
     for (let i = 1; i < values.length; i++) {
@@ -1004,10 +1034,13 @@ function getExternalShares(memberId){
       const allowAll = share.allowedAttachmentIds.includes('__ALL__');
       const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
       const expired = !!(share.expiresAt && share.expiresAt.getTime() < now);
+      const url = buildExternalShareUrl_(share.token);
+      const qrUrl = buildExternalShareQrUrl_(url);
 
       shares.push({
         token: share.token,
-        url: baseUrl + '?shareId=' + encodeURIComponent(share.token),
+        url,
+        qrUrl,
         createdAtText: formatShareDate_(share.createdAt),
         createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
         expiresAtText: formatShareDate_(share.expiresAt),
@@ -1056,6 +1089,8 @@ function getExternalShareMeta(token){
     const expired = !!(share.expiresAt && share.expiresAt.getTime() < now);
     const allowAll = share.allowedAttachmentIds.includes('__ALL__');
     const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
+    const url = buildExternalShareUrl_(share.token);
+    const qrUrl = buildExternalShareQrUrl_(url);
     const summary = {
       token: share.token,
       memberId: share.memberId,
@@ -1068,7 +1103,9 @@ function getExternalShareMeta(token){
       allowAllAttachments: allowAll,
       allowedCount,
       remainingLabel: computeRemainingLabel_(share.expiresAt),
-      rangeLabel: share.rangeLabel
+      rangeLabel: share.rangeLabel,
+      url,
+      qrUrl
     };
     return { status:'success', share: summary };
   } catch (e) {
@@ -1103,6 +1140,8 @@ function enterExternalShare(token, password){
 
     const allowAll = share.allowedAttachmentIds.includes('__ALL__');
     const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
+    const url = buildExternalShareUrl_(share.token);
+    const qrUrl = buildExternalShareQrUrl_(url);
     const summary = {
       token: share.token,
       memberId: share.memberId,
@@ -1115,7 +1154,9 @@ function enterExternalShare(token, password){
       allowAllAttachments: allowAll,
       allowedCount,
       remainingLabel: computeRemainingLabel_(share.expiresAt),
-      rangeLabel: share.rangeLabel
+      rangeLabel: share.rangeLabel,
+      url,
+      qrUrl
     };
 
     return { status:'success', share: summary, records: payload };

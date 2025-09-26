@@ -1991,7 +1991,8 @@ function renderShareItem(share){
   const itemClass=expired?"share-item expired":"share-item";
   const badgeLabel=expired?"期限切れ":"共有中";
   const info=getAudienceInfo(share.audience);
-  const safeUrl=escapeHtml(share.url||"");
+  const shareUrlRaw=share.url||"";
+  const safeUrl=escapeHtml(shareUrlRaw);
   const expiresLabel=share.expiresAtText?`期限: ${escapeHtml(share.expiresAtText)}`:"期限: 設定なし";
   const attachmentsLabel=share.allowAllAttachments?"添付: すべて共有":`添付: ${share.allowedCount||0}件`;
   const passwordLabel=share.passwordProtected?"パスワードあり":"パスワードなし";
@@ -2003,7 +2004,8 @@ function renderShareItem(share){
   const accessLabel=share.accessCount?`閲覧回数: ${share.accessCount}回`:"";
   const metaParts=[audienceLabel,expiresLabel,attachmentsLabel,passwordLabel,maskLabel,rangeLabel,remaining,lastAccess,accessLabel].filter(Boolean);
   const metaHtml=metaParts.map(p=>`<span>${p}</span>`).join("\n");
-  const qrUrl=share.url?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(share.url)}`:"";
+  const qrUrlRaw=share.qrUrl||"";
+  const qrUrl=qrUrlRaw|| (shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"");
   const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
     + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div></div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
@@ -2074,7 +2076,9 @@ function openSharePrintView(share){
     return;
   }
   const info=getAudienceInfo(share.audience);
-  const qrUrl=`https://chart.googleapis.com/chart?cht=qr&chs=260x260&choe=UTF-8&chl=${encodeURIComponent(share.url)}`;
+  const shareUrlRaw=share.url||"";
+  const qrUrlRaw=share.qrUrl||"";
+  const qrUrl=qrUrlRaw|| (shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=260x260&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"");
   const expiryText=share.expiresAtText?`閲覧期限：${escapeHtml(share.expiresAtText)}`:"閲覧期限：設定なし";
   const rangeText=share.rangeLabel?`共有範囲：${escapeHtml(share.rangeLabel)}`:"共有範囲：直近30日";
   const passwordNote=share.passwordProtected?"閲覧時にパスワードが必要です。発行時にお伝えしたパスワードを入力してください。":"パスワード入力は不要です。";
