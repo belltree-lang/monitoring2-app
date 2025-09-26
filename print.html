@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>モニタリング共有案内</title>
+<style>
+  body { font-family: "Noto Sans JP", system-ui, sans-serif; background:#f3f6ff; margin:0; padding:24px; }
+  @page { size:A4; margin:20mm; }
+  .sheet { max-width:720px; margin:0 auto; background:#fff; border-radius:18px; padding:28px; box-shadow:0 6px 24px rgba(25,118,210,0.18); }
+  .sheet h1 { margin:0 0 12px; font-size:1.6rem; color:#1a3d78; }
+  .sheet .audience { font-size:1rem; color:#1f508b; margin-bottom:16px; font-weight:600; }
+  .sheet .row { display:flex; flex-wrap:wrap; gap:24px; align-items:center; margin-bottom:20px; }
+  .sheet .qr { width:220px; height:220px; display:flex; align-items:center; justify-content:center; border:1px solid #d0ddf4; border-radius:16px; padding:10px; background:#fff; }
+  .sheet .qr img { width:100%; height:100%; object-fit:contain; }
+  .sheet .qr .qr-placeholder { text-align:center; font-size:0.85rem; color:#5c6d86; padding:12px; }
+  .sheet .details { flex:1; min-width:220px; font-size:0.95rem; color:#334; }
+  .sheet .details p { margin:0 0 12px; line-height:1.6; }
+  .sheet .details .meta { font-size:0.9rem; color:#4a5c7a; margin-bottom:12px; line-height:1.6; }
+  .sheet .details .url { word-break:break-all; margin:12px 0; padding:10px; border-radius:8px; border:1px dashed #c0d6f5; background:#f5f9ff; font-family:monospace; font-size:0.85rem; }
+  .sheet h2 { font-size:1.1rem; color:#1f3763; margin:24px 0 10px; }
+  .sheet ol { margin:0 0 16px 18px; padding:0; font-size:0.92rem; color:#324; }
+  .sheet li { margin-bottom:8px; line-height:1.6; }
+  .sheet .footer { font-size:0.8rem; color:#5c6d86; border-top:1px solid #dbe6f8; padding-top:12px; text-align:right; }
+  .error { max-width:520px; margin:80px auto; background:#fff5f5; color:#9a1e1e; border:1px solid #f2caca; border-radius:14px; padding:28px; font-size:0.95rem; }
+</style>
+</head>
+<body>
+<? var meta = typeof shareMeta !== 'undefined' ? shareMeta : null; ?>
+<? var share = (meta && meta.status === 'success') ? meta.share : null; ?>
+<? var info = typeof shareAudienceInfo !== 'undefined' ? shareAudienceInfo : null; ?>
+<? var tips = typeof shareManualTips !== 'undefined' ? shareManualTips : []; ?>
+<? var qrSrc = typeof shareQrSrc !== 'undefined' ? shareQrSrc : ''; ?>
+<? var printedAt = typeof printedAtText !== 'undefined' ? printedAtText : ''; ?>
+<? var errorMessage = (!share && meta && meta.message) ? meta.message : '共有情報を取得できませんでした。'; ?>
+<? if (share) { ?>
+<div class="sheet">
+  <h1>モニタリング共有のご案内</h1>
+  <div class="audience"><?!= info && info.label ? info.label : '共有案内' ?></div>
+  <div class="row">
+    <div class="qr">
+      <? if (qrSrc) { ?>
+        <img src="<?!= qrSrc ?>" alt="共有ページQRコード" />
+      <? } else { ?>
+        <div class="qr-placeholder">QRコードを生成できませんでした</div>
+      <? } ?>
+    </div>
+    <div class="details">
+      <? if (info && info.description) { ?><p><?!= info.description ?></p><? } ?>
+      <div class="meta">
+        <div>閲覧期限：<?!= share.expiresAtText ? share.expiresAtText : '設定なし' ?></div>
+        <div>共有範囲：<?!= share.rangeLabel ? share.rangeLabel : '直近30日' ?></div>
+        <div><?!= share.requirePassword ? '閲覧にはパスワードが必要です。' : 'パスワード入力は不要です。' ?></div>
+      </div>
+      <div class="url"><?!= share.url ?></div>
+      <div style="font-size:0.85rem; color:#4a5c7a;">添付：<?!= share.allowAllAttachments ? 'すべて閲覧可能' : (share.allowedCount ? share.allowedCount + '件のみ共有' : '本文のみ共有') ?></div>
+    </div>
+  </div>
+  <? if (tips && tips.length) { ?>
+  <h2>ご利用方法</h2>
+  <ol>
+    <? for (var i = 0; i < tips.length; i++) { ?>
+      <li><?!= tips[i] ?></li>
+    <? } ?>
+  </ol>
+  <? } ?>
+  <div class="footer">印刷日：<?!= printedAt ?></div>
+</div>
+<? } else { ?>
+<div class="error">
+  <p><?!= errorMessage ?></p>
+</div>
+<? } ?>
+<script>
+  window.addEventListener('load', function(){
+    try { window.print(); } catch (e) {}
+  });
+</script>
+</body>
+</html>

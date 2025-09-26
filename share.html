@@ -591,13 +591,24 @@ function fetchShareMeta(){
     updateHeader(share);
     setIntro(share);
     setFooter(share);
+    let normalizedRecords = [];
+    if(!share.requirePassword){
+      normalizedRecords = normalizeRecords(Array.isArray(res.records) ? res.records : []);
+      recordsCache = normalizedRecords;
+      latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
+      updateKindOptions();
+    }else{
+      recordsCache = [];
+      latestTimestamp = null;
+      updateKindOptions();
+    }
     if(share.expired){
       showAlert('warning', 'この共有リンクは期限切れです。最新のリンクを発行してください。');
       setLoading('期限切れのため閲覧できません。');
       return null;
     }
     showAlert('', '');
-    return share;
+    return { share, records: normalizedRecords };
   }).catch(err => {
     const msg = err && err.message ? err.message : '共有設定の取得に失敗しました。';
     showAlert('error', msg);
@@ -671,14 +682,36 @@ function initSharePage(){
   const authForm = document.getElementById('authForm');
   if(authForm) authForm.addEventListener('submit', onAuthSubmit);
 
-  fetchShareMeta().then(share => {
-    if(!share) return;
+  fetchShareMeta().then(result => {
+    if(!result) return;
+    const share = result.share || currentShare || {};
     if(share.requirePassword){
       const auth = document.getElementById('shareAuth');
       if(auth) auth.style.display = 'block';
       setLoading('パスワードを入力してください。');
+      return;
+    }
+    const filters = document.getElementById('shareFilters');
+    if(filters) filters.style.display = 'flex';
+    showAlert(share.expired ? 'warning' : '', share.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
+    if(share.expired){
+      setLoading('期限切れのため閲覧できません。');
+      return;
+    }
+    const initialRecords = Array.isArray(result.records) ? result.records : recordsCache;
+    if(initialRecords && initialRecords.length){
+      recordsCache = initialRecords;
+      latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
+      updateKindOptions();
+      applyQuickRange(getDefaultQuickRange(share));
+      applyFilters(true);
     }else{
-      loadShareData('');
+      recordsCache = [];
+      latestTimestamp = null;
+      updateKindOptions();
+      setLoading('共有可能な記録はまだありません。');
+      const emptyEl = document.getElementById('emptyState');
+      if(emptyEl) emptyEl.style.display = 'block';
     }
   });
 }

@@ -28,12 +28,48 @@ function doGet(e) {
       .setHeader('Access-Control-Allow-Origin','*');
   }
   const shareToken = params.shareId || params.share || params.token || '';
-  const templateName = shareToken ? 'share' : 'member';
+  const printParamRaw = params.print || params.mode;
+  const wantsPrint = shareToken && String(printParamRaw || '').trim() !== '' && String(printParamRaw || '').trim() !== '0';
+  const templateName = wantsPrint ? 'print' : (shareToken ? 'share' : 'member');
   const tmpl = HtmlService.createTemplateFromFile(templateName);
   if (shareToken) {
     tmpl.shareToken = shareToken;
   }
-  const title = shareToken ? 'モニタリング共有ビュー' : 'ケアマネ・モニタリング';
+  let title = shareToken ? 'モニタリング共有ビュー' : 'ケアマネ・モニタリング';
+  if (wantsPrint && shareToken) {
+    const meta = getExternalShareMeta(shareToken);
+    tmpl.shareMeta = meta;
+    let audienceInfo = null;
+    let manualTips = [];
+    let qrSrc = '';
+    if (meta && meta.status === 'success' && meta.share) {
+      const share = meta.share;
+      audienceInfo = getShareAudienceInfo_(share.audience);
+      qrSrc = share.qrDataUrl || share.qrUrl || '';
+      const tips = Array.isArray(audienceInfo && audienceInfo.manualTips)
+        ? audienceInfo.manualTips.slice()
+        : [];
+      const passwordNote = share.requirePassword
+        ? '閲覧時にパスワードが必要です。発行時にお伝えしたパスワードを入力してください。'
+        : 'パスワード入力は不要です。';
+      const attachmentNote = share.allowAllAttachments
+        ? '添付ファイルもすべて閲覧できます。'
+        : (share.allowedCount
+          ? `選択した添付ファイル（${share.allowedCount}件）が閲覧できます。`
+          : '本文のみが共有されています。');
+      const maskNote = share.maskMode === 'simple'
+        ? '本文は固有名詞を一部マスキングしています。'
+        : '本文は原文のまま表示されます。';
+      tips.push(passwordNote, attachmentNote, maskNote, 'URLやパスワードは第三者に共有しないでください。');
+      manualTips = tips;
+    }
+    tmpl.shareAudienceInfo = audienceInfo;
+    tmpl.shareManualTips = manualTips;
+    tmpl.shareQrSrc = qrSrc;
+    const tz = Session.getScriptTimeZone ? (Session.getScriptTimeZone() || 'Asia/Tokyo') : 'Asia/Tokyo';
+    tmpl.printedAtText = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd HH:mm');
+    title = 'モニタリング共有案内（印刷）';
+  }
   return tmpl.evaluate()
     .setTitle(title)
     .addMetaTag('viewport','width=device-width, initial-scale=1.0');
@@ -934,12 +970,90 @@ function buildExternalShareUrl_(token){
   return `${base}?shareId=${encodeURIComponent(tok)}`;
 }
 
-function buildExternalShareQrUrl_(shareUrl, size){
+function parseQrDimensions_(value){
+  const defaultMatch = String(SHARE_QR_SIZE || '220x220').match(/(\d+)x(\d+)/);
+  let defaultWidth = 220;
+  let defaultHeight = 220;
+  if (defaultMatch) {
+    defaultWidth = parseInt(defaultMatch[1], 10) || 220;
+    defaultHeight = parseInt(defaultMatch[2], 10) || defaultWidth;
+  }
+  if (!value) return { width: defaultWidth, height: defaultHeight };
+  const raw = String(value).trim();
+  const match = raw.match(/(\d+)(?:x(\d+))?/i);
+  if (match) {
+    const width = parseInt(match[1], 10);
+    const height = match[2] ? parseInt(match[2], 10) : width;
+    if (!isNaN(width) && width > 0 && !isNaN(height) && height > 0) {
+      return { width, height };
+    }
+  }
+  const numeric = parseInt(raw, 10);
+  if (!isNaN(numeric) && numeric > 0) {
+    return { width: numeric, height: numeric };
+  }
+  return { width: defaultWidth, height: defaultHeight };
+}
+
+function buildExternalShareQrDataUrl_(shareUrl, size){
   const url = String(shareUrl || '').trim();
   if (!url) return '';
-  const dim = size ? String(size) : SHARE_QR_SIZE;
-  const safeSize = /^\d+x\d+$/.test(dim) ? dim : SHARE_QR_SIZE;
-  return `https://chart.googleapis.com/chart?cht=qr&chs=${safeSize}&choe=UTF-8&chl=${encodeURIComponent(url)}`;
+  const dims = parseQrDimensions_(size || SHARE_QR_SIZE);
+  try {
+    if (typeof ChartApp !== 'undefined' && ChartApp.newQrCode) {
+      let builder = null;
+      try {
+        builder = ChartApp.newQrCode(url);
+      } catch (_ignored) {
+        builder = null;
+      }
+      if (!builder) {
+        builder = ChartApp.newQrCode();
+      }
+      if (!builder) return '';
+      if (builder.setText) {
+        builder = builder.setText(url);
+      } else if (builder.addText) {
+        builder = builder.addText(url);
+      }
+      if (builder.setDimensions) {
+        builder = builder.setDimensions(dims.width, dims.height);
+      } else if (builder.setSize) {
+        try {
+          builder = builder.setSize(dims.width, dims.height);
+        } catch (_e) {
+          builder = builder.setSize(Math.min(dims.width, dims.height));
+        }
+      }
+      if (builder.setMargin) {
+        builder = builder.setMargin(0);
+      }
+      const chart = builder.build ? builder.build() : null;
+      if (chart) {
+        const blob = chart.getAs ? chart.getAs('image/png') : (chart.getBlob ? chart.getBlob() : null);
+        if (blob) {
+          const contentType = blob.getContentType() || 'image/png';
+          const base64 = Utilities.base64Encode(blob.getBytes());
+          return `data:${contentType};base64,${base64}`;
+        }
+      }
+      if (builder.getBlob) {
+        const blob = builder.getBlob();
+        if (blob) {
+          const contentType = blob.getContentType() || 'image/png';
+          const base64 = Utilities.base64Encode(blob.getBytes());
+          return `data:${contentType};base64,${base64}`;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('buildExternalShareQrDataUrl_ error: ' + e);
+  }
+  return '';
+}
+
+function buildExternalShareQrUrl_(shareUrl, size){
+  return buildExternalShareQrDataUrl_(shareUrl, size);
 }
 
 function createExternalShare(memberId, options){
@@ -996,12 +1110,13 @@ function createExternalShare(memberId, options){
     ]);
 
     const url = buildExternalShareUrl_(token);
-    const qrUrl = buildExternalShareQrUrl_(url);
+    const qrDataUrl = buildExternalShareQrDataUrl_(url);
     return {
       status:'success',
       token,
       url,
-      qrUrl,
+      qrUrl: qrDataUrl,
+      qrDataUrl,
       audience,
       expiresAt: expiresAtIso,
       maskMode,
@@ -1035,12 +1150,13 @@ function getExternalShares(memberId){
       const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
       const expired = !!(share.expiresAt && share.expiresAt.getTime() < now);
       const url = buildExternalShareUrl_(share.token);
-      const qrUrl = buildExternalShareQrUrl_(url);
+      const qrDataUrl = buildExternalShareQrDataUrl_(url);
 
       shares.push({
         token: share.token,
         url,
-        qrUrl,
+        qrUrl: qrDataUrl,
+        qrDataUrl,
         createdAtText: formatShareDate_(share.createdAt),
         createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
         expiresAtText: formatShareDate_(share.expiresAt),
@@ -1082,7 +1198,7 @@ function getExternalShareMeta(token){
   try {
     const info = findShareRowByToken_(token);
     if (!info) throw new Error('共有リンクが無効です');
-    const { share } = info;
+    const { sheet, rowIndex, share } = info;
     if (share.revokedAt) throw new Error('共有リンクは停止されています');
 
     const now = Date.now();
@@ -1090,7 +1206,8 @@ function getExternalShareMeta(token){
     const allowAll = share.allowedAttachmentIds.includes('__ALL__');
     const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
     const url = buildExternalShareUrl_(share.token);
-    const qrUrl = buildExternalShareQrUrl_(url);
+    const qrDataUrl = buildExternalShareQrDataUrl_(url);
+    const audienceInfo = getShareAudienceInfo_(share.audience);
     const summary = {
       token: share.token,
       memberId: share.memberId,
@@ -1105,9 +1222,23 @@ function getExternalShareMeta(token){
       remainingLabel: computeRemainingLabel_(share.expiresAt),
       rangeLabel: share.rangeLabel,
       url,
-      qrUrl
+      qrUrl: qrDataUrl,
+      qrDataUrl,
+      audienceInfo
     };
-    return { status:'success', share: summary };
+    const includeRecords = !summary.requirePassword;
+    const records = includeRecords ? buildExternalSharePayload_(share) : [];
+    if (includeRecords) {
+      try {
+        sheet.getRange(rowIndex, 9).setValue(new Date());
+        const nextCount = (share.accessCount || 0) + 1;
+        sheet.getRange(rowIndex, 11).setValue(nextCount);
+        logExternalShareAccess_(share);
+      } catch (logErr) {
+        Logger.log('getExternalShareMeta log error: ' + logErr);
+      }
+    }
+    return { status:'success', share: summary, records };
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
@@ -1141,7 +1272,8 @@ function enterExternalShare(token, password){
     const allowAll = share.allowedAttachmentIds.includes('__ALL__');
     const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
     const url = buildExternalShareUrl_(share.token);
-    const qrUrl = buildExternalShareQrUrl_(url);
+    const qrDataUrl = buildExternalShareQrDataUrl_(url);
+    const audienceInfo = getShareAudienceInfo_(share.audience);
     const summary = {
       token: share.token,
       memberId: share.memberId,
@@ -1156,7 +1288,9 @@ function enterExternalShare(token, password){
       remainingLabel: computeRemainingLabel_(share.expiresAt),
       rangeLabel: share.rangeLabel,
       url,
-      qrUrl
+      qrUrl: qrDataUrl,
+      qrDataUrl,
+      audienceInfo
     };
 
     return { status:'success', share: summary, records: payload };
@@ -1373,6 +1507,49 @@ function lookupMemberName_(memberId){
     }
   } catch(_e) {}
   return '';
+}
+
+function getShareAudienceInfo_(audience){
+  const map = {
+    family: {
+      label: 'ご家族向け共有',
+      description: 'ご家族の皆さまが状況を把握しやすいよう、本文を簡潔にまとめています。',
+      intro: 'ご家族とのコミュニケーションにご活用ください。',
+      manualTips: [
+        'QRコードからアクセスし、スマートフォンやパソコンで最新の記録をご覧いただけます。',
+        '閲覧後のご感想や気づきがあれば、担当ケアマネジャーまでお知らせください。'
+      ]
+    },
+    center: {
+      label: '地域包括支援センター向け共有',
+      description: '日付や種別を含めて記録を確認しやすいレイアウトです。',
+      intro: '地域包括支援センターの職員さまとの情報共有にご利用ください。',
+      manualTips: [
+        'QRコードからアクセスし、閲覧専用のページで記録をご確認ください。',
+        '気づいた点があればケアマネジャーへフィードバックをお願いします。'
+      ]
+    },
+    medical: {
+      label: '医療連携向け共有',
+      description: '医師・看護師が経過を把握しやすいよう、必要事項を抜粋しています。',
+      intro: '診察や訪問時の参考情報としてご活用ください。',
+      manualTips: [
+        'QRコードを読み取り、モニタリング記録を時系列で確認できます。',
+        '必要に応じて担当ケアマネジャーへご連絡ください。'
+      ]
+    },
+    service: {
+      label: 'サービス事業者向け共有',
+      description: 'ケア実務者が把握しやすいよう、現場目線で構成しています。',
+      intro: 'サービス提供に関する情報共有にご利用ください。',
+      manualTips: [
+        'QRコードでアクセスし、必要な記録をいつでも確認できます。',
+        'サービス提供に関する気づきはケアマネジャーまでご連絡ください。'
+      ]
+    }
+  };
+  const key = String(audience || 'family').toLowerCase();
+  return map[key] || map.family;
 }
 
 function helloWorld() {

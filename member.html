@@ -2004,8 +2004,9 @@ function renderShareItem(share){
   const accessLabel=share.accessCount?`閲覧回数: ${share.accessCount}回`:"";
   const metaParts=[audienceLabel,expiresLabel,attachmentsLabel,passwordLabel,maskLabel,rangeLabel,remaining,lastAccess,accessLabel].filter(Boolean);
   const metaHtml=metaParts.map(p=>`<span>${p}</span>`).join("\n");
-  const qrUrlRaw=share.qrUrl||"";
-  const qrUrl=qrUrlRaw|| (shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"");
+  const qrSrc=share.qrDataUrl||share.qrUrl||"";
+  const fallbackQr=!qrSrc && shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"";
+  const qrUrl=qrSrc||fallbackQr;
   const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
     + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div></div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
@@ -2075,58 +2076,13 @@ function openSharePrintView(share){
     alert("共有URLが見つかりませんでした");
     return;
   }
-  const info=getAudienceInfo(share.audience);
   const shareUrlRaw=share.url||"";
-  const qrUrlRaw=share.qrUrl||"";
-  const qrUrl=qrUrlRaw|| (shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=260x260&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"");
-  const expiryText=share.expiresAtText?`閲覧期限：${escapeHtml(share.expiresAtText)}`:"閲覧期限：設定なし";
-  const rangeText=share.rangeLabel?`共有範囲：${escapeHtml(share.rangeLabel)}`:"共有範囲：直近30日";
-  const passwordNote=share.passwordProtected?"閲覧時にパスワードが必要です。発行時にお伝えしたパスワードを入力してください。":"パスワード入力は不要です。";
-  const attachmentNote=share.allowAllAttachments?"添付ファイルもすべて閲覧できます。":(share.allowedCount?`選択した添付ファイル（${share.allowedCount}件）が閲覧できます。`:"本文のみが共有されています。");
-  const maskNote=share.maskMode==='simple'?"本文は固有名詞を一部マスキングしています。":"本文は原文のまま表示されます。";
-  const tips=(info.manualTips||[]).concat([passwordNote,attachmentNote,maskNote,"URLやパスワードは第三者に共有しないでください。"]);
-  const manualList=tips.map(t=>`<li>${escapeHtml(t)}</li>`).join("\n");
-  const win=window.open("","_blank");
+  const separator=shareUrlRaw.includes("?")?"&":"?";
+  const printUrl=`${shareUrlRaw}${separator}print=1`;
+  const win=window.open(printUrl,"_blank");
   if(!win){
     alert("ポップアップがブロックされました。ブラウザの設定をご確認ください。");
-    return;
   }
-  const html=`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${escapeHtml(info.label)}｜共有案内</title>
-<style>
-  body{font-family:'Noto Sans JP',system-ui,sans-serif;background:#f3f6ff;margin:0;padding:24px;}
-  @page{size:A4;margin:20mm;}
-  .sheet{max-width:720px;margin:0 auto;background:#fff;border-radius:18px;padding:28px;box-shadow:0 6px 24px rgba(25,118,210,0.18);}
-  .sheet h1{margin:0 0 12px;font-size:1.6rem;color:#1a3d78;}
-  .sheet .audience{font-size:1rem;color:#1f508b;margin-bottom:16px;font-weight:600;}
-  .sheet .row{display:flex;flex-wrap:wrap;gap:24px;align-items:center;margin-bottom:20px;}
-  .sheet .qr img{width:220px;height:220px;border:1px solid #d0ddf4;border-radius:16px;padding:10px;background:#fff;}
-  .sheet .details{flex:1;min-width:220px;font-size:0.95rem;color:#334;}
-  .sheet .details .url{word-break:break-all;margin:12px 0;padding:10px;border-radius:8px;border:1px dashed #c0d6f5;background:#f5f9ff;font-family:monospace;font-size:0.85rem;}
-  .sheet ol{margin:0 0 16px 18px;padding:0;font-size:0.92rem;color:#324;}
-  .sheet li{margin-bottom:8px;line-height:1.6;}
-  .sheet .footer{font-size:0.8rem;color:#5c6d86;border-top:1px solid #dbe6f8;padding-top:12px;text-align:right;}
-  .meta{font-size:0.85rem;color:#4a5c7a;margin-bottom:6px;}
-</style>
-</head><body>
-<div class="sheet">
-  <h1>モニタリング共有のご案内</h1>
-  <div class="audience">${escapeHtml(info.label)}</div>
-  <div class="row">
-    <div class="qr"><img src="${qrUrl}" alt="共有ページQRコード"></div>
-    <div class="details">
-      <p>${escapeHtml(info.description)}</p>
-      <div class="meta">${expiryText}<br>${rangeText}</div>
-      <div class="url">${escapeHtml(share.url)}</div>
-    </div>
-  </div>
-  <h2 style="font-size:1.1rem;color:#1f3763;margin:0 0 10px;">ご利用方法</h2>
-  <ol>${manualList}</ol>
-  <div class="footer">印刷日：${escapeHtml(formatDateTime(new Date()))}</div>
-</div>
-</body></html>`;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
 }
 async function handleCreateShare(event){
   if(event) event.preventDefault();
