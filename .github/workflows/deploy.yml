@@ -21,11 +21,11 @@ jobs:
 
       # CLASP_JSON（例: {"scriptId":"xxxxx","rootDir":"./src"}）
       - name: Create .clasp.json
-        run: printf '%s' '${{ secrets.CLASP_JSON }}' > .clasp.json
+        run: printf "%s" '${{ secrets.CLASP_JSON }}' > .clasp.json
 
       # CLASP_CREDENTIALS（Base64 化済みの .clasprc.json）
       - name: Create .clasprc.json
-        run: echo '${{ secrets.CLASP_CREDENTIALS }}' | base64 -d > ~/.clasprc.json
+        run: printf "%s" '${{ secrets.CLASP_CREDENTIALS }}' | base64 -d > ~/.clasprc.json
 
       - name: Push to GAS
-        run: clasp push
+        run: clasp push --force
