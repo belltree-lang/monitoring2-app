@@ -120,6 +120,7 @@ button:hover { opacity:0.9;}
 .share-qr img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
 .share-qr .share-qr-actions { display:flex; flex-wrap:wrap; gap:6px; }
 .share-qr .share-qr-url { font-size:0.75rem; color:#334; word-break:break-all; }
+.share-qr .share-qr-note { font-size:0.72rem; color:#60708f; }
 .share-meta-notes { font-size:0.72rem; color:#60708f; margin-top:6px; }
 .share-form { border-top:1px dashed #c7d7ef; padding-top:10px; margin-top:10px; }
 .share-form .share-field { margin-bottom:10px; }
@@ -2007,8 +2008,10 @@ function renderShareItem(share){
   const qrSrc=share.qrDataUrl||share.qrUrl||"";
   const fallbackQr=!qrSrc && shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"";
   const qrUrl=qrSrc||fallbackQr;
+  const usingFallback=!qrSrc && !!fallbackQr;
+  const fallbackNote=usingFallback?`<div class="share-qr-note">QRコードの生成に失敗したためGoogle Chart APIで代替表示しています。</div>`:"";
   const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
-    + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div></div>`:"";
+    + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div>${fallbackNote}</div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
   return `<div class="${itemClass}">`
     + `<div class="share-item-header"><span class="badge">${badgeLabel}</span>`
