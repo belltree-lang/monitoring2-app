@@ -1000,56 +1000,26 @@ function buildExternalShareQrDataUrl_(shareUrl, size){
   if (!url) return '';
   const dims = parseQrDimensions_(size || SHARE_QR_SIZE);
   try {
-    if (typeof ChartApp !== 'undefined' && ChartApp.newQrCode) {
-      let builder = null;
-      try {
-        builder = ChartApp.newQrCode(url);
-      } catch (_ignored) {
-        builder = null;
-      }
-      if (!builder) {
-        builder = ChartApp.newQrCode();
-      }
-      if (!builder) return '';
-      if (builder.setText) {
-        builder = builder.setText(url);
-      } else if (builder.addText) {
-        builder = builder.addText(url);
-      }
-      if (builder.setDimensions) {
-        builder = builder.setDimensions(dims.width, dims.height);
-      } else if (builder.setSize) {
-        try {
-          builder = builder.setSize(dims.width, dims.height);
-        } catch (_e) {
-          builder = builder.setSize(Math.min(dims.width, dims.height));
-        }
-      }
-      if (builder.setMargin) {
-        builder = builder.setMargin(0);
-      }
-      const chart = builder.build ? builder.build() : null;
-      if (chart) {
-        const blob = chart.getAs ? chart.getAs('image/png') : (chart.getBlob ? chart.getBlob() : null);
-        if (blob) {
-          const contentType = blob.getContentType() || 'image/png';
-          const base64 = Utilities.base64Encode(blob.getBytes());
-          return `data:${contentType};base64,${base64}`;
-        }
-      }
-      if (builder.getBlob) {
-        const blob = builder.getBlob();
-        if (blob) {
-          const contentType = blob.getContentType() || 'image/png';
-          const base64 = Utilities.base64Encode(blob.getBytes());
-          return `data:${contentType};base64,${base64}`;
-        }
-      }
+    if (typeof Charts === 'undefined' || !Charts.newQrCodeChart) {
+      return '';
     }
+    const chartBuilder = Charts.newQrCodeChart()
+      .setDataUrl(url)
+      .setDimensions(dims.width, dims.height);
+    const chart = chartBuilder.build();
+    if (!chart) {
+      return '';
+    }
+    const blob = chart.getAs ? chart.getAs('image/png') : chart.getBlob();
+    if (!blob) {
+      return '';
+    }
+    const base64 = Utilities.base64Encode(blob.getBytes());
+    return `data:image/png;base64,${base64}`;
   } catch (e) {
     Logger.log('buildExternalShareQrDataUrl_ error: ' + e);
+    return '';
   }
-  return '';
 }
 
 function buildExternalShareQrUrl_(shareUrl, size){
