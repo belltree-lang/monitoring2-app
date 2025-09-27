@@ -311,6 +311,8 @@ function resolveRecordColumnIndexes_(header){
     attachments: find('添付','attachments'),
     center: find('center','センター','地域包括支援センター'),
     staff: find('staff','担当者'),
+    status: find('status','状態','状態・経過','経過'),
+    special: find('special','特記事項','特記','特記事項・備考'),
     recordId: find('recordId','recordid','記録ID'),
     memberName: find('利用者名','氏名','名前','memberName')
   };
@@ -383,6 +385,8 @@ function buildRecordFromRow_(row, header, indexes, tz, rowIndex){
   const recordIdValue = indexes.recordId >= 0 ? String(row[indexes.recordId] || '').trim() : '';
   const centerValue = indexes.center >= 0 ? String(row[indexes.center] || '').trim() : '';
   const staffValue = indexes.staff >= 0 ? String(row[indexes.staff] || '').trim() : '';
+  const statusValue = indexes.status >= 0 ? String(row[indexes.status] || '').trim() : '';
+  const specialValue = indexes.special >= 0 ? String(row[indexes.special] || '').trim() : '';
   let memberNameValue = indexes.memberName >= 0 ? String(row[indexes.memberName] || '').trim() : '';
   if (recordIdValue && !('recordId' in fields)) {
     fields.recordId = recordIdValue;
@@ -392,6 +396,12 @@ function buildRecordFromRow_(row, header, indexes, tz, rowIndex){
   }
   if (staffValue && !('staff' in fields)) {
     fields.staff = staffValue;
+  }
+  if (statusValue && !('status' in fields)) {
+    fields.status = statusValue;
+  }
+  if (specialValue && !('special' in fields)) {
+    fields.special = specialValue;
   }
   if (!memberNameValue) {
     memberNameValue = fields['利用者名'] || fields['氏名'] || fields['名前'] || '';
@@ -414,6 +424,8 @@ function buildRecordFromRow_(row, header, indexes, tz, rowIndex){
     timestamp,
     center: centerValue,
     staff: staffValue,
+    status: statusValue,
+    special: specialValue,
     fields
   };
 }
@@ -485,7 +497,7 @@ function findMemberSheetColumnIndex_(headerNormalized, candidates) {
 }
 
 function getMemberSheetColumnInfo_(values) {
-  const info = { header: [], headerNormalized: [], width: 0, idCol: -1, nameCol: -1, yomiCol: -1, careCol: -1 };
+  const info = { header: [], headerNormalized: [], width: 0, idCol: -1, nameCol: -1, yomiCol: -1, careCol: -1, centerCol: -1 };
   if (!Array.isArray(values) || !values.length) return info;
 
   const header = Array.isArray(values[0]) ? values[0].map(v => String(v || '').trim()) : [];
@@ -520,14 +532,17 @@ function getMemberSheetColumnInfo_(values) {
     'かな', 'かなめい', 'ふりかな', 'めいかな', '氏名かな', '氏名ｶﾅ', '氏名カナ', 'しめいかな'
   ];
   const careCandidates = ['担当ケアマネ', '担当けあまね', 'ケアマネ', 'けあまね', '担当者', 'たんとうしゃ', '担当', 'たんとう'];
+  const centerCandidates = ['包括支援センター', '地域包括支援センター', '包括', '地域包括'];
 
   const yomiCol = findMemberSheetColumnIndex_(headerNormalized, yomiCandidates);
   const careCol = findMemberSheetColumnIndex_(headerNormalized, careCandidates);
+  const centerCol = findMemberSheetColumnIndex_(headerNormalized, centerCandidates);
 
   info.idCol = idCol;
   info.nameCol = nameCol;
   info.yomiCol = yomiCol;
   info.careCol = careCol;
+  info.centerCol = centerCol;
   return info;
 }
 
@@ -893,17 +908,112 @@ function buildDocFallback_(docName, memberId, periodLabel, audienceTag, summaryT
 }
 
 /***** ── 編集／削除 ─────────────────*****/
-function updateRecord(rowIndex, newText){
-  if (!rowIndex) throw new Error('rowIndex未指定');
-  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-  sh.getRange(Number(rowIndex), 4).setValue(String(newText||'')); // 4列目=記録内容
-  return { status:'success' };
+function findMonitoringRowIndex_(identifier, values, indexes){
+  if (!identifier || typeof identifier !== 'object') return 0;
+  if (!Array.isArray(values) || values.length <= 1) return 0;
+  const safeString = (value) => String(value == null ? '' : value).trim();
+  const maxRow = values.length;
+
+  let candidate = Number(identifier.rowIndex || identifier.row || identifier.sheetRow);
+  if (!candidate && identifier.recordId && /^\d+$/.test(String(identifier.recordId))) {
+    candidate = Number(identifier.recordId);
+  }
+  if (candidate && candidate >= 2 && candidate <= maxRow) {
+    return candidate;
+  }
+
+  const recordId = safeString(identifier.recordId || identifier.id || '');
+  if (recordId && indexes.recordId >= 0) {
+    for (let i = 1; i < values.length; i++) {
+      const cell = safeString(values[i][indexes.recordId]);
+      if (cell === recordId) {
+        return i + 1;
+      }
+    }
+  }
+
+  const memberId = safeString(identifier.memberId || '');
+  if (memberId && indexes.memberId >= 0) {
+    let fallback = 0;
+    const targetTs = Number(identifier.timestamp || 0);
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const rowMember = safeString(row[indexes.memberId]);
+      if (rowMember !== memberId) continue;
+      if (indexes.date >= 0 && targetTs) {
+        const rawDate = row[indexes.date];
+        let rowTs = NaN;
+        if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+          rowTs = rawDate.getTime();
+        } else {
+          const parsed = new Date(rawDate);
+          if (!isNaN(parsed.getTime())) rowTs = parsed.getTime();
+        }
+        if (!isNaN(rowTs) && Math.abs(rowTs - targetTs) <= 1000) {
+          return i + 1;
+        }
+      }
+      if (!fallback) fallback = i + 1;
+    }
+    if (fallback) return fallback;
+  }
+  return 0;
 }
-function deleteRecord(rowIndex){
-  if (!rowIndex) throw new Error('rowIndex未指定');
-  const sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-  sh.deleteRow(Number(rowIndex));
-  return { status:'success' };
+
+function updateMonitoringRecord(data){
+  try {
+    const payload = data && typeof data === 'object' ? data : {};
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+    const values = sheet.getDataRange().getValues();
+    if (!values || values.length <= 1) throw new Error('記録が存在しません');
+    const header = values[0].map(v => String(v || '').trim());
+    const indexes = resolveRecordColumnIndexes_(header);
+    const rowIndex = findMonitoringRowIndex_(payload, values, indexes);
+    if (!rowIndex || rowIndex < 2) throw new Error('対象の記録が見つかりません');
+    if (payload.memberId && indexes.memberId >= 0) {
+      const currentMember = String(values[rowIndex - 1][indexes.memberId] || '').trim();
+      if (currentMember && String(payload.memberId).trim() && currentMember !== String(payload.memberId).trim()) {
+        throw new Error('対象の記録が見つかりません');
+      }
+    }
+    const sanitize = (value) => String(value == null ? '' : value).trim();
+    if (indexes.center >= 0) {
+      sheet.getRange(rowIndex, indexes.center + 1).setValue(sanitize(payload.center));
+    }
+    if (indexes.staff >= 0) {
+      sheet.getRange(rowIndex, indexes.staff + 1).setValue(sanitize(payload.staff));
+    }
+    if (indexes.status >= 0) {
+      sheet.getRange(rowIndex, indexes.status + 1).setValue(sanitize(payload.status));
+    }
+    if (indexes.special >= 0) {
+      sheet.getRange(rowIndex, indexes.special + 1).setValue(sanitize(payload.special));
+    }
+    return { status:'success', rowIndex };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function deleteMonitoringRecord(identifier){
+  try {
+    const payload = (identifier && typeof identifier === 'object') ? identifier : { recordId: identifier };
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+    const values = sheet.getDataRange().getValues();
+    if (!values || values.length <= 1) throw new Error('記録が存在しません');
+    const header = values[0].map(v => String(v || '').trim());
+    const indexes = resolveRecordColumnIndexes_(header);
+    const rowIndex = findMonitoringRowIndex_(payload, values, indexes);
+    if (!rowIndex || rowIndex < 2) throw new Error('対象の記録が見つかりません');
+    sheet.deleteRow(rowIndex);
+    return { status:'success' };
+  } catch (e) {
+    return { status:'error', message:String(e && e.message || e) };
+  }
 }
 
 /***** ── 権限管理（Accessシート：利用者ID/氏名/メール） ─────────────────*****/
@@ -1318,7 +1428,7 @@ function revokeExternalShare(token){
 function getExternalShareMeta(token, recordId){
   try {
     const info = findShareRowByToken_(token);
-    if (!info) throw new Error('共有リンクが無効です');
+    if (!info) throw new Error('無効な共有リンクです');
     const { sheet, rowIndex, share } = info;
     if (share.revokedAt) throw new Error('共有リンクは停止されています');
 
@@ -1329,10 +1439,14 @@ function getExternalShareMeta(token, recordId){
     const url = buildExternalShareUrl_(share.token);
     const qrDataUrl = buildExternalShareQrDataUrl_(url);
     const audienceInfo = getShareAudienceInfo_(share.audience);
+    const profile = lookupMemberProfile_(share.memberId);
+    if (!profile.found) throw new Error('利用者情報が見つかりません');
     const summary = {
       token: share.token,
-      memberId: share.memberId,
-      memberName: lookupMemberName_(share.memberId),
+      memberId: profile.id || share.memberId,
+      memberName: profile.name || lookupMemberName_(share.memberId),
+      memberCenter: profile.center || '',
+      memberStaff: profile.staff || '',
       expiresAtText: formatShareDate_(share.expiresAt),
       expired,
       audience: share.audience,
@@ -1364,7 +1478,12 @@ function getExternalShareMeta(token, recordId){
         Logger.log('getExternalShareMeta log error: ' + logErr);
       }
     }
-    return { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
+    summary.hasRecords = !!(payload.records && payload.records.length);
+    const response = { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
+    if (!summary.hasRecords) {
+      response.message = '記録が存在しません';
+    }
+    return response;
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
@@ -1373,7 +1492,7 @@ function getExternalShareMeta(token, recordId){
 function enterExternalShare(token, password, recordId){
   try {
     const info = findShareRowByToken_(token);
-    if (!info) throw new Error('共有リンクが無効です');
+    if (!info) throw new Error('無効な共有リンクです');
     const { sheet, rowIndex, share } = info;
     if (share.revokedAt) throw new Error('共有リンクは停止されています');
 
@@ -1404,10 +1523,14 @@ function enterExternalShare(token, password, recordId){
     const url = buildExternalShareUrl_(share.token);
     const qrDataUrl = buildExternalShareQrDataUrl_(url);
     const audienceInfo = getShareAudienceInfo_(share.audience);
+    const profile = lookupMemberProfile_(share.memberId);
+    if (!profile.found) throw new Error('利用者情報が見つかりません');
     const summary = {
       token: share.token,
-      memberId: share.memberId,
-      memberName: lookupMemberName_(share.memberId),
+      memberId: profile.id || share.memberId,
+      memberName: profile.name || lookupMemberName_(share.memberId),
+      memberCenter: profile.center || '',
+      memberStaff: profile.staff || '',
       expiresAtText: formatShareDate_(share.expiresAt),
       expired: false,
       audience: share.audience,
@@ -1422,8 +1545,13 @@ function enterExternalShare(token, password, recordId){
       qrDataUrl,
       audienceInfo
     };
+    summary.hasRecords = !!(payload.records && payload.records.length);
+    const response = { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
+    if (!summary.hasRecords) {
+      response.message = '記録が存在しません';
+    }
 
-    return { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
+    return response;
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
@@ -1551,6 +1679,8 @@ function buildExternalSharePayload_(share, options){
       timestamp,
       center: rec.center || '',
       staff: rec.staff || '',
+      status: rec.status || fields.status || '',
+      special: rec.special || fields.special || '',
       fields
     };
     results.push(item);
@@ -1688,19 +1818,40 @@ function computeRemainingLabel_(expiresAt){
   return minutes > 0 ? `残り約${minutes}分` : '';
 }
 
-function lookupMemberName_(memberId){
+function lookupMemberProfile_(memberId){
+  const empty = { id: String(memberId || ''), name: '', center: '', staff: '', found: false };
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sh = ss.getSheetByName('ほのぼのID');
-    if (!sh) return '';
-    const vals = sh.getDataRange().getValues();
-    for (let i = 1; i < vals.length; i++) {
-      if (String(vals[i][0]).trim() === String(memberId).trim()) {
-        return String(vals[i][1] || '').trim();
-      }
+    if (!sh) return empty;
+    const values = sh.getDataRange().getValues();
+    if (!values || values.length <= 1) return empty;
+    const layout = getMemberSheetColumnInfo_(values);
+    const targetId = normalizeMemberId_(memberId);
+    if (!targetId) return empty;
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const rawId = (layout.idCol >= 0 && layout.idCol < row.length) ? row[layout.idCol] : '';
+      const normalized = normalizeMemberId_(rawId);
+      if (!normalized || normalized !== targetId) continue;
+      const nameRaw = (layout.nameCol >= 0 && layout.nameCol < row.length) ? row[layout.nameCol] : '';
+      const centerRaw = (layout.centerCol >= 0 && layout.centerCol < row.length) ? row[layout.centerCol] : '';
+      const staffRaw = (layout.careCol >= 0 && layout.careCol < row.length) ? row[layout.careCol] : '';
+      return {
+        id: targetId,
+        name: String(nameRaw || '').trim(),
+        center: String(centerRaw || '').trim(),
+        staff: String(staffRaw || '').trim(),
+        found: true
+      };
     }
-  } catch(_e) {}
-  return '';
+  } catch (_e) {}
+  return empty;
+}
+
+function lookupMemberName_(memberId){
+  const profile = lookupMemberProfile_(memberId);
+  return profile && profile.name ? profile.name : '';
 }
 
 function getShareAudienceInfo_(audience){
