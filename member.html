@@ -29,8 +29,16 @@ button:hover { opacity:0.9;}
 .autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
 .autocomplete-item:hover { background:var(--accent);}
 .autocomplete-item.autocomplete-empty { color:var(--muted); cursor:default; pointer-events:none; }
-.layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
-@media(max-width:960px){.layout{grid-template-columns:1fr;}}
+.layout { display:grid; grid-template-columns:minmax(260px,320px) minmax(0,1fr) minmax(260px,320px); gap:16px; align-items:start; }
+.layout-column { display:flex; flex-direction:column; gap:16px; }
+.layout-right { display:flex; flex-direction:column; gap:16px; }
+@media(max-width:1200px){
+  .layout { grid-template-columns:minmax(260px,320px) minmax(0,1fr); }
+  .layout-right { grid-column:1 / -1; }
+}
+@media(max-width:960px){
+  .layout { grid-template-columns:1fr; }
+}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
 .record .muted { font-size:0.85rem; color:#666;}
 .record .toolbar { margin-top:6px;}
@@ -144,7 +152,7 @@ button:hover { opacity:0.9;}
 <!-- メインUI -->
 <div id="mainArea" style="display:none;">
   <div class="layout">
-    <div class="left">
+    <div class="layout-column layout-compose">
       <!-- 新規記録 -->
       <div class="card">
         <h2>新規モニタリング記録</h2>
@@ -195,7 +203,8 @@ button:hover { opacity:0.9;}
         </div>
         <div id="adviceOutput" class="muted">ここに提案が表示されます</div>
       </div>
-      <!-- 過去の記録 -->
+    </div>
+    <div class="layout-column layout-history">
       <div class="card">
         <h2>過去の記録</h2>
         <div class="search-toolbar">
@@ -229,7 +238,7 @@ button:hover { opacity:0.9;}
         <div id="dashboardMessage" class="dashboard-message"></div>
       </div>
     </div>
-    <aside class="right">
+    <aside class="layout-right">
       <div class="card">
         <h2>添付ギャラリー</h2>
         <div id="mediaGallery" class="muted">利用者を選択してください</div>
