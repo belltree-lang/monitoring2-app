@@ -317,6 +317,7 @@ let memberSearchResults = [];
 let memberListLoading = false;
 let memberListLoaded = false;
 let recordsCache = [];
+let recordsLoading = false;
 let selectedRecord = null;
 let selectedRecordId = "";
 let dashboardMessageTimer = null;
@@ -395,6 +396,11 @@ function renderDashboardPanel() {
   if (!container) return;
   if (!memberId) {
     container.innerHTML = '<div class="dashboard-empty">利用者を選択してください</div>';
+    setDashboardMessage("", false);
+    return;
+  }
+  if (recordsLoading) {
+    container.innerHTML = '<div class="dashboard-empty">記録を読み込み中です…</div>';
     setDashboardMessage("", false);
     return;
   }
@@ -828,9 +834,16 @@ function loadMemberData(userId, options = {}) {
   } else {
     console.warn("[member] loadMemberData:memberTag-not-found");
   }
+  recordsCache = [];
+  recordsLoading = true;
+  selectedRecord = null;
+  selectedRecordId = "";
+  const recordListEl = document.getElementById("recordList");
+  if (recordListEl) recordListEl.textContent = "記録を読み込み中です…";
   updateMediaGallery([]);
   closeShareForm();
   resetShareListPlaceholder();
+  updateShareAttachmentOptions([]);
   renderDashboardPanel();
   loadRecords();
   fetchExternalShareList();
@@ -1039,6 +1052,7 @@ function loadRecords(options = {}) {
   const days = rangeEl ? rangeEl.value : 'all';
   if (!memberId) {
     if (list) list.textContent = "利用者を選択してください";
+    recordsLoading = false;
     recordsCache = [];
     selectedRecord = null;
     selectedRecordId = "";
@@ -1047,9 +1061,12 @@ function loadRecords(options = {}) {
     updateShareAttachmentOptions([]);
     return Promise.resolve();
   }
+  recordsLoading = true;
   if (list) list.textContent = "読込中…";
   if (gallery) gallery.textContent = "添付を読み込んでいます…";
+  renderDashboardPanel();
   return callGoogle("getRecordsByMemberId_v3", memberId, days).then(res => {
+    recordsLoading = false;
     if (!res || res.status !== "success") {
       const msg = res && res.message ? res.message : "取得に失敗しました";
       if (list) list.textContent = "エラー:" + msg;
@@ -1082,6 +1099,7 @@ function loadRecords(options = {}) {
     updateMediaGallery(recordsCache);
     ensureSelectedRecord();
   }).catch(err => {
+    recordsLoading = false;
     const msg = err && err.message ? err.message : err;
     if (list) list.textContent = "エラー:" + msg;
     recordsCache = [];
