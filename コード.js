@@ -22,53 +22,72 @@ function doGet(e) {
   const shareApi = String(params.shareApi || params.api || '').trim().toLowerCase();
   if (shareApi === 'meta') {
     const token = params.shareId || params.share || params.token || '';
-    const result = getExternalShareMeta(token);
+    const recordId = params.recordId || params.record || '';
+    const result = getExternalShareMeta(token, recordId);
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON)
       .setHeader('Access-Control-Allow-Origin','*');
   }
   const shareToken = params.shareId || params.share || params.token || '';
+  const recordIdParam = params.recordId || params.record || '';
   const printParamRaw = params.print || params.mode;
   const wantsPrint = shareToken && String(printParamRaw || '').trim() !== '' && String(printParamRaw || '').trim() !== '0';
   const templateName = wantsPrint ? 'print' : (shareToken ? 'share' : 'member');
   const tmpl = HtmlService.createTemplateFromFile(templateName);
   if (shareToken) {
     tmpl.shareToken = shareToken;
+    if (recordIdParam) {
+      tmpl.shareRecordId = recordIdParam;
+    }
   }
   let title = shareToken ? 'モニタリング共有ビュー' : 'ケアマネ・モニタリング';
   if (wantsPrint && shareToken) {
-    const meta = getExternalShareMeta(shareToken);
+    const meta = getExternalShareMeta(shareToken, recordIdParam);
     tmpl.shareMeta = meta;
-    let audienceInfo = null;
-    let manualTips = [];
-    let qrSrc = '';
+    let printMode = 'record';
+    let printRecords = [];
+    let primaryRecord = null;
+    let centerLabel = '';
+    let staffLabel = '';
+    let errorMessage = '';
+    const requestedMode = String(params.mode || '').trim().toLowerCase();
     if (meta && meta.status === 'success' && meta.share) {
       const share = meta.share;
-      audienceInfo = getShareAudienceInfo_(share.audience);
-      qrSrc = share.qrDataUrl || share.qrUrl || '';
-      const tips = Array.isArray(audienceInfo && audienceInfo.manualTips)
-        ? audienceInfo.manualTips.slice()
-        : [];
-      const passwordNote = share.requirePassword
-        ? '閲覧時にパスワードが必要です。発行時にお伝えしたパスワードを入力してください。'
-        : 'パスワード入力は不要です。';
-      const attachmentNote = share.allowAllAttachments
-        ? '添付ファイルもすべて閲覧できます。'
-        : (share.allowedCount
-          ? `選択した添付ファイル（${share.allowedCount}件）が閲覧できます。`
-          : '本文のみが共有されています。');
-      const maskNote = share.maskMode === 'simple'
-        ? '本文は固有名詞を一部マスキングしています。'
-        : '本文は原文のまま表示されます。';
-      tips.push(passwordNote, attachmentNote, maskNote, 'URLやパスワードは第三者に共有しないでください。');
-      manualTips = tips;
+      const initialRecords = Array.isArray(meta.records) ? meta.records.slice() : [];
+      primaryRecord = meta.primaryRecord || (initialRecords.length ? initialRecords[0] : null);
+      printRecords = initialRecords;
+      if (requestedMode === 'center' && primaryRecord && primaryRecord.center) {
+        const centerRecords = getRecordsByCenter(primaryRecord.center);
+        const payload = buildExternalSharePayload_(share, { records: centerRecords, center: primaryRecord.center, recordId: primaryRecord.recordId });
+        printRecords = payload.records;
+        primaryRecord = payload.primaryRecord || primaryRecord;
+        centerLabel = primaryRecord.center || primaryRecord.fields && primaryRecord.fields.center || '';
+        printMode = 'center';
+      } else if (requestedMode === 'staff' && primaryRecord && primaryRecord.staff) {
+        const staffRecords = getRecordsByStaff(primaryRecord.staff);
+        const payload = buildExternalSharePayload_(share, { records: staffRecords, staff: primaryRecord.staff, recordId: primaryRecord.recordId });
+        printRecords = payload.records;
+        primaryRecord = payload.primaryRecord || primaryRecord;
+        staffLabel = primaryRecord.staff || primaryRecord.fields && primaryRecord.fields.staff || '';
+        printMode = 'staff';
+      } else {
+        const payload = buildExternalSharePayload_(share, { recordId: recordIdParam });
+        printRecords = payload.records;
+        primaryRecord = payload.primaryRecord || primaryRecord;
+      }
+    } else {
+      errorMessage = meta && meta.message ? String(meta.message) : '共有情報を取得できませんでした。';
     }
-    tmpl.shareAudienceInfo = audienceInfo;
-    tmpl.shareManualTips = manualTips;
-    tmpl.shareQrSrc = qrSrc;
+    tmpl.printMode = printMode;
+    tmpl.printRecords = printRecords;
+    tmpl.printPrimaryRecord = primaryRecord;
+    tmpl.printCenter = centerLabel;
+    tmpl.printStaff = staffLabel;
+    tmpl.printErrorMessage = errorMessage;
+    tmpl.printRecordId = recordIdParam;
     const tz = Session.getScriptTimeZone ? (Session.getScriptTimeZone() || 'Asia/Tokyo') : 'Asia/Tokyo';
     tmpl.printedAtText = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd HH:mm');
-    title = 'モニタリング共有案内（印刷）';
+    title = 'モニタリング記録 印刷';
   }
   return tmpl.evaluate()
     .setTitle(title)
@@ -124,7 +143,11 @@ function doPost(e) {
       if (!passwordParam && jsonPayload) {
         passwordParam = jsonPayload.password || '';
       }
-      var shareResult = enterExternalShare(tokenParam, passwordParam);
+      var recordIdParam = (e.parameter && (e.parameter.recordId || e.parameter.record)) || '';
+      if (!recordIdParam && jsonPayload) {
+        recordIdParam = jsonPayload.recordId || jsonPayload.record || '';
+      }
+      var shareResult = enterExternalShare(tokenParam, passwordParam, recordIdParam);
       return ContentService.createTextOutput(JSON.stringify(shareResult))
         .setMimeType(ContentService.MimeType.JSON)
         .setHeader('Access-Control-Allow-Origin','*');
@@ -233,25 +256,12 @@ function fetchRecordsWithIndex_(memberId, days) {
   if (!vals || vals.length <= 1) return [];
 
   const header = vals[0].map(v => String(v || '').trim());
-  const colDate = header.indexOf('日付');
-  const colId   = header.indexOf('利用者ID');
-  const colKind = header.indexOf('種別');
-  const colRec  = header.indexOf('記録内容');
-  const colAtt  = header.indexOf('添付');
-
-  if (colDate < 0 || colId < 0 || colKind < 0 || colRec < 0 || colAtt < 0) {
+  const indexes = resolveRecordColumnIndexes_(header);
+  if (indexes.date < 0 || indexes.memberId < 0 || indexes.kind < 0 || indexes.record < 0 || indexes.attachments < 0) {
     throw new Error(`ヘッダー不一致（必要: 日付/利用者ID/種別/記録内容/添付, 実際: ${JSON.stringify(header)}）`);
   }
 
   const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
-  const toDateText = (v) => {
-    const d = (v instanceof Date) ? v : new Date(v);
-    if (d && d.getTime && !isNaN(d.getTime())) {
-      return Utilities.formatDate(d, tz, 'yyyy/MM/dd HH:mm');
-    }
-    return String(v ?? '');
-  };
-
   let limitDate = null;
   if (days && String(days) !== 'all') {
     const n = Number(days);
@@ -259,41 +269,15 @@ function fetchRecordsWithIndex_(memberId, days) {
   }
 
   const out = [];
+  const targetId = String(memberId).trim();
   for (let i = 1; i < vals.length; i++) {
     const row = vals[i];
-    const id  = String(row[colId] || '').trim();
-    if (id !== String(memberId).trim()) continue;
+    const id  = String(row[indexes.memberId] || '').trim();
+    if (id !== targetId) continue;
 
-    const rawDate = row[colDate];
-    const d = (rawDate instanceof Date) ? rawDate : new Date(rawDate);
-    const ts = (d instanceof Date && !isNaN(d.getTime())) ? d.getTime() : null;
-    if (limitDate && ts !== null && ts < limitDate.getTime()) continue;
-
-    let attachments = [];
-    try { attachments = JSON.parse(String(row[colAtt] || '[]')) || []; }
-    catch(_e){ attachments = []; }
-    const normalizedAttachments = Array.isArray(attachments)
-      ? attachments.map(att => {
-          if (att && typeof att === 'object') {
-            const fileId = String(att.fileId || att.id || '').trim();
-            const url = String(att.url || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '') || '').trim();
-            const name = String(att.name || att.fileName || '').trim();
-            const mimeType = String(att.mimeType || att.type || '').trim();
-            return { fileId, url, name, mimeType };
-          }
-          const label = String(att ?? '').trim();
-          return { fileId: '', url: '', name: label, mimeType: '' };
-        })
-      : [];
-
-    out.push({
-      rowIndex : i + 1,
-      dateText : toDateText(rawDate),
-      kind     : String(row[colKind] ?? ''),
-      text     : String(row[colRec]  ?? ''),
-      attachments: normalizedAttachments,
-      timestamp : ts
-    });
+    const record = buildRecordFromRow_(row, header, indexes, tz, i);
+    if (limitDate && record.timestamp !== null && record.timestamp < limitDate.getTime()) continue;
+    out.push(record);
   }
 
   out.sort((a,b) => {
@@ -303,6 +287,173 @@ function fetchRecordsWithIndex_(memberId, days) {
     return (b.rowIndex || 0) - (a.rowIndex || 0);
   });
   return out;
+}
+
+function resolveRecordColumnIndexes_(header){
+  const trimmed = header.map(v => String(v || '').trim());
+  const lower = trimmed.map(v => v.toLowerCase());
+  const find = (...names) => {
+    for (let i = 0; i < names.length; i++) {
+      const candidate = String(names[i] || '').trim();
+      if (!candidate) continue;
+      const idxExact = trimmed.indexOf(candidate);
+      if (idxExact >= 0) return idxExact;
+      const idxLower = lower.indexOf(candidate.toLowerCase());
+      if (idxLower >= 0) return idxLower;
+    }
+    return -1;
+  };
+  return {
+    date: find('日付','date'),
+    memberId: find('利用者ID','memberid','id'),
+    kind: find('種別','区分','kind'),
+    record: find('記録内容','本文','text','内容'),
+    attachments: find('添付','attachments'),
+    center: find('center','センター','地域包括支援センター'),
+    staff: find('staff','担当者'),
+    recordId: find('recordId','recordid','記録ID'),
+    memberName: find('利用者名','氏名','名前','memberName')
+  };
+}
+
+function formatRecordDate_(value, tz){
+  const d = (value instanceof Date) ? value : new Date(value);
+  if (d && d.getTime && !isNaN(d.getTime())) {
+    return Utilities.formatDate(d, tz, 'yyyy/MM/dd HH:mm');
+  }
+  return String(value ?? '');
+}
+
+function formatFieldValue_(value, tz){
+  if (value == null) return '';
+  if (value instanceof Date) {
+    return formatRecordDate_(value, tz);
+  }
+  if (typeof value === 'number' && !isFinite(value)) return '';
+  return String(value);
+}
+
+function buildRecordFromRow_(row, header, indexes, tz, rowIndex){
+  let attachmentsRaw = [];
+  if (indexes.attachments >= 0) {
+    try {
+      attachmentsRaw = JSON.parse(String(row[indexes.attachments] || '[]')) || [];
+    } catch(_err) {
+      attachmentsRaw = [];
+    }
+  }
+  const normalizedAttachments = Array.isArray(attachmentsRaw)
+    ? attachmentsRaw.map(att => {
+        if (att && typeof att === 'object') {
+          const fileId = String(att.fileId || att.id || '').trim();
+          const url = String(att.url || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '') || '').trim();
+          const name = String(att.name || att.fileName || '').trim();
+          const mimeType = String(att.mimeType || att.type || '').trim();
+          return { fileId, url, name, mimeType };
+        }
+        const label = String(att ?? '').trim();
+        return { fileId: '', url: '', name: label, mimeType: '' };
+      })
+    : [];
+
+  const attachmentsSummary = normalizedAttachments.map(att => att && att.name ? att.name : (att && att.url ? att.url : '')).filter(Boolean).join('\n');
+  const rawDate = indexes.date >= 0 ? row[indexes.date] : '';
+  const dateText = indexes.date >= 0 ? formatRecordDate_(rawDate, tz) : '';
+  const timestamp = (() => {
+    if (!(rawDate instanceof Date)) {
+      const d = new Date(rawDate);
+      if (d && !isNaN(d.getTime())) return d.getTime();
+    }
+    return (rawDate instanceof Date && !isNaN(rawDate.getTime())) ? rawDate.getTime() : null;
+  })();
+
+  const fields = {};
+  for (let idx = 0; idx < header.length; idx++) {
+    const key = String(header[idx] || '').trim();
+    if (!key) continue;
+    if (idx === indexes.attachments) {
+      fields[key] = attachmentsSummary;
+    } else if (idx === indexes.date) {
+      fields[key] = dateText;
+    } else {
+      fields[key] = formatFieldValue_(row[idx], tz);
+    }
+  }
+
+  const recordIdValue = indexes.recordId >= 0 ? String(row[indexes.recordId] || '').trim() : '';
+  const centerValue = indexes.center >= 0 ? String(row[indexes.center] || '').trim() : '';
+  const staffValue = indexes.staff >= 0 ? String(row[indexes.staff] || '').trim() : '';
+  let memberNameValue = indexes.memberName >= 0 ? String(row[indexes.memberName] || '').trim() : '';
+  if (recordIdValue && !('recordId' in fields)) {
+    fields.recordId = recordIdValue;
+  }
+  if (centerValue && !('center' in fields)) {
+    fields.center = centerValue;
+  }
+  if (staffValue && !('staff' in fields)) {
+    fields.staff = staffValue;
+  }
+  if (!memberNameValue) {
+    memberNameValue = fields['利用者名'] || fields['氏名'] || fields['名前'] || '';
+  }
+
+  const textValue = indexes.record >= 0 ? String(row[indexes.record] ?? '') : '';
+  const kindValue = indexes.kind >= 0 ? String(row[indexes.kind] ?? '') : '';
+  const memberIdValue = indexes.memberId >= 0 ? String(row[indexes.memberId] || '').trim() : '';
+  const sheetRowIndex = rowIndex + 1;
+
+  return {
+    rowIndex: sheetRowIndex,
+    recordId: recordIdValue || String(sheetRowIndex),
+    memberId: memberIdValue,
+    memberName: memberNameValue,
+    dateText,
+    kind: kindValue,
+    text: textValue,
+    attachments: normalizedAttachments,
+    timestamp,
+    center: centerValue,
+    staff: staffValue,
+    fields
+  };
+}
+
+function fetchRecordsByColumn_(columnKey, value){
+  const target = String(value || '').trim();
+  if (!target) return [];
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sh = ss.getSheetByName(SHEET_NAME);
+  if (!sh) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+  const vals = sh.getDataRange().getValues();
+  if (!vals || vals.length <= 1) return [];
+  const header = vals[0].map(v => String(v || '').trim());
+  const indexes = resolveRecordColumnIndexes_(header);
+  const targetIndex = columnKey === 'center' ? indexes.center : indexes.staff;
+  if (targetIndex < 0) return [];
+  const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
+  const lowerTarget = target.toLowerCase();
+  const out = [];
+  for (let i = 1; i < vals.length; i++) {
+    const row = vals[i];
+    const cell = String(row[targetIndex] || '').trim();
+    if (cell.toLowerCase() !== lowerTarget) continue;
+    out.push(buildRecordFromRow_(row, header, indexes, tz, i));
+  }
+  out.sort((a,b) => {
+    const ta = (typeof a.timestamp === 'number') ? a.timestamp : 0;
+    const tb = (typeof b.timestamp === 'number') ? b.timestamp : 0;
+    if (tb !== ta) return tb - ta;
+    return (b.rowIndex || 0) - (a.rowIndex || 0);
+  });
+  return out;
+}
+
+function getRecordsByCenter(centerName){
+  return fetchRecordsByColumn_('center', centerName);
+}
+
+function getRecordsByStaff(staffName){
+  return fetchRecordsByColumn_('staff', staffName);
 }
 
 /***** ── ダッシュボード要約 ─────────────────*****/
@@ -1164,7 +1315,7 @@ function revokeExternalShare(token){
   }
 }
 
-function getExternalShareMeta(token){
+function getExternalShareMeta(token, recordId){
   try {
     const info = findShareRowByToken_(token);
     if (!info) throw new Error('共有リンクが無効です');
@@ -1196,9 +1347,14 @@ function getExternalShareMeta(token){
       qrDataUrl,
       audienceInfo
     };
+    const recordIdSafe = String(recordId || '').trim();
     const includeRecords = !summary.requirePassword;
-    const records = includeRecords ? buildExternalSharePayload_(share) : [];
+    let payload = { records: [], primaryRecord: null };
     if (includeRecords) {
+      payload = buildExternalSharePayload_(share, { recordId: recordIdSafe });
+      if (recordIdSafe && (!payload.records || !payload.records.length)) {
+        throw new Error('対象の記録が見つかりません。');
+      }
       try {
         sheet.getRange(rowIndex, 9).setValue(new Date());
         const nextCount = (share.accessCount || 0) + 1;
@@ -1208,13 +1364,13 @@ function getExternalShareMeta(token){
         Logger.log('getExternalShareMeta log error: ' + logErr);
       }
     }
-    return { status:'success', share: summary, records };
+    return { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
 }
 
-function enterExternalShare(token, password){
+function enterExternalShare(token, password, recordId){
   try {
     const info = findShareRowByToken_(token);
     if (!info) throw new Error('共有リンクが無効です');
@@ -1233,7 +1389,11 @@ function enterExternalShare(token, password){
       }
     }
 
-    const payload = buildExternalSharePayload_(share);
+    const recordIdSafe = String(recordId || '').trim();
+    const payload = buildExternalSharePayload_(share, { recordId: recordIdSafe });
+    if (recordIdSafe && (!payload.records || !payload.records.length)) {
+      return { status:'error', message:'対象の記録が見つかりません。' };
+    }
     sheet.getRange(rowIndex, 9).setValue(new Date()); // LastAccessAt
     const nextCount = (share.accessCount || 0) + 1;
     sheet.getRange(rowIndex, 11).setValue(nextCount);
@@ -1263,7 +1423,7 @@ function enterExternalShare(token, password){
       audienceInfo
     };
 
-    return { status:'success', share: summary, records: payload };
+    return { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
@@ -1331,23 +1491,87 @@ function findShareRowByToken_(token){
   return null;
 }
 
-function buildExternalSharePayload_(share){
+function buildExternalSharePayload_(share, options){
+  const opts = options || {};
   const rangeArg = shareRangeToFetchArg_(share && (share.rangeSpec || share.rangeLabel || share.range));
-  const records = fetchRecordsWithIndex_(share.memberId, rangeArg);
   const allowAll = share.allowedAttachmentIds.includes('__ALL__');
   const allowedSet = new Set(allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__'));
   const audience = share.audience || 'family';
-  return records.map(rec => {
+  const recordsSource = Array.isArray(opts.records) && opts.records.length
+    ? opts.records.slice()
+    : fetchRecordsWithIndex_(share.memberId, rangeArg);
+  const recordIdFilter = String(opts.recordId || '').trim();
+  const centerFilter = String(opts.center || '').trim();
+  const staffFilter = String(opts.staff || '').trim();
+
+  let filtered = recordsSource;
+  if (centerFilter) {
+    filtered = filtered.filter(rec => String(rec.center || '').trim().toLowerCase() === centerFilter.toLowerCase());
+  }
+  if (staffFilter) {
+    filtered = filtered.filter(rec => String(rec.staff || '').trim().toLowerCase() === staffFilter.toLowerCase());
+  }
+  if (recordIdFilter) {
+    const matched = filtered.filter(rec => String(rec.recordId || rec.rowIndex || '').trim() === recordIdFilter);
+    filtered = matched.length ? matched : [];
+  }
+
+  const results = [];
+  let primaryRecord = null;
+  filtered.forEach(rec => {
     const attachments = filterAttachmentsForShare_(rec.attachments, { allowAll, allowedSet });
-    return {
+    const maskedText = maskTextForExternal_(rec.text || '', share.maskMode);
+    const timestamp = (typeof rec.timestamp === 'number') ? rec.timestamp : null;
+    const fields = rec.fields ? Object.assign({}, rec.fields) : {};
+    if ('記録内容' in fields) {
+      fields['記録内容'] = maskedText;
+    }
+    if ('text' in fields && fields.text === rec.text) {
+      fields.text = maskedText;
+    }
+    if ('添付' in fields) {
+      fields['添付'] = attachments.map(att => att && att.name ? att.name : (att && att.url ? att.url : '')).filter(Boolean).join('\n');
+    }
+    if (!('center' in fields) && rec.center) {
+      fields.center = rec.center;
+    }
+    if (!('staff' in fields) && rec.staff) {
+      fields.staff = rec.staff;
+    }
+    const item = {
+      recordId: rec.recordId || String(rec.rowIndex || ''),
+      rowIndex: rec.rowIndex,
+      memberId: rec.memberId || '',
+      memberName: rec.memberName || lookupMemberName_(rec.memberId),
       dateText: rec.dateText || '',
       kind: rec.kind || '',
       audience,
-      text: maskTextForExternal_(rec.text || '', share.maskMode),
+      text: maskedText,
       attachments,
-      timestamp: (typeof rec.timestamp === 'number') ? rec.timestamp : null
+      timestamp,
+      center: rec.center || '',
+      staff: rec.staff || '',
+      fields
     };
-  }).filter(rec => rec.text || (rec.attachments && rec.attachments.length));
+    results.push(item);
+    const isPrimary = recordIdFilter
+      ? String(item.recordId || '').trim() === recordIdFilter
+      : !primaryRecord;
+    if (isPrimary) {
+      primaryRecord = item;
+    }
+  });
+
+  const filteredResults = results.filter(rec => {
+    if (recordIdFilter && String(rec.recordId || '').trim() === recordIdFilter) {
+      return true;
+    }
+    return rec.text || (rec.attachments && rec.attachments.length);
+  });
+  if (!primaryRecord && filteredResults.length) {
+    primaryRecord = filteredResults[0];
+  }
+  return { records: filteredResults, primaryRecord };
 }
 
 function logExternalShareAccess_(share){

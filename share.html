@@ -22,6 +22,13 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .share-member { font-size:1.05rem; font-weight:600; }
 .share-meta { margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; font-size:0.82rem; color:var(--muted); }
 .share-meta .meta-item { display:inline-flex; align-items:center; gap:4px; }
+.share-actions { margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+.print-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; }
+.print-controls label { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#35507a; }
+.print-select { padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:#f8fbff; color:#1f2a44; font-size:0.9rem; min-width:200px; }
+.print-button { padding:10px 18px; border-radius:999px; border:none; background:var(--accent); color:#fff; font-size:0.92rem; cursor:pointer; box-shadow:0 8px 18px rgba(43,108,176,0.24); }
+.print-button:disabled { background:#a8c2e8; cursor:not-allowed; box-shadow:none; }
+.print-button:not(:disabled):hover { opacity:0.92; }
 .share-intro { margin-top:18px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:16px; padding:16px 18px; line-height:1.6; font-size:0.93rem; color:#2c4674; }
 .share-alert { margin-top:18px; padding:14px; border-radius:14px; font-size:0.9rem; display:none; }
 .share-alert.error { display:block; background:#fde8e8; border:1px solid #f5b5b5; color:#b91c1c; }
@@ -89,6 +96,18 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       <span class="meta-item" id="shareRemaining"></span>
       <span class="meta-item" id="shareMask"></span>
       <span class="meta-item" id="shareAttachmentPolicy"></span>
+    </div>
+    <div class="share-actions" id="printControls" style="display:none;">
+      <div class="print-controls">
+        <label>印刷対象
+          <select id="printScope" class="print-select">
+            <option value="record">この記録のみ</option>
+            <option value="center">地域包括支援センター全件</option>
+            <option value="staff">担当者全件</option>
+          </select>
+        </label>
+      </div>
+      <button type="button" class="print-button" id="printButton" disabled>印刷</button>
     </div>
   </header>
   <section id="shareIntro" class="share-intro">
@@ -159,8 +178,10 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 </div>
 <script>
 const TEMPLATE_TOKEN = <?= typeof shareToken === 'string' ? JSON.stringify(shareToken) : '""' ?>;
+const TEMPLATE_RECORD_ID = <?= typeof shareRecordId === 'string' ? JSON.stringify(shareRecordId) : '""' ?>;
 const queryParams = new URLSearchParams(window.location.search);
 const externalToken = TEMPLATE_TOKEN || queryParams.get('shareId') || queryParams.get('share') || queryParams.get('token') || '';
+const RECORD_ID_PARAM = TEMPLATE_RECORD_ID || queryParams.get('recordId') || queryParams.get('record') || '';
 const shareAudienceInfo = {
   family: {
     label: '家族向け共有',
@@ -214,6 +235,9 @@ let filteredRecords = [];
 let displayLimit = DISPLAY_LIMIT_DEFAULT;
 let latestTimestamp = null;
 let searchTimer = null;
+let resolvedRecordId = RECORD_ID_PARAM ? String(RECORD_ID_PARAM) : '';
+let primaryRecordData = null;
+let singleRecordMode = !!resolvedRecordId;
 
 function getAudienceInfo(audience){
   const key = String(audience || '').toLowerCase();
@@ -241,17 +265,20 @@ const EXEC_BASE_URL = window.location.href.split('#')[0].split('?')[0];
 async function callShareApi(action, options = {}){
   const token = options.token || externalToken;
   if (!token) throw new Error('共有リンクが見つかりません。');
+  const requestedRecordId = options.recordId !== undefined ? options.recordId : resolvedRecordId;
+  const recordIdValue = requestedRecordId ? String(requestedRecordId) : '';
   const canUseGoogleRun = typeof google !== 'undefined' && google.script && google.script.run;
   if (canUseGoogleRun) {
     if (action === 'meta') {
-      return callGoogle('getExternalShareMeta', token);
+      return callGoogle('getExternalShareMeta', token, recordIdValue || '');
     }
     if (action === 'enter') {
-      return callGoogle('enterExternalShare', token, options.password || '');
+      return callGoogle('enterExternalShare', token, options.password || '', recordIdValue || '');
     }
   }
   if (action === 'meta') {
     const params = new URLSearchParams({ shareApi: 'meta', shareId: token });
+    if (recordIdValue) params.set('recordId', recordIdValue);
     const res = await fetch(`${EXEC_BASE_URL}?${params.toString()}`, { credentials: 'include' });
     if (!res.ok) throw new Error('共有設定の取得に失敗しました。');
     try {
@@ -262,6 +289,7 @@ async function callShareApi(action, options = {}){
   }
   if (action === 'enter') {
     const body = new URLSearchParams({ action: 'shareEnter', shareId: token, password: options.password || '' });
+    if (recordIdValue) body.append('recordId', recordIdValue);
     const res = await fetch(EXEC_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
@@ -287,6 +315,7 @@ function setLoading(message){
   if(emptyEl) emptyEl.style.display = 'none';
   const loadMore = document.getElementById('loadMore');
   if(loadMore) loadMore.style.display = 'none';
+  updatePrintControls(null);
 }
 
 function showAlert(type, message){
@@ -348,6 +377,61 @@ function setFooter(share){
   if(tips.length){
     footer.innerHTML += `<ul>${tips.map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>`;
   }
+}
+
+function updateFilterVisibility(){
+  const filters = document.getElementById('shareFilters');
+  if(!filters) return;
+  const shouldShow = !singleRecordMode && recordsCache.length > 1;
+  filters.style.display = shouldShow ? 'flex' : 'none';
+}
+
+function setSingleRecordMode(enabled){
+  singleRecordMode = !!enabled;
+  updateFilterVisibility();
+}
+
+function getResolvedRecordId(){
+  if(resolvedRecordId) return resolvedRecordId;
+  if(primaryRecordData && primaryRecordData.recordId) return String(primaryRecordData.recordId);
+  if(recordsCache.length && recordsCache[0].recordId) return String(recordsCache[0].recordId);
+  return '';
+}
+
+function updatePrintControls(record){
+  const container = document.getElementById('printControls');
+  const select = document.getElementById('printScope');
+  const button = document.getElementById('printButton');
+  if(!container || !select || !button) return;
+  if(!record){
+    container.style.display = 'none';
+    button.disabled = true;
+    return;
+  }
+  container.style.display = 'flex';
+  const hasCenter = !!String(record.center || '').trim();
+  const hasStaff = !!String(record.staff || '').trim();
+  const centerOption = select.querySelector('option[value="center"]');
+  const staffOption = select.querySelector('option[value="staff"]');
+  if(centerOption) centerOption.disabled = !hasCenter;
+  if(staffOption) staffOption.disabled = !hasStaff;
+  if(select.value === 'center' && !hasCenter) select.value = 'record';
+  if(select.value === 'staff' && !hasStaff) select.value = 'record';
+  button.disabled = false;
+}
+
+function handlePrintClick(){
+  const recordId = getResolvedRecordId();
+  if(!externalToken || !recordId){
+    showAlert('error', '印刷対象の記録を特定できません。');
+    return;
+  }
+  const select = document.getElementById('printScope');
+  const mode = select ? select.value : 'record';
+  const params = new URLSearchParams({ shareId: externalToken, print: '1', recordId });
+  if(mode && mode !== 'record') params.set('mode', mode);
+  const url = `${EXEC_BASE_URL}?${params.toString()}`;
+  window.open(url, '_blank', 'noopener');
 }
 
 function decorateText(value){
@@ -460,6 +544,13 @@ function getFilterValues(){
 
 function applyFilters(resetLimit){
   if(resetLimit) displayLimit = DISPLAY_LIMIT_DEFAULT;
+  if(singleRecordMode){
+    filteredRecords = recordsCache.slice();
+    displayLimit = filteredRecords.length;
+    renderRecords();
+    updateStatus('');
+    return;
+  }
   const { searchValue, kindValue, sortValue, fromTime, toTime } = getFilterValues();
   let results = recordsCache.slice();
   if(kindValue && kindValue !== 'all'){
@@ -515,6 +606,14 @@ function renderRecords(){
 function updateStatus(searchValue){
   const statusEl = document.getElementById('shareStatus');
   if(!statusEl) return;
+  if(singleRecordMode){
+    if(!filteredRecords.length){
+      statusEl.textContent = '表示できる記録がありません。';
+    }else{
+      statusEl.textContent = `${filteredRecords.length}件表示`;
+    }
+    return;
+  }
   if(!filteredRecords.length){
     if(searchValue){
       statusEl.textContent = `該当する記録はありません（キーワード「${searchValue}」）。`;
@@ -579,7 +678,7 @@ function fetchShareMeta(){
     return Promise.resolve(null);
   }
   setLoading('共有設定を確認しています…');
-  return callShareApi('meta', { token: externalToken }).then(res => {
+  return callShareApi('meta', { token: externalToken, recordId: resolvedRecordId }).then(res => {
     if(!res || res.status !== 'success'){
       const msg = res && res.message ? res.message : '共有設定の取得に失敗しました。';
       showAlert('error', msg);
@@ -592,16 +691,24 @@ function fetchShareMeta(){
     setIntro(share);
     setFooter(share);
     let normalizedRecords = [];
+    primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : null);
+    if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
+      resolvedRecordId = String(primaryRecordData.recordId);
+    }
+    setSingleRecordMode(Boolean(resolvedRecordId));
     if(!share.requirePassword){
       normalizedRecords = normalizeRecords(Array.isArray(res.records) ? res.records : []);
       recordsCache = normalizedRecords;
       latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
       updateKindOptions();
+      updatePrintControls(primaryRecordData);
     }else{
       recordsCache = [];
       latestTimestamp = null;
       updateKindOptions();
+      updatePrintControls(null);
     }
+    updateFilterVisibility();
     if(share.expired){
       showAlert('warning', 'この共有リンクは期限切れです。最新のリンクを発行してください。');
       setLoading('期限切れのため閲覧できません。');
@@ -619,7 +726,7 @@ function fetchShareMeta(){
 
 function loadShareData(password){
   setLoading('記録を読み込んでいます…');
-  return callShareApi('enter', { token: externalToken, password: password || '' }).then(res => {
+  return callShareApi('enter', { token: externalToken, password: password || '', recordId: resolvedRecordId }).then(res => {
     if(!res || res.status !== 'success'){
       const msg = res && res.message ? res.message : '閲覧に失敗しました。';
       showAlert('error', msg);
@@ -638,12 +745,17 @@ function loadShareData(password){
     setFooter(currentShare);
     const auth = document.getElementById('shareAuth');
     if(auth) auth.style.display = 'none';
-    const filters = document.getElementById('shareFilters');
-    if(filters) filters.style.display = 'flex';
+    primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : primaryRecordData);
+    if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
+      resolvedRecordId = String(primaryRecordData.recordId);
+    }
+    setSingleRecordMode(Boolean(resolvedRecordId));
     showAlert(currentShare.expired ? 'warning' : '', currentShare.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
     recordsCache = normalizeRecords(Array.isArray(res.records) ? res.records : []);
     latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
     updateKindOptions();
+    updateFilterVisibility();
+    updatePrintControls(primaryRecordData);
     applyQuickRange(getDefaultQuickRange(currentShare));
     if(!recordsCache.length){
       setLoading('共有可能な記録はまだありません。');
@@ -681,6 +793,8 @@ function initSharePage(){
   if(loadMore) loadMore.addEventListener('click', handleLoadMore);
   const authForm = document.getElementById('authForm');
   if(authForm) authForm.addEventListener('submit', onAuthSubmit);
+  const printButton = document.getElementById('printButton');
+  if(printButton) printButton.addEventListener('click', handlePrintClick);
 
   fetchShareMeta().then(result => {
     if(!result) return;
@@ -691,8 +805,8 @@ function initSharePage(){
       setLoading('パスワードを入力してください。');
       return;
     }
-    const filters = document.getElementById('shareFilters');
-    if(filters) filters.style.display = 'flex';
+    updateFilterVisibility();
+    updatePrintControls(primaryRecordData);
     showAlert(share.expired ? 'warning' : '', share.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
     if(share.expired){
       setLoading('期限切れのため閲覧できません。');
