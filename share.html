@@ -20,7 +20,10 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .badge.subtle { background:#edf2f9; color:#4a5a75; }
 .badge.audience { background:#dbeafe; color:#1d4ed8; }
 .share-member { font-size:1.05rem; font-weight:600; }
-.share-member-details { margin-top:6px; display:flex; flex-direction:column; gap:2px; font-size:0.85rem; color:#35507a; }
+.share-profile { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
+.profile-item { background:#f3f7ff; border:1px solid rgba(43,108,176,0.18); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:4px; }
+.profile-label { font-size:0.72rem; color:#4c5d7c; letter-spacing:0.06em; text-transform:uppercase; }
+.profile-value { font-size:0.95rem; color:#1f2a44; font-weight:600; word-break:break-word; }
 .share-meta { margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; font-size:0.82rem; color:var(--muted); }
 .share-meta .meta-item { display:inline-flex; align-items:center; gap:4px; }
 .share-actions { margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
@@ -78,6 +81,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
   .filter-row { flex-direction:column; }
   .filter { width:100%; }
   .quick-range { flex-direction:column; }
+  .share-profile { grid-template-columns:1fr; }
 }
 </style>
 </head>
@@ -93,7 +97,20 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       </div>
     </div>
     <div class="share-member" id="shareMember">閲覧対象を確認しています…</div>
-    <div class="share-member-details" id="shareMemberDetails" style="display:none;"></div>
+    <div class="share-profile" id="shareProfile" style="display:none;">
+      <div class="profile-item">
+        <span class="profile-label">ほのぼのID</span>
+        <span class="profile-value" id="shareMemberId">確認中…</span>
+      </div>
+      <div class="profile-item">
+        <span class="profile-label">地域包括支援センター</span>
+        <span class="profile-value" id="shareMemberCenter">確認中…</span>
+      </div>
+      <div class="profile-item">
+        <span class="profile-label">担当ケアマネジャー</span>
+        <span class="profile-value" id="shareMemberStaff">確認中…</span>
+      </div>
+    </div>
     <div class="share-meta">
       <span class="meta-item" id="shareRange">表示範囲を確認しています…</span>
       <span class="meta-item" id="shareExpiry"></span>
@@ -345,23 +362,18 @@ function updateHeader(share){
   if(memberEl){
     memberEl.textContent = share && share.memberName ? `${share.memberName} 様のモニタリング` : '対象を確認しています…';
   }
-  const detailsEl = document.getElementById('shareMemberDetails');
-  if(detailsEl){
-    const detailParts = [];
-    const memberId = share && share.memberId ? String(share.memberId).trim() : '';
-    const memberCenter = share && share.memberCenter ? String(share.memberCenter).trim() : '';
-    const memberStaff = share && share.memberStaff ? String(share.memberStaff).trim() : '';
-    if(memberId){
-      detailParts.push(`<span>利用者ID：${escapeHtml(memberId)}</span>`);
-    }
-    if(memberCenter){
-      detailParts.push(`<span>地域包括支援センター：${escapeHtml(memberCenter)}</span>`);
-    }
-    if(memberStaff){
-      detailParts.push(`<span>担当ケアマネジャー：${escapeHtml(memberStaff)}</span>`);
-    }
-    detailsEl.innerHTML = detailParts.join('');
-    detailsEl.style.display = detailParts.length ? 'flex' : 'none';
+  const profileEl = document.getElementById('shareProfile');
+  const memberIdEl = document.getElementById('shareMemberId');
+  const memberCenterEl = document.getElementById('shareMemberCenter');
+  const memberStaffEl = document.getElementById('shareMemberStaff');
+  const memberId = share && share.memberId ? String(share.memberId).trim() : '';
+  const memberCenter = share && share.memberCenter ? String(share.memberCenter).trim() : '';
+  const memberStaff = share && share.memberStaff ? String(share.memberStaff).trim() : '';
+  if(memberIdEl) memberIdEl.textContent = memberId || '未登録';
+  if(memberCenterEl) memberCenterEl.textContent = memberCenter || '未設定';
+  if(memberStaffEl) memberStaffEl.textContent = memberStaff || '未設定';
+  if(profileEl){
+    profileEl.style.display = 'grid';
   }
   const rangeEl = document.getElementById('shareRange');
   if(rangeEl){
