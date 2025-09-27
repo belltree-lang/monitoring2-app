@@ -20,6 +20,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .badge.subtle { background:#edf2f9; color:#4a5a75; }
 .badge.audience { background:#dbeafe; color:#1d4ed8; }
 .share-member { font-size:1.05rem; font-weight:600; }
+.share-member-details { margin-top:6px; display:flex; flex-direction:column; gap:2px; font-size:0.85rem; color:#35507a; }
 .share-meta { margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; font-size:0.82rem; color:var(--muted); }
 .share-meta .meta-item { display:inline-flex; align-items:center; gap:4px; }
 .share-actions { margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
@@ -53,6 +54,8 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .share-record.latest { border-color:#7aa7ff; box-shadow:0 14px 28px rgba(24,72,140,0.18); position:relative; }
 .share-record.latest::before { content:"最新"; position:absolute; top:14px; right:16px; background:var(--accent); color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:999px; letter-spacing:0.04em; }
 .record-meta { font-size:0.85rem; color:#3a5684; display:flex; flex-wrap:wrap; gap:10px; margin-bottom:10px; }
+.record-submeta { font-size:0.85rem; color:#3a5684; margin-top:6px; line-height:1.6; }
+.record-submeta strong { font-weight:600; }
 .record-text { font-size:0.95rem; line-height:1.7; color:#1f2a44; white-space:pre-wrap; word-break:break-word; }
 .keyword-hit { background:var(--highlight); padding:0 4px; border-radius:4px; font-weight:600; }
 .keyword-hit.health { background:#ffe4e6; color:#b91c1c; }
@@ -90,6 +93,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       </div>
     </div>
     <div class="share-member" id="shareMember">閲覧対象を確認しています…</div>
+    <div class="share-member-details" id="shareMemberDetails" style="display:none;"></div>
     <div class="share-meta">
       <span class="meta-item" id="shareRange">表示範囲を確認しています…</span>
       <span class="meta-item" id="shareExpiry"></span>
@@ -318,6 +322,13 @@ function setLoading(message){
   updatePrintControls(null);
 }
 
+function showEmptyState(message){
+  const emptyEl = document.getElementById('emptyState');
+  if(!emptyEl) return;
+  emptyEl.textContent = message || '共有可能な記録はまだありません。';
+  emptyEl.style.display = 'block';
+}
+
 function showAlert(type, message){
   const alertEl = document.getElementById('shareAlert');
   if(!alertEl) return;
@@ -333,6 +344,24 @@ function updateHeader(share){
   const memberEl = document.getElementById('shareMember');
   if(memberEl){
     memberEl.textContent = share && share.memberName ? `${share.memberName} 様のモニタリング` : '対象を確認しています…';
+  }
+  const detailsEl = document.getElementById('shareMemberDetails');
+  if(detailsEl){
+    const detailParts = [];
+    const memberId = share && share.memberId ? String(share.memberId).trim() : '';
+    const memberCenter = share && share.memberCenter ? String(share.memberCenter).trim() : '';
+    const memberStaff = share && share.memberStaff ? String(share.memberStaff).trim() : '';
+    if(memberId){
+      detailParts.push(`<span>利用者ID：${escapeHtml(memberId)}</span>`);
+    }
+    if(memberCenter){
+      detailParts.push(`<span>地域包括支援センター：${escapeHtml(memberCenter)}</span>`);
+    }
+    if(memberStaff){
+      detailParts.push(`<span>担当ケアマネジャー：${escapeHtml(memberStaff)}</span>`);
+    }
+    detailsEl.innerHTML = detailParts.join('');
+    detailsEl.style.display = detailParts.length ? 'flex' : 'none';
   }
   const rangeEl = document.getElementById('shareRange');
   if(rangeEl){
@@ -449,6 +478,12 @@ function buildRecordHtml(record, showKind){
   if(showKind){
     metaParts.push(escapeHtml(record.kind || '種別未設定'));
   }
+  if(record.center){
+    metaParts.push(`地域包括支援センター：${escapeHtml(record.center)}`);
+  }
+  if(record.staff){
+    metaParts.push(`担当：${escapeHtml(record.staff)}`);
+  }
   const metaHtml = metaParts.map(part => `<span>${part}</span>`).join('<span>｜</span>');
   const attachments = Array.isArray(record.attachments) ? record.attachments : [];
   const attachmentsHtml = attachments.length
@@ -458,12 +493,20 @@ function buildRecordHtml(record, showKind){
         return `<a href="${url}" target="_blank" rel="noopener">📎 ${name}</a>`;
       }).join('')}</div>`
     : '';
+  const detailSections = [];
+  if(record.status){
+    detailSections.push(`<div class="record-submeta"><strong>状態・経過：</strong>${escapeHtml(record.status)}</div>`);
+  }
+  if(record.special){
+    detailSections.push(`<div class="record-submeta"><strong>特記事項：</strong>${escapeHtml(record.special)}</div>`);
+  }
   const classes = (latestTimestamp && Number(record.timestamp||0) === latestTimestamp)
     ? 'share-record latest'
     : 'share-record';
   return `<article class="${classes}">
     <div class="record-meta">${metaHtml}</div>
     <div class="record-text">${decorateText(record.text || '') || '<span class="share-muted">（本文なし）</span>'}</div>
+    ${detailSections.join('')}
     ${attachmentsHtml}
   </article>`;
 }
@@ -590,7 +633,17 @@ function renderRecords(){
   if(!container) return;
   if(!filteredRecords.length){
     container.innerHTML = '';
-    if(emptyEl) emptyEl.style.display = 'block';
+    if(emptyEl){
+      if(recordsCache.length){
+        emptyEl.textContent = '条件に合致する記録がありません。';
+      }else{
+        const noRecordMessage = currentShare && currentShare.hasRecords === false
+          ? '記録が存在しません'
+          : '共有可能な記録はまだありません。';
+        emptyEl.textContent = noRecordMessage;
+      }
+      emptyEl.style.display = 'block';
+    }
     if(loadMore) loadMore.style.display = 'none';
     return;
   }
@@ -655,7 +708,11 @@ function normalizeRecords(records){
     const textValue = String(rec.text || '');
     const attachments = Array.isArray(rec.attachments) ? rec.attachments : [];
     const attachmentNames = attachments.map(att => String(att && att.name || '')).join(' ');
-    const searchIndex = `${textValue} ${attachmentNames}`.toLowerCase();
+    const centerValue = String(rec.center || '');
+    const staffValue = String(rec.staff || '');
+    const statusValue = String(rec.status || '');
+    const specialValue = String(rec.special || '');
+    const searchIndex = `${textValue} ${attachmentNames} ${centerValue} ${staffValue} ${statusValue} ${specialValue}`.toLowerCase();
     return { ...rec, timestamp, searchIndex, audience };
   });
 }
@@ -715,7 +772,8 @@ function fetchShareMeta(){
       return null;
     }
     showAlert('', '');
-    return { share, records: normalizedRecords };
+    const responseMessage = res && res.message ? res.message : (share && share.hasRecords === false ? '記録が存在しません' : '');
+    return { share, records: normalizedRecords, message: responseMessage };
   }).catch(err => {
     const msg = err && err.message ? err.message : '共有設定の取得に失敗しました。';
     showAlert('error', msg);
@@ -757,10 +815,11 @@ function loadShareData(password){
     updateFilterVisibility();
     updatePrintControls(primaryRecordData);
     applyQuickRange(getDefaultQuickRange(currentShare));
+    const responseMessage = res && res.message ? res.message : (currentShare && currentShare.hasRecords === false ? '記録が存在しません' : '');
     if(!recordsCache.length){
-      setLoading('共有可能な記録はまだありません。');
-      const emptyEl = document.getElementById('emptyState');
-      if(emptyEl) emptyEl.style.display = 'block';
+      const message = responseMessage || '共有可能な記録はまだありません。';
+      setLoading(message);
+      showEmptyState(message);
       return;
     }
     applyFilters(true);
@@ -799,10 +858,17 @@ function initSharePage(){
   fetchShareMeta().then(result => {
     if(!result) return;
     const share = result.share || currentShare || {};
+    const responseMessage = result && result.message ? result.message : (share && share.hasRecords === false ? '記録が存在しません' : '');
     if(share.requirePassword){
       const auth = document.getElementById('shareAuth');
       if(auth) auth.style.display = 'block';
-      setLoading('パスワードを入力してください。');
+      if(share.hasRecords === false){
+        const message = responseMessage || '記録が存在しません';
+        setLoading(message);
+        showEmptyState(message);
+      }else{
+        setLoading('パスワードを入力してください。');
+      }
       return;
     }
     updateFilterVisibility();
@@ -823,9 +889,9 @@ function initSharePage(){
       recordsCache = [];
       latestTimestamp = null;
       updateKindOptions();
-      setLoading('共有可能な記録はまだありません。');
-      const emptyEl = document.getElementById('emptyState');
-      if(emptyEl) emptyEl.style.display = 'block';
+      const message = responseMessage || '共有可能な記録はまだありません。';
+      setLoading(message);
+      showEmptyState(message);
     }
   });
 }
