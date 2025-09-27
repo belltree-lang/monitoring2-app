@@ -1260,27 +1260,59 @@ function buildExternalShareQrDataUrl_(shareUrl, size){
   const url = String(shareUrl || '').trim();
   if (!url) return '';
   const dims = parseQrDimensions_(size || SHARE_QR_SIZE);
+  const toDataUrlFromBlob = (blob) => {
+    if (!blob) return '';
+    try {
+      const bytes = blob.getBytes();
+      if (!bytes || !bytes.length) return '';
+      const mimeType = blob.getContentType && blob.getContentType() ? blob.getContentType() : 'image/png';
+      const base64 = Utilities.base64Encode(bytes);
+      return `data:${mimeType};base64,${base64}`;
+    } catch (err) {
+      Logger.log('buildExternalShareQrDataUrl_ blob error: ' + err);
+      return '';
+    }
+  };
+
   try {
-    if (typeof Charts === 'undefined' || !Charts.newQrCodeChart) {
-      return '';
+    if (typeof Charts !== 'undefined' && Charts.newQrCodeChart) {
+      const chartBuilder = Charts.newQrCodeChart()
+        .setDataUrl(url)
+        .setDimensions(dims.width, dims.height);
+      const chart = chartBuilder.build();
+      if (chart) {
+        const blob = chart.getAs ? chart.getAs('image/png') : chart.getBlob();
+        const dataUrl = toDataUrlFromBlob(blob);
+        if (dataUrl) {
+          return dataUrl;
+        }
+      }
     }
-    const chartBuilder = Charts.newQrCodeChart()
-      .setDataUrl(url)
-      .setDimensions(dims.width, dims.height);
-    const chart = chartBuilder.build();
-    if (!chart) {
-      return '';
-    }
-    const blob = chart.getAs ? chart.getAs('image/png') : chart.getBlob();
-    if (!blob) {
-      return '';
-    }
-    const base64 = Utilities.base64Encode(blob.getBytes());
-    return `data:image/png;base64,${base64}`;
-  } catch (e) {
-    Logger.log('buildExternalShareQrDataUrl_ error: ' + e);
-    return '';
+  } catch (chartErr) {
+    Logger.log('buildExternalShareQrDataUrl_ chart error: ' + chartErr);
   }
+
+  try {
+    const chs = `${dims.width}x${dims.height}`;
+    const apiUrl = 'https://chart.googleapis.com/chart?cht=qr&chld=L|0&choe=UTF-8&chs='
+      + encodeURIComponent(chs)
+      + '&chl='
+      + encodeURIComponent(url);
+    const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
+    if (!response) return '';
+    const code = typeof response.getResponseCode === 'function' ? response.getResponseCode() : 0;
+    if (code >= 200 && code < 300) {
+      const blob = response.getBlob();
+      const dataUrl = toDataUrlFromBlob(blob);
+      if (dataUrl) {
+        return dataUrl;
+      }
+    }
+  } catch (fetchErr) {
+    Logger.log('buildExternalShareQrDataUrl_ fetch error: ' + fetchErr);
+  }
+
+  return '';
 }
 
 function buildExternalShareQrUrl_(shareUrl, size){
@@ -1289,8 +1321,10 @@ function buildExternalShareQrUrl_(shareUrl, size){
 
 function createExternalShare(memberId, options){
   try {
-    const id = String(memberId || '').trim();
-    if (!id) throw new Error('利用者IDが未指定です');
+    const normalizedId = normalizeMemberId_(memberId);
+    const rawId = String(memberId || '').trim();
+    const resolvedId = normalizedId || rawId;
+    if (!resolvedId) throw new Error('利用者IDが未指定です');
 
     const shareSheet = ensureShareSheet_();
     const config = options && typeof options === 'object' ? options : {};
@@ -1327,7 +1361,7 @@ function createExternalShare(memberId, options){
 
     shareSheet.appendRow([
       token,
-      id,
+      resolvedId,
       passwordHash,
       expiresAtIso,
       maskMode,
@@ -1345,9 +1379,13 @@ function createExternalShare(memberId, options){
     return {
       status:'success',
       token,
+      shareId: token,
+      memberId: resolvedId,
       url,
+      shareLink: url,
       qrUrl: qrDataUrl,
       qrDataUrl,
+      qrCode: qrDataUrl,
       audience,
       expiresAt: expiresAtIso,
       maskMode,
@@ -1386,8 +1424,10 @@ function getExternalShares(memberId){
       shares.push({
         token: share.token,
         url,
+        shareLink: url,
         qrUrl: qrDataUrl,
         qrDataUrl,
+        qrCode: qrDataUrl,
         createdAtText: formatShareDate_(share.createdAt),
         createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
         expiresAtText: formatShareDate_(share.expiresAt),
@@ -1457,8 +1497,10 @@ function getExternalShareMeta(token, recordId){
       remainingLabel: computeRemainingLabel_(share.expiresAt),
       rangeLabel: share.rangeLabel,
       url,
+      shareLink: url,
       qrUrl: qrDataUrl,
       qrDataUrl,
+      qrCode: qrDataUrl,
       audienceInfo
     };
     const recordIdSafe = String(recordId || '').trim();
@@ -1541,8 +1583,10 @@ function enterExternalShare(token, password, recordId){
       remainingLabel: computeRemainingLabel_(share.expiresAt),
       rangeLabel: share.rangeLabel,
       url,
+      shareLink: url,
       qrUrl: qrDataUrl,
       qrDataUrl,
+      qrCode: qrDataUrl,
       audienceInfo
     };
     summary.hasRecords = !!(payload.records && payload.records.length);
@@ -1590,7 +1634,11 @@ function parseShareRow_(row){
   const rangeSpec = normalizeShareRangeSpec_(row[11]);
   return {
     token: String(row[0] || '').trim(),
-    memberId: String(row[1] || '').trim(),
+    memberId: (() => {
+      const normalized = normalizeMemberId_(row[1]);
+      if (normalized) return normalized;
+      return String(row[1] || '').trim();
+    })(),
     passwordHash: String(row[2] || '').trim(),
     expiresAt: toDate(row[3]),
     maskMode: String(row[4] || 'simple').trim() || 'simple',
