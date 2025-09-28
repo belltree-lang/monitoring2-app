@@ -16,82 +16,118 @@ const ATTACHMENTS_FOLDER_ID_PROP= DEFAULT_FOLDER_ID;
 const DOC_TEMPLATE_ID_PROP        = PropertiesService.getScriptProperties().getProperty('DOC_TEMPLATE_ID') || '';
 const DOC_TEMPLATE_ID_FAMILY_PROP = PropertiesService.getScriptProperties().getProperty('DOC_TEMPLATE_ID_FAMILY') || '';
 
-/***** ── Webエントリ ───────────────────────────*****/
+/** パラメータの余計な " を除去するユーティリティ */
+function cleanParam_(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^"+|"+$/g, "");   // 先頭・末尾の " を削除
+}
+
+/** Webアプリのエントリーポイント */
 function doGet(e) {
-  const params = (e && e.parameter) || {};
-  const shareApi = String(params.shareApi || params.api || '').trim().toLowerCase();
-  if (shareApi === 'meta') {
-    const token = params.shareId || params.share || params.token || '';
-    const recordId = params.recordId || params.record || '';
-    const result = getExternalShareMeta(token, recordId);
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader('Access-Control-Allow-Origin','*');
-  }
-  const shareToken = params.shareId || params.share || params.token || '';
-  const recordIdParam = params.recordId || params.record || '';
-  const printParamRaw = params.print || params.mode;
-  const wantsPrint = shareToken && String(printParamRaw || '').trim() !== '' && String(printParamRaw || '').trim() !== '0';
-  const templateName = wantsPrint ? 'print' : (shareToken ? 'share' : 'member');
-  const tmpl = HtmlService.createTemplateFromFile(templateName);
-  if (shareToken) {
-    tmpl.shareToken = shareToken;
-    if (recordIdParam) {
-      tmpl.shareRecordId = recordIdParam;
-    }
-  }
-  let title = shareToken ? 'モニタリング共有ビュー' : 'ケアマネ・モニタリング';
-  if (wantsPrint && shareToken) {
-    const meta = getExternalShareMeta(shareToken, recordIdParam);
-    tmpl.shareMeta = meta;
-    let printMode = 'record';
-    let printRecords = [];
-    let primaryRecord = null;
-    let centerLabel = '';
-    let staffLabel = '';
-    let errorMessage = '';
-    const requestedMode = String(params.mode || '').trim().toLowerCase();
-    if (meta && meta.status === 'success' && meta.share) {
-      const share = meta.share;
-      const initialRecords = Array.isArray(meta.records) ? meta.records.slice() : [];
-      primaryRecord = meta.primaryRecord || (initialRecords.length ? initialRecords[0] : null);
-      printRecords = initialRecords;
-      if (requestedMode === 'center' && primaryRecord && primaryRecord.center) {
-        const centerRecords = getRecordsByCenter(primaryRecord.center);
-        const payload = buildExternalSharePayload_(share, { records: centerRecords, center: primaryRecord.center, recordId: primaryRecord.recordId });
-        printRecords = payload.records;
-        primaryRecord = payload.primaryRecord || primaryRecord;
-        centerLabel = primaryRecord.center || primaryRecord.fields && primaryRecord.fields.center || '';
-        printMode = 'center';
-      } else if (requestedMode === 'staff' && primaryRecord && primaryRecord.staff) {
-        const staffRecords = getRecordsByStaff(primaryRecord.staff);
-        const payload = buildExternalSharePayload_(share, { records: staffRecords, staff: primaryRecord.staff, recordId: primaryRecord.recordId });
-        printRecords = payload.records;
-        primaryRecord = payload.primaryRecord || primaryRecord;
-        staffLabel = primaryRecord.staff || primaryRecord.fields && primaryRecord.fields.staff || '';
-        printMode = 'staff';
-      } else {
-        const payload = buildExternalSharePayload_(share, { recordId: recordIdParam });
-        printRecords = payload.records;
-        primaryRecord = payload.primaryRecord || primaryRecord;
+  try {
+    Logger.log("🟢 doGet called at " + new Date());
+    Logger.log("raw event = " + JSON.stringify(e));
+
+    const params = e && e.parameter ? e.parameter : {};
+    Logger.log("params = " + JSON.stringify(params));
+
+    // --- JSON API モード（フロントから fetch された時用） ---
+    if (params.api === 'shareMeta') {
+      const tokenParam = cleanParam_(params.shareId || params.share || params.token || "");
+      const recordId   = cleanParam_(params.recordId || params.record || "");
+      if (!tokenParam) {
+        return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'shareId is missing' }))
+          .setMimeType(ContentService.MimeType.JSON);
       }
-    } else {
-      errorMessage = meta && meta.message ? String(meta.message) : '共有情報を取得できませんでした。';
+      const shareResult = getExternalShareMeta(tokenParam, recordId);
+      return ContentService.createTextOutput(JSON.stringify(shareResult))
+        .setMimeType(ContentService.MimeType.JSON);
     }
-    tmpl.printMode = printMode;
-    tmpl.printRecords = printRecords;
-    tmpl.printPrimaryRecord = primaryRecord;
-    tmpl.printCenter = centerLabel;
-    tmpl.printStaff = staffLabel;
-    tmpl.printErrorMessage = errorMessage;
-    tmpl.printRecordId = recordIdParam;
-    const tz = Session.getScriptTimeZone ? (Session.getScriptTimeZone() || 'Asia/Tokyo') : 'Asia/Tokyo';
-    tmpl.printedAtText = Utilities.formatDate(new Date(), tz, 'yyyy/MM/dd HH:mm');
-    title = 'モニタリング記録 印刷';
+
+    // --- 通常のHTML表示モード ---
+    const shareToken = cleanParam_(params.shareId || params.share || params.token || "");
+    const recordId   = cleanParam_(params.recordId || params.record || "");
+    const printParamRaw = params.print || params.mode;
+    const wantsPrint = shareToken && String(printParamRaw || "").trim() !== "" && String(printParamRaw || "").trim() !== "0";
+
+    Logger.log("shareToken=" + shareToken + ", recordId=" + recordId + ", wantsPrint=" + wantsPrint);
+
+    const templateName = wantsPrint ? "print" : (shareToken ? "share" : "member");
+    Logger.log("templateName = " + templateName);
+
+    const tmpl = HtmlService.createTemplateFromFile(templateName);
+
+    if (shareToken) {
+      tmpl.shareToken = shareToken;
+      if (recordId) tmpl.shareRecordId = recordId;
+    }
+
+    let title = shareToken ? "モニタリング共有ビュー" : "ケアマネ・モニタリング";
+
+    if (wantsPrint && shareToken) {
+      const meta = getExternalShareMeta(shareToken, recordId);
+      tmpl.shareMeta = meta;
+      let printMode = "record";
+      let printRecords = [];
+      let primaryRecord = null;
+      let centerLabel = "";
+      let staffLabel = "";
+      let errorMessage = "";
+      const requestedMode = String(params.mode || "").trim().toLowerCase();
+
+      if (meta && meta.status === "success" && meta.share) {
+        const share = meta.share;
+        const initialRecords = Array.isArray(meta.records) ? meta.records.slice() : [];
+        primaryRecord = meta.primaryRecord || (initialRecords.length ? initialRecords[0] : null);
+        printRecords = initialRecords;
+
+        if (requestedMode === "center" && primaryRecord && primaryRecord.center) {
+          const centerRecords = getRecordsByCenter(primaryRecord.center);
+          const payload = buildExternalSharePayload_(share, { records: centerRecords, center: primaryRecord.center, recordId });
+          printRecords = payload.records;
+          primaryRecord = payload.primaryRecord || primaryRecord;
+          centerLabel = primaryRecord.center || (primaryRecord.fields && primaryRecord.fields.center) || "";
+          printMode = "center";
+        } else if (requestedMode === "staff" && primaryRecord && primaryRecord.staff) {
+          const staffRecords = getRecordsByStaff(primaryRecord.staff);
+          const payload = buildExternalSharePayload_(share, { records: staffRecords, staff: primaryRecord.staff, recordId });
+          printRecords = payload.records;
+          primaryRecord = payload.primaryRecord || primaryRecord;
+          staffLabel = primaryRecord.staff || (primaryRecord.fields && primaryRecord.fields.staff) || "";
+          printMode = "staff";
+        } else {
+          const payload = buildExternalSharePayload_(share, { recordId });
+          printRecords = payload.records;
+          primaryRecord = payload.primaryRecord || primaryRecord;
+        }
+      } else {
+        errorMessage = meta && meta.message ? String(meta.message) : "共有情報を取得できませんでした。";
+      }
+
+      tmpl.printMode = printMode;
+      tmpl.printRecords = printRecords;
+      tmpl.printPrimaryRecord = primaryRecord;
+      tmpl.printCenter = centerLabel;
+      tmpl.printStaff = staffLabel;
+      tmpl.printErrorMessage = errorMessage;
+      tmpl.printRecordId = recordId;
+
+      const tz = Session.getScriptTimeZone ? (Session.getScriptTimeZone() || "Asia/Tokyo") : "Asia/Tokyo";
+      tmpl.printedAtText = Utilities.formatDate(new Date(), tz, "yyyy/MM/dd HH:mm");
+      title = "モニタリング記録 印刷";
+    }
+
+    Logger.log("✅ doGet finished, returning template: " + templateName);
+
+    return tmpl.evaluate()
+      .setTitle(title)
+      .addMetaTag("viewport", "width=device-width, initial-scale=1.0");
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  return tmpl.evaluate()
-    .setTitle(title)
-    .addMetaTag('viewport','width=device-width, initial-scale=1.0');
 }
 
 /** クライアントから参照するための Web アプリURL（/exec） */
@@ -116,81 +152,121 @@ function saveRecordFromBrowser(memberId, content, isoTimestamp, attachmentsJson,
   return { status: 'success' };
 }
 
-/***** ── バイナリアップロード受付（fetch(FormData) → doPost）※未使用でも残置 ──*****/
+/***** ── 汎用 doPost（外部共有 API 用分岐を追加） ──*****/
 function doPost(e) {
   try {
-    var action = (e.parameter && e.parameter.action) || '';
+    // 1) 生パラメータ／JSON ボディの解釈
+    var params = e && e.parameter ? e.parameter : {};
+    var action = params.action || params.shareApi || '';
     var jsonPayload = null;
+
+    // try parse JSON body if present
     if (!action && e && e.postData && e.postData.contents) {
       var postType = (e.postData && e.postData.type) || '';
-      if (postType === 'application/json') {
+      if (postType.indexOf('application/json') === 0) {
         try {
           jsonPayload = JSON.parse(e.postData.contents);
-          if (jsonPayload && jsonPayload.action) {
-            action = jsonPayload.action;
-          }
-        } catch(_err) {
+          action = action || jsonPayload.action || jsonPayload.shareApi || '';
+        } catch (_err) {
           jsonPayload = null;
         }
       }
     }
+
+    action = String(action || '').trim();
+
+    // normalize a few common aliases
+    if (action === 'enter' ) action = 'shareEnter';
+    if (action === 'meta') action = 'shareMeta';
+
+    // 2) 外部共有：閲覧（enter）
     if (action === 'shareEnter') {
-      var tokenParam = (e.parameter && (e.parameter.shareId || e.parameter.share || e.parameter.token)) || '';
+      var tokenParam = (params && (params.shareId || params.share || params.token)) || '';
       if (!tokenParam && jsonPayload) {
         tokenParam = jsonPayload.shareId || jsonPayload.share || jsonPayload.token || '';
       }
-      var passwordParam = (e.parameter && e.parameter.password) || '';
+      var passwordParam = (params && params.password) || '';
       if (!passwordParam && jsonPayload) {
         passwordParam = jsonPayload.password || '';
       }
-      var recordIdParam = (e.parameter && (e.parameter.recordId || e.parameter.record)) || '';
+      var recordIdParam = (params && (params.recordId || params.record)) || '';
       if (!recordIdParam && jsonPayload) {
         recordIdParam = jsonPayload.recordId || jsonPayload.record || '';
       }
       var shareResult = enterExternalShare(tokenParam, passwordParam, recordIdParam);
       return ContentService.createTextOutput(JSON.stringify(shareResult))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeader('Access-Control-Allow-Origin','*');
+        .setMimeType(ContentService.MimeType.JSON);
     }
-    if (action !== 'upload') {
-      return ContentService.createTextOutput(JSON.stringify({ status:'error', message:'unknown action' }))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeader('Access-Control-Allow-Origin','*');
+
+    // 3) 外部共有：メタ取得（POST 経由で来た場合のサポート）
+    if (action === 'shareMeta') {
+      var tokenParam2 = (params && (params.shareId || params.share || params.token)) || '';
+      if (!tokenParam2 && jsonPayload) {
+        tokenParam2 = jsonPayload.shareId || jsonPayload.share || jsonPayload.token || '';
+      }
+      var recordIdParam2 = (params && (params.recordId || params.record)) || '';
+      if (!recordIdParam2 && jsonPayload) {
+        recordIdParam2 = jsonPayload.recordId || jsonPayload.record || '';
+      }
+      var metaResult = getExternalShareMeta(tokenParam2, recordIdParam2);
+      return ContentService.createTextOutput(JSON.stringify(metaResult))
+        .setMimeType(ContentService.MimeType.JSON);
     }
-    var memberId = (e.parameter && e.parameter.memberId) || '';
-    var name     = (e.parameter && e.parameter.name) || 'upload';
-    if (!memberId) throw new Error('memberId is required');
 
-    var up = e && e.files && (e.files.file || e.files['file']);
-    if (!up) throw new Error('no file found (e.files.file is empty)');
-    if (Array.isArray(up)) up = up[0];
+    // 4) 既存のバイナリアップロード処理（action === 'upload' を期待）
+    if (action === 'upload') {
+      var memberId = (params && params.memberId) || '';
+      var name = (params && params.name) || 'upload';
+      if (!memberId) throw new Error('memberId is required');
 
-    var blob = up;
-    if (name) blob.setName(name);
+      var up = e && e.files && (e.files.file || e.files['file']);
+      if (!up) throw new Error('no file found (e.files.file is empty)');
+      if (Array.isArray(up)) up = up[0];
 
-    var root = DriveApp.getFolderById(ATTACHMENTS_FOLDER_ID_PROP || DEFAULT_FOLDER_ID);
-    var folder = getOrCreateChildFolder_(root, String(memberId).trim());
-    var file = folder.createFile(blob);
-    if (name) file.setName(name);
+      var blob = up;
+      if (name) blob.setName(name);
 
-    var fileId = file.getId();
-    var url = 'https://drive.google.com/file/d/' + fileId + '/view';
+      var root = DriveApp.getFolderById(ATTACHMENTS_FOLDER_ID_PROP || DEFAULT_FOLDER_ID);
+      var folder = getOrCreateChildFolder_(root, String(memberId).trim());
+      var file = folder.createFile(blob);
+      if (name) file.setName(name);
 
-    try { ensureSharingForMember_(file, memberId); } catch(_e){}
+      var fileId = file.getId();
+      var url = 'https://drive.google.com/file/d/' + fileId + '/view';
 
-    var out = { status:'success', fileId:fileId, url:url, name:file.getName(), mimeType:file.getMimeType(), uploadedAt: new Date().toISOString() };
-    return ContentService.createTextOutput(JSON.stringify(out))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader('Access-Control-Allow-Origin','*');
+      try { ensureSharingForMember_(file, memberId); } catch (_e) {}
+
+      var out = { status: 'success', fileId: fileId, url: url, name: file.getName(), mimeType: file.getMimeType(), uploadedAt: new Date().toISOString() };
+      return ContentService.createTextOutput(JSON.stringify(out))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 5) unknown action
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'unknown action' }))
+      .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
-    var outErr = { status:'error', message: String(err && err.message || err) };
+    var outErr = { status: 'error', message: String(err && err.message || err) };
     return ContentService.createTextOutput(JSON.stringify(outErr))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeader('Access-Control-Allow-Origin','*');
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
+// 地域包括支援センター・担当者名を保存
+function saveCenterInfo(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName("ほのぼのID"); // 保存先タブ
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues(); 
+  // A=ほのぼのID, B=氏名, C=フリガナ, D=地域包括支援センター/担当者
 
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][0]) === String(data.memberId)) {
+      // D列に地域包括支援センター + 担当者名を保存
+      sheet.getRange(i + 2, 4).setValue(data.center + "／" + data.staff);
+      return { ok: true };
+    }
+  }
+  return { ok: false, message: "ID not found" };
+}
 /***** ── Base64アップロード（フロントから呼ばれる） ─────────────────*****/
 function uploadAttachment_(memberId, fileName, mimeType, base64) {
   const where = [];
@@ -245,7 +321,7 @@ function getRecordsByMemberId_v3(memberId, days) {
   }
 }
 
-function fetchRecordsWithIndex_(memberId, days) {
+function fetchRecordsWithIndex_(memberId, days) { 
   if (!memberId) throw new Error('memberIdが未指定です');
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -273,10 +349,24 @@ function fetchRecordsWithIndex_(memberId, days) {
   for (let i = 1; i < vals.length; i++) {
     const row = vals[i];
     const id  = String(row[indexes.memberId] || '').trim();
-    if (id !== targetId) continue;
+    const dateVal = row[indexes.date];
+
+    // 🔎 デバッグ: 各行を確認
+    Logger.log("行%d: ID=%s, targetId=%s, date=%s", i+1, id, targetId, dateVal);
+
+    if (id !== targetId) {
+      Logger.log("  → memberId不一致でスキップ");
+      continue;
+    }
 
     const record = buildRecordFromRow_(row, header, indexes, tz, i);
-    if (limitDate && record.timestamp !== null && record.timestamp < limitDate.getTime()) continue;
+
+    if (limitDate && record.timestamp !== null && record.timestamp < limitDate.getTime()) {
+      Logger.log("  → 日付制限によりスキップ: ts=%s, limit=%s", record.timestamp, limitDate);
+      continue;
+    }
+
+    Logger.log("  → 採用: %s", JSON.stringify(record));
     out.push(record);
   }
 
@@ -286,8 +376,15 @@ function fetchRecordsWithIndex_(memberId, days) {
     if (tb !== ta) return tb - ta;
     return (b.rowIndex || 0) - (a.rowIndex || 0);
   });
+
+  Logger.log("✅ fetchRecordsWithIndex_: memberId=%s, days=%s, found=%s", targetId, days, out.length);
+
   return out;
 }
+
+
+
+
 
 function resolveRecordColumnIndexes_(header){
   const trimmed = header.map(v => String(v || '').trim());
@@ -1210,93 +1307,6 @@ function updateMemberName(id, newName){
   return { status:'error', message:'IDが見つかりません: '+id };
 }
 
-/** ほのぼのIDシートからセンター・担当者情報を取得 */
-function getMemberCenterInfo(memberId) {
-  try {
-    const normalizedId = normalizeMemberId_(memberId);
-    if (!normalizedId) {
-      return { status: 'error', message: '利用者IDが未指定です' };
-    }
-
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sh = ss.getSheetByName('ほのぼのID');
-    if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
-
-    const values = sh.getDataRange().getValues();
-    if (!values || values.length <= 1) {
-      return { status: 'not_found', ok: false, memberId: normalizedId, center: '', staff: '' };
-    }
-
-    for (let i = 1; i < values.length; i++) {
-      const row = values[i];
-      const rawId = row && row.length ? row[0] : '';
-      const rowId = normalizeMemberId_(rawId);
-      if (!rowId || rowId !== normalizedId) continue;
-      const center = row.length >= 4 ? String(row[3] || '').trim() : '';
-      const staff = row.length >= 5 ? String(row[4] || '').trim() : '';
-      return {
-        status: 'success',
-        ok: true,
-        memberId: normalizedId,
-        center,
-        staff
-      };
-    }
-
-    return { status: 'not_found', ok: false, memberId: normalizedId, center: '', staff: '' };
-  } catch (e) {
-    return { status: 'error', message: String(e && e.message || e) };
-  }
-}
-
-/** ほのぼのIDシートにセンター・担当者情報を保存 */
-function saveMemberCenterInfo(memberId, center, staff) {
-  try {
-    const normalizedId = normalizeMemberId_(memberId);
-    if (!normalizedId) {
-      throw new Error('利用者IDが未指定です');
-    }
-
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sh = ss.getSheetByName('ほのぼのID');
-    if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
-
-    const values = sh.getDataRange().getValues();
-    if (!values || values.length <= 1) {
-      throw new Error('対象の利用者が見つかりません');
-    }
-
-    let targetRow = -1;
-    for (let i = 1; i < values.length; i++) {
-      const rowId = normalizeMemberId_(values[i] && values[i].length ? values[i][0] : '');
-      if (rowId && rowId === normalizedId) {
-        targetRow = i + 1;
-        break;
-      }
-    }
-
-    if (targetRow < 0) {
-      throw new Error('対象の利用者が見つかりません');
-    }
-
-    const centerValue = String(center == null ? '' : center).trim();
-    const staffValue = String(staff == null ? '' : staff).trim();
-
-    sh.getRange(targetRow, 4).setValue(centerValue); // D列（センター）
-    sh.getRange(targetRow, 5).setValue(staffValue); // E列（担当者）
-
-    return {
-      status: 'success',
-      ok: true,
-      memberId: normalizedId,
-      center: centerValue,
-      staff: staffValue
-    };
-  } catch (e) {
-    return { status: 'error', message: String(e && e.message || e) };
-  }
-}
-
 /***** ── 外部共有リンク ─────────────────*****/
 function getExecUrlSafe_(){
   try {
@@ -1343,70 +1353,32 @@ function parseQrDimensions_(value){
   return { width: defaultWidth, height: defaultHeight };
 }
 
-function buildExternalShareQrDataUrl_(shareUrl, size){
-  const url = String(shareUrl || '').trim();
-  if (!url) return '';
-  const dims = parseQrDimensions_(size || SHARE_QR_SIZE);
-  const toDataUrlFromBlob = (blob) => {
-    if (!blob) return '';
-    try {
-      const bytes = blob.getBytes();
-      if (!bytes || !bytes.length) return '';
-      const mimeType = blob.getContentType && blob.getContentType() ? blob.getContentType() : 'image/png';
-      const base64 = Utilities.base64Encode(bytes);
-      return `data:${mimeType};base64,${base64}`;
-    } catch (err) {
-      Logger.log('buildExternalShareQrDataUrl_ blob error: ' + err);
-      return '';
-    }
-  };
-
+function buildExternalShareQrDataUrl_(url) {
   try {
-    if (typeof Charts !== 'undefined' && Charts.newQrCodeChart) {
-      const chartBuilder = Charts.newQrCodeChart()
-        .setDataUrl(url)
-        .setDimensions(dims.width, dims.height);
-      const chart = chartBuilder.build();
-      if (chart) {
-        const blob = chart.getAs ? chart.getAs('image/png') : chart.getBlob();
-        const dataUrl = toDataUrlFromBlob(blob);
-        if (dataUrl) {
-          return dataUrl;
-        }
-      }
-    }
-  } catch (chartErr) {
-    Logger.log('buildExternalShareQrDataUrl_ chart error: ' + chartErr);
+    if (!url) return '';
+    // Chart API の URL をそのまま返す
+    const encoded = encodeURIComponent(url);
+    return `https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encoded}`;
+  } catch (e) {
+    Logger.log("buildExternalShareQrDataUrl_ error: " + e);
+    return '';
   }
-
-  try {
-    const chs = `${dims.width}x${dims.height}`;
-    const apiUrl = 'https://chart.googleapis.com/chart?cht=qr&chld=L|0&choe=UTF-8&chs='
-      + encodeURIComponent(chs)
-      + '&chl='
-      + encodeURIComponent(url);
-    const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
-    if (!response) return '';
-    const code = typeof response.getResponseCode === 'function' ? response.getResponseCode() : 0;
-    if (code >= 200 && code < 300) {
-      const blob = response.getBlob();
-      const dataUrl = toDataUrlFromBlob(blob);
-      if (dataUrl) {
-        return dataUrl;
-      }
-    }
-  } catch (fetchErr) {
-    Logger.log('buildExternalShareQrDataUrl_ fetch error: ' + fetchErr);
-  }
-
-  return '';
 }
 
+
+/** 呼び出し側の後方互換 */
 function buildExternalShareQrUrl_(shareUrl, size){
   return buildExternalShareQrDataUrl_(shareUrl, size);
 }
-
+/** tokenを確実に保存し、列順固定でappend */
 function createExternalShare(memberId, options){
+  Logger.log("🟢 createExternalShare called with", memberId, JSON.stringify(options));
+  Logger.log("🔎 createExternalShare called");
+  Logger.log("memberId = " + memberId);
+  Logger.log("options = " + JSON.stringify(options)); // ここは options を出す
+  const baseUrl = getExecUrlSafe_();
+  Logger.log("🟩 createExternalShare: serviceUrl=%s memberId=%s", baseUrl, memberId);
+
   try {
     const normalizedId = normalizeMemberId_(memberId);
     const rawId = String(memberId || '').trim();
@@ -1415,6 +1387,7 @@ function createExternalShare(memberId, options){
 
     const shareSheet = ensureShareSheet_();
     const config = options && typeof options === 'object' ? options : {};
+    Logger.log("config = " + JSON.stringify(config)); // ← 定義後にログ出す
 
     const audienceRaw = String(config.audience || '').trim().toLowerCase();
     const audience = ['family','center','medical','service'].includes(audienceRaw)
@@ -1423,18 +1396,21 @@ function createExternalShare(memberId, options){
 
     const maskMode = (config.maskMode === 'none') ? 'none' : 'simple';
     const passwordHash = hashSharePassword_(config.password);
+
     const allowedRaw = Array.isArray(config.allowedAttachmentIds) ? config.allowedAttachmentIds : [];
     const allowAll = allowedRaw.includes('__ALL__');
-    const allowedAttachmentIds = allowAll ? ['__ALL__'] : Array.from(new Set(allowedRaw.filter(v => v && v !== '__ALL__').map(String)));
+    const allowedAttachmentIds = allowAll
+      ? ['__ALL__']
+      : Array.from(new Set(allowedRaw.filter(v => v && v !== '__ALL__').map(String)));
+
     const rangeSpec = normalizeShareRangeSpec_(config.range || config.rangeSpec || config.recordRange);
     const rangeLabel = formatShareRangeLabel_(rangeSpec);
 
+    // 期限
     let expiresAtIso = '';
     if (config.expiresAt) {
       const expires = new Date(config.expiresAt);
-      if (!isNaN(expires.getTime())) {
-        expiresAtIso = expires.toISOString();
-      }
+      if (!isNaN(expires.getTime())) expiresAtIso = expires.toISOString();
     } else if (config.expiresInDays) {
       const days = Number(config.expiresInDays);
       if (!isNaN(days) && days > 0) {
@@ -1446,23 +1422,25 @@ function createExternalShare(memberId, options){
     const token = Utilities.getUuid().replace(/-/g, '');
     const nowIso = new Date().toISOString();
 
+    // 列順に合わせて書き込む
     shareSheet.appendRow([
-      token,
-      resolvedId,
-      passwordHash,
-      expiresAtIso,
-      maskMode,
-      JSON.stringify(allowedAttachmentIds),
-      nowIso,
-      '',
-      '',
-      audience,
-      0,
-      rangeSpec
+      token,                         // Token
+      resolvedId,                    // MemberID
+      passwordHash,                  // PasswordHash
+      expiresAtIso,                  // ExpiresAt
+      maskMode,                      // MaskMode
+      JSON.stringify(allowedAttachmentIds), // AllowedAttachments
+      nowIso,                        // CreatedAt
+      '',                            // RevokedAt
+      '',                            // LastAccessAt
+      audience,                      // Audience
+      0,                             // AccessCount
+      rangeSpec                      // RangeSpec
     ]);
 
     const url = buildExternalShareUrl_(token);
     const qrDataUrl = buildExternalShareQrDataUrl_(url);
+
     return {
       status:'success',
       token,
@@ -1486,6 +1464,7 @@ function createExternalShare(memberId, options){
 }
 
 function getExternalShares(memberId){
+  Logger.log("🟢 getExternalShares called with memberId=" + memberId);
   try {
     const id = String(memberId || '').trim();
     if (!id) throw new Error('利用者IDが未指定です');
@@ -1552,7 +1531,8 @@ function revokeExternalShare(token){
   }
 }
 
-function getExternalShareMeta(token, recordId){
+function getExternalShareMeta(token, recordId) {
+  Logger.log("🟦 getExternalShareMeta: token=%s recordId=%s", token, recordId);
   try {
     const info = findShareRowByToken_(token);
     if (!info) throw new Error('無効な共有リンクです');
@@ -1568,6 +1548,7 @@ function getExternalShareMeta(token, recordId){
     const audienceInfo = getShareAudienceInfo_(share.audience);
     const profile = lookupMemberProfile_(share.memberId);
     if (!profile.found) throw new Error('利用者情報が見つかりません');
+
     const summary = {
       token: share.token,
       memberId: profile.id || share.memberId,
@@ -1590,16 +1571,32 @@ function getExternalShareMeta(token, recordId){
       qrCode: qrDataUrl,
       audienceInfo
     };
+
     const recordIdSafe = String(recordId || '').trim();
-    const includeRecords = !summary.requirePassword;
+
+    // パスワード不要なら即payload同梱
     let payload = { records: [], primaryRecord: null };
-    if (includeRecords) {
-      payload = buildExternalSharePayload_(share, { recordId: recordIdSafe });
-      if (recordIdSafe && (!payload.records || !payload.records.length)) {
-        throw new Error('対象の記録が見つかりません。');
-      }
+    if (!summary.requirePassword) {
       try {
-        sheet.getRange(rowIndex, 9).setValue(new Date());
+        const days = shareRangeToFetchArg_(share.rangeSpec);   // 30/90/all を解釈
+        const records = fetchRecordsWithIndex_(share.memberId, days);
+        payload = { records, primaryRecord: records[0] || null };
+      } catch (pErr) {
+        Logger.log('getExternalShareMeta payload error: ' + pErr);
+        payload = { records: [], primaryRecord: null };
+      }
+
+      // 🔎 デバッグ用ログ
+      Logger.log('📊 payload.records count = ' + (payload.records ? payload.records.length : 0));
+      if (payload.records && payload.records.length) {
+        try {
+          Logger.log('📊 first record sample = ' + JSON.stringify(payload.records[0]));
+        } catch (_e) {}
+      }
+
+      // アクセスログ更新
+      try {
+        sheet.getRange(rowIndex, 9).setValue(new Date()); // LastAccessAt
         const nextCount = (share.accessCount || 0) + 1;
         sheet.getRange(rowIndex, 11).setValue(nextCount);
         logExternalShareAccess_(share);
@@ -1607,14 +1604,17 @@ function getExternalShareMeta(token, recordId){
         Logger.log('getExternalShareMeta log error: ' + logErr);
       }
     }
-    summary.hasRecords = !!(payload.records && payload.records.length);
-    const response = { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
-    if (!summary.hasRecords) {
-      response.message = '記録が存在しません';
-    }
-    return response;
+
+    // 最終レスポンス
+    return {
+      status: 'success',
+      share: summary,
+      records: payload.records,
+      primaryRecord: payload.primaryRecord
+    };
+
   } catch (e) {
-    return { status:'error', message:String(e && e.message || e) };
+    return { status: 'error', message: String(e && e.message || e) };
   }
 }
 
@@ -1625,11 +1625,13 @@ function enterExternalShare(token, password, recordId){
     const { sheet, rowIndex, share } = info;
     if (share.revokedAt) throw new Error('共有リンクは停止されています');
 
+    // 期限判定
     const now = Date.now();
     if (share.expiresAt && share.expiresAt.getTime() < now) {
       return { status:'error', message:'この共有リンクは期限切れです。' };
     }
 
+    // パスワード判定
     if (share.passwordHash) {
       const hash = hashSharePassword_(password);
       if (!hash || hash !== share.passwordHash) {
@@ -1638,15 +1640,31 @@ function enterExternalShare(token, password, recordId){
     }
 
     const recordIdSafe = String(recordId || '').trim();
-    const payload = buildExternalSharePayload_(share, { recordId: recordIdSafe });
-    if (recordIdSafe && (!payload.records || !payload.records.length)) {
+    let payload = { records: [], primaryRecord: null };
+    try {
+      payload = buildExternalSharePayload_(share, { recordId: recordIdSafe }) || { records: [], primaryRecord: null };
+    } catch (pErr) {
+      Logger.log('enterExternalShare payload error: ' + pErr);
+    }
+
+    // 🔎 デバッグ出力
+    Logger.log('📊 enter payload.records count = ' + (payload.records ? payload.records.length : 0));
+    if (payload.records && payload.records.length && !payload.primaryRecord) {
+      payload.primaryRecord = payload.records[0];
+    }
+
+    // recordId が指定されているのに 0 件ならエラー
+    if (recordIdSafe && recordIdSafe.length > 0 && (!payload.records || !payload.records.length)) {
       return { status:'error', message:'対象の記録が見つかりません。' };
     }
+
+    // アクセスログ
     sheet.getRange(rowIndex, 9).setValue(new Date()); // LastAccessAt
     const nextCount = (share.accessCount || 0) + 1;
     sheet.getRange(rowIndex, 11).setValue(nextCount);
     logExternalShareAccess_(share);
 
+    // サマリー（パス後の確定版）
     const allowAll = share.allowedAttachmentIds.includes('__ALL__');
     const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
     const url = buildExternalShareUrl_(share.token);
@@ -1654,6 +1672,7 @@ function enterExternalShare(token, password, recordId){
     const audienceInfo = getShareAudienceInfo_(share.audience);
     const profile = lookupMemberProfile_(share.memberId);
     if (!profile.found) throw new Error('利用者情報が見つかりません');
+
     const summary = {
       token: share.token,
       memberId: profile.id || share.memberId,
@@ -1677,32 +1696,67 @@ function enterExternalShare(token, password, recordId){
       audienceInfo
     };
     summary.hasRecords = !!(payload.records && payload.records.length);
-    const response = { status:'success', share: summary, records: payload.records, primaryRecord: payload.primaryRecord };
+
+    const response = {
+      status:'success',
+      share: summary,
+      records: payload.records,
+      primaryRecord: payload.primaryRecord
+    };
     if (!summary.hasRecords) {
       response.message = '記録が存在しません';
     }
-
     return response;
+
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
   }
 }
 
+
+/** 外部共有シートを必ずヘッダー揃えて用意する */
 function ensureShareSheet_(){
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  Logger.log("📄 ensureShareSheet_: spreadsheetId=%s", ss.getId());
+
   let sheet = ss.getSheetByName(SHARE_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHARE_SHEET_NAME);
+    Logger.log("📄 ensureShareSheet_: sheet created = %s", sheet.getName());
+  } else {
+    Logger.log("📄 ensureShareSheet_: sheet exists = %s", sheet.getName());
   }
-  const header = ['Token','MemberID','PasswordHash','ExpiresAt','MaskMode','AllowedAttachments','CreatedAt','RevokedAt','LastAccessAt','Audience','AccessCount','RangeSpec'];
+
+  const header = [
+    'Token',           // A1
+    'MemberID',        // B1
+    'PasswordHash',    // C1
+    'ExpiresAt',       // D1 (ISO or Date)
+    'MaskMode',        // E1 ('simple' | 'none')
+    'AllowedAttachments', // F1 (JSON array or ['__ALL__'])
+    'CreatedAt',       // G1 (Date)
+    'RevokedAt',       // H1 (Date or blank)
+    'LastAccessAt',    // I1 (Date)
+    'Audience',        // J1 ('family'|'center'|'medical'|'service')
+    'AccessCount',     // K1 (number)
+    'RangeSpec'        // L1 ('all'|'90'|'30'|number)
+  ];
+
+  // 列数保証
   if (sheet.getMaxColumns() < header.length) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
+    sheet.insertColumnsAfter(
+      sheet.getMaxColumns(),
+      header.length - sheet.getMaxColumns()
+    );
   }
-  const range = sheet.getRange(1, 1, 1, header.length);
-  range.setValues([header]);
+
+  // 1行目にヘッダーを常にセット
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
+
   return sheet;
 }
 
+/** ExternalSharesの1行を安全にパース */
 function parseShareRow_(row){
   const safeJson = (value) => {
     try { return JSON.parse(value); } catch(_e){ return []; }
@@ -1719,12 +1773,12 @@ function parseShareRow_(row){
   const audienceRaw = String(row[9] || '').trim().toLowerCase();
   const audience = ['family','center','medical','service'].includes(audienceRaw) ? audienceRaw : 'family';
   const rangeSpec = normalizeShareRangeSpec_(row[11]);
+
   return {
     token: String(row[0] || '').trim(),
     memberId: (() => {
       const normalized = normalizeMemberId_(row[1]);
-      if (normalized) return normalized;
-      return String(row[1] || '').trim();
+      return normalized || String(row[1] || '').trim();
     })(),
     passwordHash: String(row[2] || '').trim(),
     expiresAt: toDate(row[3]),
@@ -1740,19 +1794,34 @@ function parseShareRow_(row){
   };
 }
 
+function normalizeToken_(tok){
+  return String(tok || "")
+    .trim()
+    .replace(/\s+/g, "")       // 改行やスペースを全部削除
+    .toLowerCase();            // 念のため小文字化
+}
+
 function findShareRowByToken_(token){
-  const tok = String(token || '').trim();
+  const tok = cleanParam_(token);   // ← ここでクリーンアップ
   if (!tok) return null;
+
   const sheet = ensureShareSheet_();
   const values = sheet.getDataRange().getValues();
+  Logger.log("findShareRowByToken_: total rows=" + values.length);
+
   for (let i = 1; i < values.length; i++) {
     const share = parseShareRow_(values[i]);
+    Logger.log(`🔍 compare row ${i+1}: sheet="${share.token}" vs request="${tok}"`);
     if (share.token === tok) {
+      Logger.log(`✅ MATCH at row ${i+1}`);
       return { sheet, rowIndex: i + 1, share };
     }
   }
+  Logger.log(`❌ no match after ${values.length-1} rows`);
   return null;
 }
+
+
 
 function buildExternalSharePayload_(share, options){
   const opts = options || {};
@@ -1760,32 +1829,49 @@ function buildExternalSharePayload_(share, options){
   const allowAll = share.allowedAttachmentIds.includes('__ALL__');
   const allowedSet = new Set(allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__'));
   const audience = share.audience || 'family';
+
+  // レコード取得
   const recordsSource = Array.isArray(opts.records) && opts.records.length
     ? opts.records.slice()
     : fetchRecordsWithIndex_(share.memberId, rangeArg);
+
+  // デバッグ用ログ
+  if (recordsSource && recordsSource.length) {
+    try {
+      Logger.log("🔎 recordsSource sample = " + JSON.stringify(recordsSource[0]));
+    } catch(_e){}
+  }
+
   const recordIdFilter = String(opts.recordId || '').trim();
   const centerFilter = String(opts.center || '').trim();
   const staffFilter = String(opts.staff || '').trim();
 
   let filtered = recordsSource;
+
+  // center 指定フィルタ
   if (centerFilter) {
     filtered = filtered.filter(rec => String(rec.center || '').trim().toLowerCase() === centerFilter.toLowerCase());
   }
+  // staff 指定フィルタ
   if (staffFilter) {
     filtered = filtered.filter(rec => String(rec.staff || '').trim().toLowerCase() === staffFilter.toLowerCase());
   }
-  if (recordIdFilter) {
+  // recordId 指定フィルタ（空や "0" "undefined" は無視）
+  if (recordIdFilter && recordIdFilter !== "0" && recordIdFilter.toLowerCase() !== "undefined") {
     const matched = filtered.filter(rec => String(rec.recordId || rec.rowIndex || '').trim() === recordIdFilter);
     filtered = matched.length ? matched : [];
   }
 
   const results = [];
   let primaryRecord = null;
+
   filtered.forEach(rec => {
     const attachments = filterAttachmentsForShare_(rec.attachments, { allowAll, allowedSet });
     const maskedText = maskTextForExternal_(rec.text || '', share.maskMode);
     const timestamp = (typeof rec.timestamp === 'number') ? rec.timestamp : null;
     const fields = rec.fields ? Object.assign({}, rec.fields) : {};
+
+    // マスク処理を fields に反映
     if ('記録内容' in fields) {
       fields['記録内容'] = maskedText;
     }
@@ -1793,7 +1879,10 @@ function buildExternalSharePayload_(share, options){
       fields.text = maskedText;
     }
     if ('添付' in fields) {
-      fields['添付'] = attachments.map(att => att && att.name ? att.name : (att && att.url ? att.url : '')).filter(Boolean).join('\n');
+      fields['添付'] = attachments
+        .map(att => att && att.name ? att.name : (att && att.url ? att.url : ''))
+        .filter(Boolean)
+        .join('\n');
     }
     if (!('center' in fields) && rec.center) {
       fields.center = rec.center;
@@ -1801,6 +1890,7 @@ function buildExternalSharePayload_(share, options){
     if (!('staff' in fields) && rec.staff) {
       fields.staff = rec.staff;
     }
+
     const item = {
       recordId: rec.recordId || String(rec.rowIndex || ''),
       rowIndex: rec.rowIndex,
@@ -1818,7 +1908,9 @@ function buildExternalSharePayload_(share, options){
       special: rec.special || fields.special || '',
       fields
     };
+
     results.push(item);
+
     const isPrimary = recordIdFilter
       ? String(item.recordId || '').trim() === recordIdFilter
       : !primaryRecord;
@@ -1827,27 +1919,28 @@ function buildExternalSharePayload_(share, options){
     }
   });
 
+  // text か 添付が無いレコードは削除。ただし recordId 指定がある場合は例外
   const filteredResults = results.filter(rec => {
     if (recordIdFilter && String(rec.recordId || '').trim() === recordIdFilter) {
       return true;
     }
     return rec.text || (rec.attachments && rec.attachments.length);
   });
+
   if (!primaryRecord && filteredResults.length) {
     primaryRecord = filteredResults[0];
   }
+
   return { records: filteredResults, primaryRecord };
 }
 
+
+
+/** アクセスログ（追加シートに追記） */
 function logExternalShareAccess_(share){
   try {
     const sheet = ensureShareLogSheet_();
-    sheet.appendRow([
-      new Date(),
-      share.token,
-      share.memberId,
-      share.audience || 'family'
-    ]);
+    sheet.appendRow([ new Date(), share.token, share.memberId, share.audience || 'family' ]);
   } catch (e) {
     Logger.log('logExternalShareAccess_ error: ' + e);
   }
@@ -1856,15 +1949,12 @@ function logExternalShareAccess_(share){
 function ensureShareLogSheet_(){
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHARE_LOG_SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHARE_LOG_SHEET_NAME);
-  }
+  if (!sheet) sheet = ss.insertSheet(SHARE_LOG_SHEET_NAME);
   const header = ['AccessedAt','Token','MemberID','Audience'];
   if (sheet.getMaxColumns() < header.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
   }
-  const range = sheet.getRange(1, 1, 1, header.length);
-  range.setValues([header]);
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
   return sheet;
 }
 
@@ -2032,7 +2122,107 @@ function getShareAudienceInfo_(audience){
   return map[key] || map.family;
 }
 
-function helloWorld() {
-  Logger.log("Hello from VS Code!");
+/** 既存UI互換：本文だけ差し替える簡易更新 */
+function updateRecord(rowIndex, newText){
+  try {
+    const payload = { rowIndex: Number(rowIndex), record: String(newText || '') };
+    // 既存の updateMonitoringRecord は center/staff/status/special を想定しているので
+    // 本文だけは Monitoring シートの「記録内容」列を書き換える軽量版を用意
+    return updateMonitoringRecordBodyOnly_(payload);
+  } catch (e) {
+    throw new Error('更新に失敗しました: ' + (e && e.message ? e.message : e));
+  }
 }
-// dummy change for Claude test
+
+/** 既存UI互換：行番号のみで削除 */
+function deleteRecord(rowIndex){
+  try {
+    return deleteMonitoringRecord({ rowIndex: Number(rowIndex) });
+  } catch (e) {
+    throw new Error('削除に失敗しました: ' + (e && e.message ? e.message : e));
+  }
+}
+
+/** 本文（記録内容）だけを書き換える内部用：Monitoring シートの列検出を使う */
+function updateMonitoringRecordBodyOnly_(data){
+  const payload = data && typeof data === 'object' ? data : {};
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+  const values = sheet.getDataRange().getValues();
+  if (!values || values.length <= 1) throw new Error('記録が存在しません');
+
+  const header = values[0].map(v => String(v || '').trim());
+  const indexes = resolveRecordColumnIndexes_(header);
+  const rowIndex = Number(payload.rowIndex || 0);
+  if (!rowIndex || rowIndex < 2) throw new Error('対象の記録が見つかりません');
+
+  const bodyCol = indexes.record >= 0 ? (indexes.record + 1) : 0;
+  if (!bodyCol) throw new Error('「記録内容」列が見つかりません');
+
+  sheet.getRange(rowIndex, bodyCol).setValue(String(payload.record || ''));
+  return { status:'success', rowIndex };
+}
+/** 指定した memberId でレコードが取れるか確認 */
+function test_fetchRecords() {
+  const memberId = "5745";   // ← 問題のIDに差し替え
+  const recs = fetchRecordsWithIndex_(memberId, 30); // 直近30日
+  Logger.log("✅ fetchRecords length = " + recs.length);
+  if (recs.length) {
+    Logger.log("📄 first record = " + JSON.stringify(recs[0], null, 2));
+  }
+}
+
+/** 取得・保存・削除 */
+function getMemberCenterInfo(memberIdRaw) {
+  const row = findMemberRowById_(memberIdRaw);
+  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + normalizeMemberId_(memberIdRaw) };
+  const sh = ensureMemberCenterHeaders_();
+  return {
+    ok: true,
+    id: normalizeMemberId_(memberIdRaw),
+    center: String(sh.getRange(row, 4).getValue() || ''), // D
+    staff:  String(sh.getRange(row, 5).getValue() || '')  // E
+  };
+}
+
+function saveMemberCenterInfo(memberIdRaw, center, staff) {
+  const row = findMemberRowById_(memberIdRaw);
+  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + normalizeMemberId_(memberIdRaw) };
+  const sh = ensureMemberCenterHeaders_();
+  sh.getRange(row, 4).setValue(String(center || '')); // D=センター
+  sh.getRange(row, 5).setValue(String(staff  || '')); // E=担当者
+  return { ok:true };
+}
+/** ほのぼのIDシート: D=センター, E=担当者 を保証 */
+function ensureMemberCenterHeaders_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sh = ss.getSheetByName('ほのぼのID');
+  if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
+  // 少なくともE列まで用意
+  if (sh.getMaxColumns() < 5) sh.insertColumnsAfter(sh.getMaxColumns(), 5 - sh.getMaxColumns());
+  // ヘッダを確定（A=ID, B=氏名 は触らない）
+  sh.getRange(1, 4).setValue('包括支援センター'); // D1
+  sh.getRange(1, 5).setValue('担当者名');         // E1
+  return sh;
+}
+/** 行番号を A列（ほのぼのID）だけで厳密に探す */
+function findMemberRowById_(memberIdRaw) {
+  const id = normalizeMemberId_(memberIdRaw);  // "5767" などに正規化
+  if (!id) return 0;
+  const sh = ensureMemberCenterHeaders_();
+  const vals = sh.getDataRange().getValues();
+  for (let i = 1; i < vals.length; i++) {
+    const cellId = normalizeMemberId_(vals[i][0]); // A列のみを見る
+    if (cellId && cellId === id) return i + 1;     // 1-based
+  }
+  return 0;
+}
+function clearMemberCenterInfo(memberIdRaw) {
+  const row = findMemberRowById_(memberIdRaw);
+  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + normalizeMemberId_(memberIdRaw) };
+  const sh = ensureMemberCenterHeaders_();
+  sh.getRange(row, 4, 1, 2).clearContent(); // D,E を空に
+  return { ok:true };
+}
+
