@@ -29,22 +29,8 @@ button:hover { opacity:0.9;}
 .autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
 .autocomplete-item:hover { background:var(--accent);}
 .autocomplete-item.autocomplete-empty { color:var(--muted); cursor:default; pointer-events:none; }
-.app-shell { display:grid; grid-template-columns:minmax(240px,300px) minmax(0,1fr); gap:16px; align-items:start; }
-.sidebar-column { display:flex; flex-direction:column; gap:16px; }
-.main-area { min-width:0; }
-.layout { display:grid; grid-template-columns:minmax(260px,320px) minmax(0,1fr) minmax(260px,320px); gap:16px; align-items:start; }
-.layout-column { display:flex; flex-direction:column; gap:16px; }
-.layout-right { display:flex; flex-direction:column; gap:16px; }
-@media(max-width:1200px){
-  .app-shell { grid-template-columns:minmax(220px,280px) minmax(0,1fr); }
-  .layout { grid-template-columns:minmax(260px,320px) minmax(0,1fr); }
-  .layout-right { grid-column:1 / -1; }
-}
-@media(max-width:960px){
-  .app-shell { grid-template-columns:1fr; }
-  .layout { grid-template-columns:1fr; }
-  .sidebar-column { flex-direction:column; }
-}
+.layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
+@media(max-width:960px){.layout{grid-template-columns:1fr;}}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
 .record .muted { font-size:0.85rem; color:#666;}
 .record .toolbar { margin-top:6px;}
@@ -64,24 +50,53 @@ button:hover { opacity:0.9;}
 .media-card .media-meta { padding:8px; font-size:0.75rem; color:#555; }
 .media-card .media-meta .name { font-weight:600; color:#333; margin-bottom:4px; }
 .dashboard-card h2 { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.dashboard-content { min-height:180px; display:flex; flex-direction:column; gap:14px; }
-.dashboard-empty { color:var(--muted); font-size:0.85rem; }
-.dashboard-summary { display:flex; flex-direction:column; gap:10px; background:#f5f8ff; border:1px solid #d3e0f6; border-radius:10px; padding:12px; }
-.dashboard-summary-header { display:flex; flex-wrap:wrap; gap:8px; font-size:0.85rem; color:#1f2f4b; }
-.dashboard-summary-header span { background:#eef3ff; padding:4px 10px; border-radius:999px; }
-.dashboard-meta { font-size:0.8rem; color:#4a5a75; display:flex; flex-wrap:wrap; gap:12px; }
-.dashboard-form { display:flex; flex-direction:column; gap:12px; }
-.dashboard-form label { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#334; }
-.dashboard-form input[type="text"], .dashboard-form textarea { font-family:inherit; border:1px solid #ccd5e6; border-radius:8px; padding:8px 10px; font-size:0.9rem; background:#fff; }
-.dashboard-form textarea { min-height:110px; resize:vertical; }
-.center-info-form { display:flex; flex-direction:column; gap:12px; }
-.center-info-form label { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#334; }
-.center-info-form input[type="text"] { font-family:inherit; border:1px solid #ccd5e6; border-radius:8px; padding:8px 10px; font-size:0.9rem; background:#fff; }
-.center-info-actions { align-items:center; }
-.center-info-status { font-size:0.78rem; color:#4a5a75; }
-.dashboard-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-.dashboard-message { font-size:0.78rem; color:#4a5a75; }
-.record.selected { border-color:var(--brand); box-shadow:0 0 0 2px rgba(25,118,210,0.18); }
+.dashboard-wrapper { display:flex; gap:14px; align-items:flex-start; margin-top:8px; }
+.dashboard-sidebar { width:48px; display:flex; flex-direction:column; gap:6px; position:sticky; top:12px; }
+.dashboard-sidebar .dashboard-index-btn { background:#e9f0fb; color:#1c3a6b; border:none; border-radius:12px; padding:8px 0; font-size:0.75rem; cursor:pointer; transition:.2s; width:100%; min-height:32px; }
+.dashboard-sidebar .dashboard-index-btn.active { background:var(--brand); color:#fff; box-shadow:0 2px 8px rgba(25,118,210,0.25); }
+.dashboard-sidebar .dashboard-index-btn:hover { opacity:0.85; }
+.dashboard-sidebar .dashboard-index-empty { font-size:0.75rem; color:#718096; writing-mode:vertical-rl; text-orientation:mixed; padding:8px 0; }
+.dashboard-main { flex:1; display:flex; flex-direction:column; gap:12px; }
+.dashboard-filters { background:#f5f8ff; border:1px solid #d3e0f6; border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.dashboard-filter-row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.dashboard-filter { display:flex; flex-direction:column; gap:6px; font-size:0.8rem; color:#4a5a75; min-width:160px; }
+.dashboard-filter label { font-weight:600; }
+.dashboard-filter select { font-size:0.85rem; padding:6px 8px; border-radius:6px; border:1px solid #ccd5e6; background:#fff; }
+.dashboard-care-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.dashboard-chip { border:1px solid #b8c7e6; background:#fff; color:#2b3d6d; border-radius:999px; padding:6px 12px; font-size:0.78rem; cursor:pointer; transition:.2s; }
+.dashboard-chip.active { background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 2px 8px rgba(25,118,210,0.25); }
+.dashboard-filter-summary { font-size:0.78rem; color:#5a6a85; }
+.dashboard-sections { display:flex; flex-direction:column; gap:12px; }
+.dashboard-section { border:1px solid #dbe6f6; border-radius:12px; background:#fff; overflow:hidden; }
+.dashboard-section-toggle { width:100%; background:#f1f6ff; border:none; display:flex; align-items:center; gap:10px; padding:12px 14px; font-size:0.95rem; color:#1f3763; font-weight:600; cursor:pointer; transition:.2s; text-align:left; }
+.dashboard-section-toggle::after { content:'▸'; margin-left:auto; font-size:1rem; color:#4a5a75; transition:transform .2s; }
+.dashboard-section-toggle.is-open { background:#e4efff; }
+.dashboard-section-toggle.is-open::after { content:'▾'; }
+.dashboard-section-count { font-size:0.78rem; color:#5a6a85; font-weight:500; }
+.dashboard-section-body { display:none; }
+.dashboard-section-body.is-open { display:block; }
+.dashboard-entry { display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px; padding:12px 16px; border-top:1px solid #e3ebf8; }
+.dashboard-entry:first-of-type { border-top:none; }
+.dashboard-entry.status-pending { background:#fff9f4; }
+.dashboard-entry.status-completed { background:#f5faf4; }
+.dashboard-entry.selected { box-shadow:0 0 0 2px rgba(25,118,210,0.2); border-radius:10px; }
+.dashboard-entry-main { flex:1; min-width:220px; }
+.dashboard-entry-name { font-weight:600; font-size:0.95rem; color:#1f2f4b; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.dashboard-entry-id { font-size:0.8rem; color:#5a6a85; background:#eef3ff; border-radius:6px; padding:2px 6px; }
+.dashboard-entry-meta { margin-top:6px; display:flex; flex-wrap:wrap; gap:8px 14px; font-size:0.8rem; color:#5a6a85; }
+.dashboard-entry-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-end; min-width:140px; }
+.dashboard-status-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:0.78rem; font-weight:600; }
+.dashboard-status-badge.pending { background:#ffe4d6; color:#c55400; }
+.dashboard-status-badge.completed { background:#e4f3e8; color:#2e7d32; }
+.dashboard-entry-actions .link-button { text-decoration:none; }
+.dashboard-index-note { font-size:0.75rem; color:#5a6a85; }
+@media(max-width:960px){
+  .dashboard-wrapper{flex-direction:column;}
+  .dashboard-sidebar{width:100%; position:static; flex-direction:row; flex-wrap:wrap; justify-content:flex-start; }
+  .dashboard-sidebar .dashboard-index-btn{flex:0 0 auto; padding:6px 10px; min-width:36px; }
+  .dashboard-sidebar .dashboard-index-empty{writing-mode:initial; text-align:center; width:100%; }
+  .dashboard-entry-actions{flex-direction:row; align-items:center; justify-content:flex-end; }
+}
 .muted { color:#666; font-size:0.8rem; }
   
 #mediaGallery { min-height:80px; }
@@ -102,13 +117,9 @@ button:hover { opacity:0.9;}
 .share-item .share-actions { display:flex; gap:6px; margin-top:8px; }
 .share-item .share-actions .btn-compact { white-space:nowrap; }
 .share-qr { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-.share-qr img, .share-qr-image { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-.share-qr-image { display:flex; align-items:center; justify-content:center; }
-.share-qr-img { max-width:100%; max-height:100%; display:block; }
-.share-qr-placeholder { font-size:0.75rem; color:#60708f; text-align:center; line-height:1.4; }
+.share-qr img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
 .share-qr .share-qr-actions { display:flex; flex-wrap:wrap; gap:6px; }
 .share-qr .share-qr-url { font-size:0.75rem; color:#334; word-break:break-all; }
-.share-qr .share-qr-note { font-size:0.72rem; color:#60708f; }
 .share-meta-notes { font-size:0.72rem; color:#60708f; margin-top:6px; }
 .share-form { border-top:1px dashed #c7d7ef; padding-top:10px; margin-top:10px; }
 .share-form .share-field { margin-bottom:10px; }
@@ -135,59 +146,49 @@ button:hover { opacity:0.9;}
   <span class="pill" id="memberTag">未選択</span>
 </h1>
 
-<div class="app-shell">
-  <aside id="sidebar" class="sidebar-column">
-    <!-- 利用者選択 -->
-    <div class="card">
-      <h2>利用者を選択</h2>
-      <div class="toolbar" style="position:relative;">
-        <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
-        <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
-        <select id="recordRange">
-          <option value="all">全件</option>
-          <option value="90">直近90日</option>
-          <option value="30" selected>直近30日</option>
-          <option value="7">直近7日</option>
-        </select>
-        <button id="btnReload" class="secondary">更新</button>
-      </div>
-      <div id="idStatus" class="muted"></div>
-    </div>
+<!-- 利用者選択 -->
+<div class="card">
+  <h2>利用者を選択</h2>
+  <div class="toolbar" style="position:relative;">
+    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
+    <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
+    <select id="centerSelect">
+      <option value="">（未入力）</option>
+      <option value="町田第１高齢者支援センター">町田第１高齢者支援センター</option>
+      <option value="町田第２高齢者支援センター">町田第２高齢者支援センター</option>
+      <option value="町田第３高齢者支援センター">町田第３高齢者支援センター</option>
+      <option value="忠生第１高齢者支援センター">忠生第１高齢者支援センター</option>
+      <option value="忠生第２高齢者支援センター">忠生第２高齢者支援センター</option>
+      <option value="鶴川第１高齢者支援センター">鶴川第１高齢者支援センター</option>
+      <option value="鶴川第２高齢者支援センター">鶴川第２高齢者支援センター</option>
+      <option value="光が丘地域包括高齢者支援センター">光が丘地域包括高齢者支援センター</option>
+    </select>
 
-    <!-- 新規利用者登録 -->
-    <div class="card">
-      <h2>新規利用者登録</h2>
-      <div class="toolbar">
-        <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
-        <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
-        <button id="btnAddMember">登録</button>
-      </div>
-      <div id="addMemberStatus" class="muted"></div>
-    </div>
+    <!-- 担当者入力 -->
+    <input type="text" id="staffInput" placeholder="担当者名を入力" list="staffHistory" style="min-width:180px;">
+    <datalist id="staffHistory"></datalist>
 
-    <!-- センター・担当情報 -->
-    <div class="card">
-      <h2>センター・担当情報</h2>
-      <form id="centerInfoForm" class="center-info-form">
-        <label>地域包括支援センター
-          <input type="text" id="memberCenterInput" placeholder="例：○○地域包括支援センター">
-        </label>
-        <label>担当者名
-          <input type="text" id="memberStaffInput" placeholder="例：担当ケアマネ氏名">
-        </label>
-        <div class="toolbar center-info-actions">
-          <button type="submit">保存</button>
-          <button type="button" id="btnCenterInfoRefresh" class="secondary btn-compact">最新を再読込</button>
-          <span id="centerInfoStatus" class="muted center-info-status"></span>
-        </div>
-      </form>
-    </div>
-  </aside>
+    <button id="btnSaveCenter" class="secondary">保存</button>
+    <button id="btnClearCenter" class="warn">削除</button>
+  </div>
+  <div id="idStatus" class="muted"></div>
+</div>
 
-  <!-- メインUI -->
-  <div id="mainArea" class="main-area" style="display:none;">
-    <div class="layout">
-    <div class="layout-column layout-compose">
+<!-- 新規利用者登録 -->
+<div class="card">
+  <h2>新規利用者登録</h2>
+  <div class="toolbar">
+    <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
+    <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
+    <button id="btnAddMember">登録</button>
+  </div>
+  <div id="addMemberStatus" class="muted"></div>
+</div>
+
+<!-- メインUI -->
+<div id="mainArea" style="display:none;">
+  <div class="layout">
+    <div class="left">
       <!-- 新規記録 -->
       <div class="card">
         <h2>新規モニタリング記録</h2>
@@ -209,6 +210,7 @@ button:hover { opacity:0.9;}
           <span id="saveStatus" class="muted"></span>
         </div>
       </div>
+
       <!-- AI要約 -->
       <div class="card">
         <h2>AI要約</h2>
@@ -224,6 +226,7 @@ button:hover { opacity:0.9;}
         </div>
         <div id="summaryOutput" class="muted">ここに要約が表示されます</div>
       </div>
+
       <!-- 提案 -->
       <div class="card">
         <h2>ケアマネからの提案</h2>
@@ -238,8 +241,8 @@ button:hover { opacity:0.9;}
         </div>
         <div id="adviceOutput" class="muted">ここに提案が表示されます</div>
       </div>
-    </div>
-    <div class="layout-column layout-history">
+
+      <!-- 過去の記録 -->
       <div class="card">
         <h2>過去の記録</h2>
         <div class="search-toolbar">
@@ -265,19 +268,8 @@ button:hover { opacity:0.9;}
         </div>
         <div id="recordList" class="muted">利用者を選択してください</div>
       </div>
-      <div class="card dashboard-card">
-        <h2>利用者ダッシュボード</h2>
-        <div id="dashboardContent" class="dashboard-content">
-          <div class="dashboard-empty">記録を選択すると詳細が表示されます</div>
-        </div>
-        <div id="dashboardMessage" class="dashboard-message"></div>
-      </div>
-    </div>
-    <aside class="layout-right">
-      <div class="card">
-        <h2>添付ギャラリー</h2>
-        <div id="mediaGallery" class="muted">利用者を選択してください</div>
-      </div>
+
+      <!-- 👇 外部共有を過去の記録の直下に移動 -->
       <div class="card share-card">
         <h2>外部共有</h2>
         <div id="shareList" class="share-list muted">利用者を選択すると共有リンクが表示されます</div>
@@ -289,19 +281,19 @@ button:hover { opacity:0.9;}
             <label>共有先を選択
               <select id="shareAudience">
                 <option value="family">家族：生活の様子を共有</option>
-                <option value="center">地域包括支援センター：定期確認</option>
+                <option value="center" selected>地域包括支援センター：定期確認</option>
                 <option value="medical">医療機関：医師・看護師との連携</option>
                 <option value="service">サービス事業者：ケア実務者と共有</option>
               </select>
             </label>
             <div class="share-helper">共有先に応じて表示内容や案内文が自動で切り替わります。</div>
           </div>
+
           <div class="share-field">
             <label>閲覧期限
               <select id="shareExpiryPreset">
-                <option value="7">7日間（短期共有）</option>
-                <option value="30" selected>30日間（標準）</option>
-                <option value="90">90日間（長期共有）</option>
+                <option value="10" selected>10日間（短期共有）</option>
+                <option value="30">30日間（標準）</option>
                 <option value="none">期限なし</option>
                 <option value="custom">日付を指定する</option>
               </select>
@@ -309,31 +301,25 @@ button:hover { opacity:0.9;}
             <input type="datetime-local" id="shareExpires" style="display:none; margin-top:6px;">
             <div class="share-helper">「日付を指定する」を選ぶと任意の期限を設定できます。</div>
           </div>
-          <div class="share-field">
-            <label>閲覧用パスワード（任意）
-              <input type="text" id="sharePassword" placeholder="未入力の場合はパスワードなし">
-            </label>
-            <div class="share-helper">安全のため、英数字を組み合わせた8文字以上を推奨します。</div>
-          </div>
-          <div class="share-field">
-            <label><input type="checkbox" id="shareMaskCheckbox" checked> 本文をやさしくマスキングする</label>
-          </div>
+
           <div class="share-field">
             <label>共有する期間
               <select id="shareRange">
-                <option value="30" selected>直近30日</option>
-                <option value="90">直近90日</option>
+                <option value="30">直近30日</option>
+                <option value="90" selected>直近90日</option>
                 <option value="all">全期間</option>
               </select>
             </label>
             <div class="share-helper">閲覧者側では期間を変更できません。必要最小限の期間に絞って共有できます。</div>
           </div>
+
           <div class="share-field">
             <div class="share-attachments-all">
               <label><input type="checkbox" id="shareAttachmentAll"> すべての添付ファイルを共有する</label>
             </div>
             <div id="shareAttachments" class="share-attachments muted">記録を読み込み中です…</div>
           </div>
+
           <div class="toolbar">
             <button id="btnCreateShare">共有リンクを発行</button>
             <button type="button" id="btnCancelShare" class="secondary">キャンセル</button>
@@ -341,11 +327,28 @@ button:hover { opacity:0.9;}
           <div id="shareFormStatus" class="muted"></div>
         </div>
       </div>
+      <!-- 👆 移動完了 -->
+    </div>
+
+    <aside class="right">
+      <div class="card">
+        <h2>添付ギャラリー</h2>
+        <div id="mediaGallery" class="muted">利用者を選択してください</div>
+      </div>
+      <div class="card dashboard-card">
+        <h2>利用者ダッシュボード</h2>
+        <div id="dashboardStatus" class="muted">読込中…</div>
+        <div class="dashboard-wrapper">
+          <nav id="dashboardIndex" class="dashboard-sidebar" aria-label="五十音ナビ"></nav>
+          <div class="dashboard-main">
+            <div id="dashboardFilters" class="dashboard-filters"></div>
+            <div id="dashboardTable" class="dashboard-sections"></div>
+          </div>
+        </div>
+      </div>
     </aside>
-    </div><!-- /.layout -->
-  </div><!-- /#mainArea -->
-</div><!-- /.app-shell -->
-</div><!-- /#internalApp -->
+  </div>
+</div>
 
 <script>
 let memberId = null, memberName = "";
@@ -354,244 +357,7 @@ let memberSearchResults = [];
 let memberListLoading = false;
 let memberListLoaded = false;
 let recordsCache = [];
-let recordsLoading = false;
-let selectedRecord = null;
-let selectedRecordId = "";
-let dashboardMessageTimer = null;
-let centerInfoStatusTimer = null;
-let centerInfoLoadToken = 0;
-let centerInfoUiInitialized = false;
 const queryParams = new URLSearchParams(window.location.search);
-
-function getRecordTimestamp(record) {
-  if (record && typeof record.timestamp === "number" && !isNaN(record.timestamp)) {
-    return record.timestamp;
-  }
-  if (record && record.date instanceof Date && !isNaN(record.date.getTime())) {
-    return record.date.getTime();
-  }
-  const raw = record && (record.dateValue || record.dateText || record.date);
-  const parsed = raw ? Date.parse(raw) : NaN;
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function normalizeRecord(record) {
-  const attachments = Array.isArray(record.attachments) ? record.attachments : [];
-  return {
-    ...record,
-    attachments,
-    timestamp: getRecordTimestamp(record)
-  };
-}
-
-function buildAttachmentViewUrl(att) {
-  if (!att) return "#";
-  if (att.url) return att.url;
-  if (att.fileId) return "https://drive.google.com/file/d/" + att.fileId + "/view";
-  return "#";
-}
-
-function buildAttachmentThumbnailUrl(att) {
-  if (!att) return "";
-  if (att.fileId) {
-    return "https://drive.google.com/thumbnail?id=" + att.fileId + "&sz=w200";
-  }
-  return "";
-}
-
-function getRecordIdentifier(record) {
-  if (!record || typeof record !== "object") return "";
-  if (record.recordId != null && record.recordId !== "") return String(record.recordId);
-  if (record.rowIndex != null && record.rowIndex !== "") return String(record.rowIndex);
-  return "";
-}
-
-function setDashboardMessage(text, isError) {
-  const messageEl = document.getElementById("dashboardMessage");
-  if (!messageEl) return;
-  messageEl.textContent = text || "";
-  messageEl.style.color = isError ? "#b91c1c" : "#1f2a44";
-  if (dashboardMessageTimer) {
-    clearTimeout(dashboardMessageTimer);
-    dashboardMessageTimer = null;
-  }
-  if (text && !isError) {
-    dashboardMessageTimer = setTimeout(() => {
-      if (messageEl.textContent === text) {
-        messageEl.textContent = "";
-      }
-    }, 4000);
-  }
-}
-
-function scrollDashboardIntoView() {
-  const card = document.querySelector('.dashboard-card');
-  if (card) {
-    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-}
-
-function renderDashboardPanel() {
-  const container = document.getElementById("dashboardContent");
-  if (!container) return;
-  if (!memberId) {
-    container.innerHTML = '';
-    setDashboardMessage("", false);
-    return;
-  }
-  if (recordsLoading) {
-    container.innerHTML = '<div class="dashboard-empty">記録を読み込み中です…</div>';
-    setDashboardMessage("", false);
-    return;
-  }
-  if (!recordsCache.length) {
-    container.innerHTML = '<div class="dashboard-empty">記録が存在しません</div>';
-    setDashboardMessage("", false);
-    return;
-  }
-  if (!selectedRecord) {
-    container.innerHTML = '<div class="dashboard-empty">記録を選択すると詳細が表示されます</div>';
-    return;
-  }
-  const identifier = getRecordIdentifier(selectedRecord);
-  if (identifier && identifier !== selectedRecordId) {
-    selectedRecordId = identifier;
-  }
-  const metaParts = [];
-  if (selectedRecord.center) metaParts.push(`地域包括支援センター: ${escapeHtml(selectedRecord.center)}`);
-  if (selectedRecord.staff) metaParts.push(`担当者名: ${escapeHtml(selectedRecord.staff)}`);
-  container.innerHTML = `
-    <div class="dashboard-summary">
-      <div class="dashboard-summary-header">
-        <span>${escapeHtml(selectedRecord.dateText || '日付未設定')}</span>
-        <span>${escapeHtml(selectedRecord.kind || '種別未設定')}</span>
-        ${identifier ? `<span>ID: ${escapeHtml(identifier)}</span>` : ''}
-      </div>
-      ${metaParts.length ? `<div class="dashboard-meta">${metaParts.map(part => `<span>${part}</span>`).join('')}</div>` : ''}
-      <form id="dashboardForm" class="dashboard-form" data-row-index="${escapeHtml(String(selectedRecord.rowIndex || ''))}" data-record-id="${escapeHtml(identifier)}">
-        <label>地域包括支援センター
-          <input type="text" id="dashboardCenter" value="${escapeHtml(selectedRecord.center || '')}" placeholder="例：○○地域包括支援センター">
-        </label>
-        <label>担当者名
-          <input type="text" id="dashboardStaff" value="${escapeHtml(selectedRecord.staff || '')}" placeholder="例：担当ケアマネ氏名">
-        </label>
-        <label>状態・経過
-          <textarea id="dashboardStatus">${escapeHtml(selectedRecord.status || '')}</textarea>
-        </label>
-        <label>特記事項
-          <textarea id="dashboardSpecial">${escapeHtml(selectedRecord.special || '')}</textarea>
-        </label>
-        <div class="dashboard-actions">
-          <button type="submit">保存</button>
-          <button type="button" id="dashboardDelete" class="danger">削除</button>
-        </div>
-      </form>
-    </div>
-  `;
-  const form = document.getElementById("dashboardForm");
-  if (form) {
-    form.addEventListener("submit", handleDashboardSubmit);
-  }
-  const deleteBtn = document.getElementById("dashboardDelete");
-  if (deleteBtn) {
-    deleteBtn.addEventListener("click", handleDashboardDelete);
-  }
-}
-
-function ensureSelectedRecord() {
-  if (!memberId || !recordsCache.length) {
-    selectedRecord = null;
-    selectedRecordId = "";
-    renderDashboardPanel();
-    return;
-  }
-  if (selectedRecordId) {
-    const existing = recordsCache.find(rec => getRecordIdentifier(rec) === selectedRecordId);
-    if (existing) {
-      selectedRecord = existing;
-      renderDashboardPanel();
-      return;
-    }
-  }
-  selectedRecord = recordsCache[0] || null;
-  selectedRecordId = getRecordIdentifier(selectedRecord);
-  renderDashboardPanel();
-}
-
-function selectRecordByRow(rowIndex, recordId) {
-  if (!recordsCache.length) {
-    selectedRecord = null;
-    selectedRecordId = "";
-    renderDashboardPanel();
-    return;
-  }
-  let match = null;
-  if (recordId) {
-    match = recordsCache.find(rec => getRecordIdentifier(rec) === String(recordId));
-  }
-  if (!match && rowIndex) {
-    match = recordsCache.find(rec => String(rec.rowIndex || '') === String(rowIndex));
-  }
-  selectedRecord = match || null;
-  selectedRecordId = match ? getRecordIdentifier(match) : "";
-  renderRecords();
-  renderDashboardPanel();
-  scrollDashboardIntoView();
-}
-
-async function handleDashboardSubmit(event) {
-  event.preventDefault();
-  if (!memberId) return;
-  const form = event.currentTarget;
-  if (!form) return;
-  const payload = {
-    memberId,
-    rowIndex: form.dataset.rowIndex || "",
-    recordId: form.dataset.recordId || "",
-    center: (document.getElementById("dashboardCenter")?.value || "").trim(),
-    staff: (document.getElementById("dashboardStaff")?.value || "").trim(),
-    status: (document.getElementById("dashboardStatus")?.value || "").trim(),
-    special: (document.getElementById("dashboardSpecial")?.value || "").trim()
-  };
-  setDashboardMessage("保存中…", false);
-  try {
-    const res = await callGoogle("updateMonitoringRecord", payload);
-    if (!res || res.status !== "success") {
-      throw new Error(res && res.message ? res.message : "保存に失敗しました");
-    }
-    await loadRecords({ keepRowIndex: payload.rowIndex, keepRecordId: payload.recordId });
-    setDashboardMessage("保存しました", false);
-  } catch (err) {
-    setDashboardMessage("失敗: " + (err && err.message ? err.message : err), true);
-  }
-}
-
-async function handleDashboardDelete() {
-  if (!memberId) return;
-  const form = document.getElementById("dashboardForm");
-  if (!form) return;
-  if (!confirm("この記録を削除しますか？")) return;
-  const payload = {
-    memberId,
-    rowIndex: form.dataset.rowIndex || "",
-    recordId: form.dataset.recordId || ""
-  };
-  setDashboardMessage("削除中…", false);
-  try {
-    const res = await callGoogle("deleteMonitoringRecord", payload);
-    if (!res || res.status !== "success") {
-      throw new Error(res && res.message ? res.message : "削除に失敗しました");
-    }
-    selectedRecord = null;
-    selectedRecordId = "";
-    await loadRecords();
-    setDashboardMessage("削除しました", false);
-  } catch (err) {
-    setDashboardMessage("失敗: " + (err && err.message ? err.message : err), true);
-  }
-}
-
-
 const shareAudienceInfo = {
   family: {
     label: "家族向け共有",
@@ -689,7 +455,841 @@ function normalizeDashboardCollapsedKeys(map) {
   return normalized;
 }
 
+function loadDashboardCollapsedSections() {
+  const storages = getAvailableStorages();
+  for (const storage of storages) {
+    try {
+      const raw = storage.getItem(DASHBOARD_COLLAPSE_STORAGE_KEY);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return normalizeDashboardCollapsedKeys(parsed);
+      }
+    } catch (err) {
+      console.warn("collapse-state-load", err);
+    }
+  }
+  return {};
+}
 
+function saveDashboardCollapsedSections() {
+  const storages = getAvailableStorages();
+  const snapshot = dashboardState && dashboardState.collapsedSections ? dashboardState.collapsedSections : {};
+  const json = JSON.stringify(snapshot);
+  for (const storage of storages) {
+    try {
+      storage.setItem(DASHBOARD_COLLAPSE_STORAGE_KEY, json);
+      return;
+    } catch (err) {
+      console.warn("collapse-state-save", err);
+    }
+  }
+}
+
+function getInitialDashboardFiltersFromQuery() {
+  const validStatus = ["all", "pending", "completed"];
+  const statusParam = String(queryParams.get("monitoringStatus") || "").toLowerCase();
+  const status = validStatus.includes(statusParam) ? statusParam : "all";
+  const careManagers = queryParams.getAll("careManager").map(v => String(v || "").trim()).filter(Boolean);
+  return {
+    status,
+    careManagers
+  };
+}
+
+let dashboardState = {
+  data: [],
+  monthLabel: "",
+  activeInitial: null,
+  filters: getInitialDashboardFiltersFromQuery(),
+  collapsedSections: loadDashboardCollapsedSections(),
+  pendingScrollLabel: null
+};
+let externalShares = [];
+let shareFormOpen = false;
+
+const DASHBOARD_KANA_GROUPS = [
+  { label: "あ行", chars: ["あ", "い", "う", "え", "お"] },
+  { label: "か行", chars: ["か", "き", "く", "け", "こ"] },
+  { label: "さ行", chars: ["さ", "し", "す", "せ", "そ"] },
+  { label: "た行", chars: ["た", "ち", "つ", "て", "と"] },
+  { label: "な行", chars: ["な", "に", "ぬ", "ね", "の"] },
+  { label: "は行", chars: ["は", "ひ", "ふ", "へ", "ほ"] },
+  { label: "ま行", chars: ["ま", "み", "む", "め", "も"] },
+  { label: "や行", chars: ["や", "ゆ", "よ"] },
+  { label: "ら行", chars: ["ら", "り", "る", "れ", "ろ"] },
+  { label: "わ行", chars: ["わ", "ゐ", "ゑ", "を", "ん", "ゎ"] }
+];
+const DASHBOARD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const DASHBOARD_KANA_CHAR_TO_LABEL = (() => {
+  const map = new Map();
+  DASHBOARD_KANA_GROUPS.forEach(group => {
+    group.chars.forEach(ch => {
+      map.set(ch, group.label);
+    });
+  });
+  return map;
+})();
+const DASHBOARD_GROUP_ORDER = [
+  ...DASHBOARD_KANA_GROUPS.map(g => g.label),
+  ...DASHBOARD_ALPHABET,
+  DASHBOARD_DIGIT_LABEL,
+  DASHBOARD_OTHER_LABEL
+];
+const DASHBOARD_COLLATOR = new Intl.Collator(["ja", "en"], { sensitivity: "base", numeric: true, caseFirst: "false" });
+
+function toHiragana(value = "") {
+  return String(value)
+    .normalize("NFKC")
+    .replace(/[ァ-ン]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+}
+
+function normalizeMemberSearchText(value) {
+  if (value == null) return "";
+  return toHiragana(String(value))
+    .toLowerCase()
+    .replace(/[\s　]+/g, "");
+}
+
+function includesMemberSearchTarget(rawValue, normalizedValue, rawQuery, normalizedQuery) {
+  if (!rawValue) return false;
+  const text = String(rawValue);
+  if (rawQuery && text.includes(rawQuery)) return true;
+  const normalized = normalizedValue ? String(normalizedValue) : normalizeMemberSearchText(text);
+  const normalizedQueryText = normalizedQuery != null ? String(normalizedQuery) : "";
+  if (!normalizedQueryText) return false;
+  return normalized.includes(normalizedQueryText);
+}
+
+function memberMatchesQuery(member, rawQuery, idDigits, normalizedQuery, normalizedIdQuery = "") {
+  if (!member) return false;
+  const safeRawQuery = rawQuery != null ? String(rawQuery) : "";
+  const hasText = !!safeRawQuery;
+  const idCandidate = idDigits != null ? String(idDigits) : "";
+  const normalizedIdCandidate = normalizedIdQuery != null ? String(normalizedIdQuery) : "";
+  const normalizedQueryText = normalizedQuery != null ? String(normalizedQuery) : "";
+  const memberId = member.id != null ? String(member.id) : "";
+  const memberIdNormalized = member.idNormalized != null ? String(member.idNormalized) : "";
+  if (idCandidate) {
+    if (memberId && memberId.includes(idCandidate)) return true;
+    if (memberIdNormalized && memberIdNormalized.includes(idCandidate)) return true;
+    if (memberIdNormalized && idCandidate.length < memberIdNormalized.length) {
+      const padded = idCandidate.padStart(memberIdNormalized.length, "0");
+      if (memberIdNormalized.includes(padded)) return true;
+    }
+  }
+  if (normalizedIdCandidate && memberIdNormalized) {
+    if (memberIdNormalized === normalizedIdCandidate) return true;
+  }
+  if (!hasText) return false;
+  if (includesMemberSearchTarget(member.name, member.nameNormalized, safeRawQuery, normalizedQueryText)) return true;
+  if (includesMemberSearchTarget(member.kana, member.kanaNormalized, safeRawQuery, normalizedQueryText)) return true;
+  if (includesMemberSearchTarget(member.yomi, member.yomiNormalized, safeRawQuery, normalizedQueryText)) return true;
+  return false;
+}
+
+function normalizeHiraganaBaseChar(ch) {
+  if (!ch) return "";
+  const base = ch.normalize("NFD")[0] || "";
+  return DASHBOARD_SMALL_KANA_MAP[base] || base;
+}
+
+function extractHeadChar(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const normalized = text.normalize("NFKC");
+  for (const ch of normalized) {
+    if (!ch) continue;
+    if (/[ぁ-んァ-ン]/.test(ch)) {
+      const hira = toHiragana(ch);
+      return normalizeHiraganaBaseChar(hira);
+    }
+    if (/[A-Za-z]/.test(ch)) {
+      return ch.toUpperCase();
+    }
+    if (/\d/.test(ch)) {
+      return ch;
+    }
+  }
+  return "";
+}
+
+function getEntryReadingCandidates(entry) {
+  if (!entry || typeof entry !== "object") return [];
+  const candidates = [
+    entry.yomi,
+    entry.reading,
+    entry.furigana,
+    entry.kana,
+    entry.nameKana,
+    entry.name
+  ];
+  return candidates.filter(value => typeof value === "string" && value.trim());
+}
+
+function getDashboardGroupLabel(entry) {
+  const candidates = [...getEntryReadingCandidates(entry), entry && entry.id];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const head = extractHeadChar(candidate);
+    if (!head) continue;
+    if (/[ぁ-ん]/.test(head)) {
+      const label = DASHBOARD_KANA_CHAR_TO_LABEL.get(head) || DASHBOARD_KANA_CHAR_TO_LABEL.get(normalizeHiraganaBaseChar(head));
+      return label || DASHBOARD_OTHER_LABEL;
+    }
+    if (/[A-Z]/.test(head)) {
+      return head;
+    }
+    if (/\d/.test(head)) {
+      return DASHBOARD_DIGIT_LABEL;
+    }
+  }
+  return DASHBOARD_OTHER_LABEL;
+}
+
+function getEntryPreferredReading(entry) {
+  const candidates = getEntryReadingCandidates(entry);
+  if (candidates.length) {
+    return candidates[0];
+  }
+  return entry && entry.id ? String(entry.id) : "";
+}
+
+function entryHasFurigana(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  const yomi = typeof entry.yomi === "string" ? entry.yomi.trim() : "";
+  return yomi !== "";
+}
+
+function getEntrySortKey(entry) {
+  const reading = getEntryPreferredReading(entry);
+  if (reading) {
+    return toHiragana(reading).replace(/[\s　]+/g, "");
+  }
+  return String(entry && entry.id || "").trim();
+}
+
+function compareEntriesByFurigana(a, b) {
+  const aHas = entryHasFurigana(a);
+  const bHas = entryHasFurigana(b);
+  if (aHas !== bHas) return aHas ? -1 : 1;
+  const keyA = getEntrySortKey(a);
+  const keyB = getEntrySortKey(b);
+  const cmpKey = DASHBOARD_COLLATOR.compare(keyA, keyB);
+  if (cmpKey !== 0) return cmpKey;
+  const nameA = String(a && a.name || "").trim();
+  const nameB = String(b && b.name || "").trim();
+  const cmpName = DASHBOARD_COLLATOR.compare(nameA, nameB);
+  if (cmpName !== 0) return cmpName;
+  const idA = String(a && a.id || "").trim();
+  const idB = String(b && b.id || "").trim();
+  return DASHBOARD_COLLATOR.compare(idA, idB);
+}
+
+function getDashboardIndexGroups(sortedData) {
+  const exists = new Set();
+  (Array.isArray(sortedData) ? sortedData : []).forEach(entry => {
+    const label = getDashboardGroupLabel(entry);
+    exists.add(label);
+  });
+  return DASHBOARD_GROUP_ORDER.filter(label => exists.has(label));
+}
+
+function parseCareManagerList(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(/[、,，;；\/／\|｜\n]+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+
+function getDashboardCareManagerOptions(data) {
+  const set = new Set();
+  (Array.isArray(data) ? data : []).forEach(entry => {
+    parseCareManagerList(entry && entry.careManager).forEach(name => set.add(name));
+  });
+  const list = Array.from(set);
+  list.sort((a, b) => DASHBOARD_COLLATOR.compare(a, b));
+  return list;
+}
+
+function applyDashboardFilters(data) {
+  const filters = dashboardState && dashboardState.filters ? dashboardState.filters : {};
+  const status = filters.status || "all";
+  const careManagers = Array.isArray(filters.careManagers) ? filters.careManagers : [];
+  return (Array.isArray(data) ? data : []).filter(entry => {
+    if (!entry) return false;
+    const statusKey = (entry.monitoringStatus === "completed") ? "completed" : "pending";
+    if (status === "pending" && statusKey !== "pending") return false;
+    if (status === "completed" && statusKey !== "completed") return false;
+    if (careManagers.length) {
+      const entryManagers = parseCareManagerList(entry.careManager);
+      if (!entryManagers.some(name => careManagers.includes(name))) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function buildDashboardSections(data) {
+  const sections = [];
+  const groups = new Map();
+  (Array.isArray(data) ? data : []).forEach(entry => {
+    const label = getDashboardGroupLabel(entry);
+    if (!groups.has(label)) {
+      groups.set(label, []);
+    }
+    groups.get(label).push(entry);
+  });
+  const order = getDashboardIndexGroups(data);
+  order.forEach(label => {
+    sections.push({ label, entries: groups.get(label) || [] });
+  });
+  return sections;
+}
+
+function getDashboardSectionDomId(label) {
+  const base = String(label || "").trim();
+  const safe = base.replace(/[^0-9A-Za-z\u3040-\u30FF\u3400-\u9FFF]/g, "").toLowerCase();
+  return `dashboard-section-${safe || "misc"}`;
+}
+
+function updateDashboardFilterQueryParams() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const filters = dashboardState && dashboardState.filters ? dashboardState.filters : {};
+    const status = filters.status || "all";
+    if (status && status !== "all") {
+      params.set("monitoringStatus", status);
+    } else {
+      params.delete("monitoringStatus");
+    }
+    params.delete("careManager");
+    const careManagers = Array.isArray(filters.careManagers) ? filters.careManagers : [];
+    careManagers.forEach(name => params.append("careManager", name));
+    const query = params.toString();
+    const newUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", newUrl);
+  } catch (err) {
+    console.warn("filter-query-update", err);
+  }
+}
+
+function getEntryLatestTimestamp(entry) {
+  if (!entry) return NaN;
+  const candidates = [
+    entry.latestTimestamp,
+    entry.latestDate,
+    entry.latestDateValue,
+    entry.latestDateText
+  ];
+  for (const value of candidates) {
+    if (typeof value === "number" && isFinite(value)) return value;
+    if (value instanceof Date && isFinite(value.getTime())) return value.getTime();
+    if (typeof value === "string" && value) {
+      const parsed = Date.parse(value);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  return NaN;
+}
+
+function getSortedDashboardData() {
+  const data = Array.isArray(dashboardState.data) ? dashboardState.data.slice() : [];
+  data.sort(compareEntriesByFurigana);
+  return data;
+}
+
+function jumpToDashboardInitial(label) {
+  const safeLabel = String(label || "").trim();
+  if (!safeLabel) return;
+  dashboardState.activeInitial = safeLabel;
+  if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
+    dashboardState.collapsedSections = {};
+  }
+  dashboardState.collapsedSections[safeLabel] = false;
+  dashboardState.pendingScrollLabel = safeLabel;
+  saveDashboardCollapsedSections();
+  renderDashboard();
+}
+
+function toHalfDigits(s) {
+  return String(s || "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
+
+function extractMemberIdDigits(value) {
+  if (value == null) return "";
+  return toHalfDigits(String(value)).replace(/[^0-9]/g, "");
+}
+
+function normalizeMemberIdForLookup(value) {
+  const digits = extractMemberIdDigits(value);
+  if (!digits) return "";
+  if (digits.length >= 4) return digits;
+  return digits.padStart(4, "0");
+}
+
+let initialMemberId = (() => {
+  const raw = queryParams.get("id") || "";
+  if (!raw) return "";
+  return normalizeMemberIdForLookup(raw.trim());
+})();
+
+function buildMemberDetailUrl(id) {
+  const safeId = String(id || "").trim();
+  const loc = window.location || {};
+  const origin = loc.origin || ((loc.protocol || "") + "//" + (loc.host || ""));
+  const base = origin + (loc.pathname || "");
+  if (!safeId) return base;
+  return `${base}?id=${encodeURIComponent(safeId)}`;
+}
+
+function escapeHtml(value) {
+  const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
+  return String(value ?? "").replace(/[&<>"']/g, ch => map[ch]);
+}
+
+function callGoogle(fnName, ...args) {
+  console.log("🔎 callGoogle invoked", fnName, args);  // ← 追加
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(res => {
+        console.log("✅ callGoogle success", res);
+        resolve(res);
+      })
+      .withFailureHandler(err => {
+        console.error("❌ callGoogle error", err);
+        reject(err);
+      })[fnName](...args);
+  });
+}
+
+
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve({
+        base64,
+        mimeType: file.type || "application/octet-stream",
+        name: file.name || "attachment"
+      });
+    };
+    reader.onerror = () => reject(reader.error || new Error("ファイルの読み込みに失敗しました"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getRecordTimestamp(record) {
+  if (record && typeof record.timestamp === "number" && !isNaN(record.timestamp)) {
+    return record.timestamp;
+  }
+  if (record && record.date instanceof Date && !isNaN(record.date.getTime())) {
+    return record.date.getTime();
+  }
+  const raw = record && (record.dateValue || record.dateText || record.date);
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return isNaN(parsed) ? null : parsed;
+}
+
+function normalizeRecord(record) {
+  const attachments = Array.isArray(record.attachments) ? record.attachments : [];
+  return {
+    ...record,
+    attachments,
+    timestamp: getRecordTimestamp(record)
+  };
+}
+
+function buildAttachmentViewUrl(att) {
+  if (!att) return "#";
+  if (att.url) return att.url;
+  if (att.fileId) return "https://drive.google.com/file/d/" + att.fileId + "/view";
+  return "#";
+}
+
+function buildAttachmentThumbnailUrl(att) {
+  if (!att) return "";
+  if (att.fileId) {
+    return "https://drive.google.com/thumbnail?id=" + att.fileId + "&sz=w200";
+  }
+  return "";
+}
+
+function setMemberStatusMessage(text) {
+  const statusEl = document.getElementById("idStatus");
+  if (statusEl) {
+    statusEl.textContent = text || "";
+  }
+}
+
+function refreshMemberList() {
+  memberListLoading = true;
+  memberListLoaded = false;
+  memberSearchResults = [];
+  setMemberStatusMessage("読み込み中…");
+  google.script.run.withSuccessHandler(list => {
+    const mapped = Array.isArray(list)
+      ? list.map(item => {
+          const entry = item && typeof item === "object" ? item : {};
+          const id = String(entry.id || "").trim();
+          const idNormalized = normalizeMemberIdForLookup(id);
+          const name = entry.name != null ? String(entry.name).trim() : "";
+          const rawYomi = entry.yomi != null ? String(entry.yomi).trim() : "";
+          const rawKana = entry.kana != null ? String(entry.kana).trim() : "";
+          const yomi = rawYomi || rawKana;
+          const kana = rawKana || rawYomi;
+          const careManager = entry.careManager != null ? String(entry.careManager).trim() : "";
+          const nameNormalized = normalizeMemberSearchText(name);
+          const kanaNormalized = normalizeMemberSearchText(kana);
+          const yomiNormalized = normalizeMemberSearchText(yomi);
+          return {
+            id,
+            idNormalized,
+            name,
+            nameNormalized,
+            yomi,
+            kana,
+            careManager,
+            kanaNormalized,
+            yomiNormalized
+          };
+        })
+      : [];
+    memberList = mapped;
+    memberListLoading = false;
+    memberListLoaded = true;
+    setMemberStatusMessage(memberList.length ? `${memberList.length}名の利用者を取得しました` : "利用者情報が見つかりません");
+    memberList.sort(compareEntriesByFurigana);
+    if (input) {
+      const currentValue = input.value || "";
+      if (currentValue.trim()) {
+        searchUsers(currentValue);
+      } else if (listBox) {
+        listBox.innerHTML = "";
+        listBox.style.display = "none";
+      }
+    }
+    if (initialMemberId && !memberId) {
+      const hit = memberList.find(m => m.id === initialMemberId);
+      if (hit) {
+        selectMember(hit.id, hit.name);
+        initialMemberId = "";
+      } else if (initialMemberId) {
+        selectMember(initialMemberId, "");
+        initialMemberId = "";
+      }
+    }
+  }).withFailureHandler(err => {
+    console.error("member list error", err);
+    memberListLoading = false;
+    setMemberStatusMessage("利用者情報の取得に失敗しました");
+  }).getMemberList();
+}
+
+function loadDashboard() {
+  const statusEl = document.getElementById("dashboardStatus");
+  const container = document.getElementById("dashboardTable");
+  if (statusEl) statusEl.textContent = "読込中…";
+  if (container) container.innerHTML = "";
+  callGoogle("getDashboardSummary").then(res => {
+    if (!res || res.status !== "success") {
+      if (statusEl) statusEl.textContent = "エラー: " + (res && res.message ? res.message : "取得に失敗しました");
+      dashboardState.data = [];
+      dashboardState.monthLabel = "";
+      dashboardState.activeInitial = null;
+      if (container) container.innerHTML = "";
+      return;
+    }
+    dashboardState.data = Array.isArray(res.data) ? res.data : [];
+    dashboardState.monthLabel = res.monthLabel || "";
+    dashboardState.activeInitial = null;
+    renderDashboard();
+  }).catch(err => {
+    console.error("dashboard error", err);
+    if (statusEl) statusEl.textContent = "エラー: " + (err && err.message ? err.message : err);
+    dashboardState.data = [];
+    dashboardState.monthLabel = "";
+    dashboardState.activeInitial = null;
+  });
+}
+
+function renderDashboard() {
+  const container = document.getElementById("dashboardTable");
+  const filterContainer = document.getElementById("dashboardFilters");
+  const indexContainer = document.getElementById("dashboardIndex");
+  const statusEl = document.getElementById("dashboardStatus");
+  if (!container) return;
+
+  const sortedData = getSortedDashboardData();
+  const careManagerOptions = getDashboardCareManagerOptions(sortedData);
+  if (!dashboardState.filters || typeof dashboardState.filters !== "object") {
+    dashboardState.filters = { status: "all", careManagers: [] };
+  }
+  const validStatus = ["all", "pending", "completed"];
+  if (!validStatus.includes(dashboardState.filters.status)) {
+    dashboardState.filters.status = "all";
+  }
+  if (!Array.isArray(dashboardState.filters.careManagers)) {
+    dashboardState.filters.careManagers = [];
+  }
+  const normalizedCare = dashboardState.filters.careManagers.filter(name => careManagerOptions.includes(name));
+  if (normalizedCare.length !== dashboardState.filters.careManagers.length) {
+    dashboardState.filters.careManagers = normalizedCare;
+  }
+
+  const filteredData = applyDashboardFilters(sortedData);
+  const indexGroups = getDashboardIndexGroups(filteredData);
+  const sections = buildDashboardSections(filteredData);
+
+  if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
+    dashboardState.collapsedSections = {};
+  }
+  let collapseChanged = false;
+  sections.forEach(section => {
+    if (!(section.label in dashboardState.collapsedSections)) {
+      dashboardState.collapsedSections[section.label] = true;
+      collapseChanged = true;
+    }
+  });
+  Object.keys(dashboardState.collapsedSections).forEach(label => {
+    if (!sections.some(section => section.label === label)) {
+      delete dashboardState.collapsedSections[label];
+      collapseChanged = true;
+    }
+  });
+  if (memberId) {
+    const targetSection = sections.find(section => section.entries.some(entry => entry && entry.id === memberId));
+    if (targetSection) {
+      if (dashboardState.collapsedSections[targetSection.label] !== false) {
+        dashboardState.collapsedSections[targetSection.label] = false;
+        collapseChanged = true;
+      }
+      if (!dashboardState.pendingScrollLabel && dashboardState.activeInitial !== targetSection.label) {
+        dashboardState.activeInitial = targetSection.label;
+      }
+    }
+  }
+  if (collapseChanged) {
+    saveDashboardCollapsedSections();
+  }
+
+  if (!dashboardState.activeInitial || !sections.some(section => section.label === dashboardState.activeInitial)) {
+    dashboardState.activeInitial = sections.length ? sections[0].label : null;
+  }
+
+  if (statusEl) {
+    const monthLabel = dashboardState.monthLabel ? `対象月：${dashboardState.monthLabel}` : "";
+    const countLabel = `${filteredData.length}名 / 全${sortedData.length}名`;
+    statusEl.textContent = monthLabel ? `${monthLabel}（${countLabel}）` : countLabel;
+  }
+
+  if (filterContainer) {
+    const statusOptions = [
+      { value: "all", label: "すべて" },
+      { value: "pending", label: "モニタリング未実施" },
+      { value: "completed", label: "モニタリング実施済み" }
+    ];
+    const statusHtml = statusOptions.map(opt => `<option value="${opt.value}"${opt.value === dashboardState.filters.status ? " selected" : ""}>${opt.label}</option>`).join("");
+
+    const chipsHtml = careManagerOptions.length
+      ? careManagerOptions.map(name => {
+          const active = dashboardState.filters.careManagers.includes(name);
+          return `<button type="button" class="dashboard-chip${active ? " active" : ""}" data-care="${escapeHtml(name)}" aria-pressed="${active}">${escapeHtml(name)}</button>`;
+        }).join("")
+      : `<div class="dashboard-index-note">担当者情報が未登録です</div>`;
+
+    filterContainer.innerHTML = `
+      <div class="dashboard-filter-row">
+        <div class="dashboard-filter">
+          <label for="dashboardStatusFilter">モニタリング状況</label>
+          <select id="dashboardStatusFilter">${statusHtml}</select>
+        </div>
+        <div class="dashboard-filter">
+          <label>担当ケアマネ</label>
+          <div class="dashboard-care-chips">
+            ${chipsHtml}
+          </div>
+        </div>
+        <button type="button" id="dashboardClearFilters" class="secondary btn-compact">フィルタをクリア</button>
+      </div>
+      <div class="dashboard-filter-summary">絞り込み：${filteredData.length}名 / 全${sortedData.length}名</div>
+    `;
+  }
+
+  if (!filteredData.length) {
+    container.innerHTML = '<div class="muted">該当する利用者がいません。</div>';
+  } else {
+    container.innerHTML = sections.map(section => {
+      const sectionId = getDashboardSectionDomId(section.label);
+      const collapsed = dashboardState.collapsedSections[section.label] !== false;
+      const isOpen = !collapsed;
+      const headerHtml = `
+        <button type="button" class="dashboard-section-toggle${isOpen ? " is-open" : ""}" data-section="${escapeHtml(section.label)}" aria-expanded="${isOpen}" aria-controls="${sectionId}-body">
+          <span>${escapeHtml(section.label)}</span>
+          <span class="dashboard-section-count">${section.entries.length}名</span>
+        </button>
+      `;
+      const rows = section.entries.map(entry => {
+        const statusKey = entry && entry.monitoringStatus === "completed" ? "completed" : "pending";
+        const statusText = statusKey === "completed" ? "モニタリング実施済み" : "モニタリング未実施";
+        const statusIcon = statusKey === "completed" ? "✅" : "⚠️";
+        const safeId = escapeHtml(entry.id || "");
+        const safeNameAttr = escapeHtml(entry.name || "");
+        const displayName = entry.name ? escapeHtml(entry.name) : "（氏名未登録）";
+        const latest = entry.latestDateText ? escapeHtml(entry.latestDateText) : "---";
+        const careRaw = String(entry.careManager || "").trim();
+        const careParts = parseCareManagerList(careRaw);
+        const careLabel = careParts.length
+          ? careParts.map(part => escapeHtml(part)).join('／')
+          : '<span class="muted">担当未設定</span>';
+        const count = Number(entry.countThisMonth || 0);
+        const link = buildMemberDetailUrl(entry.id || "");
+        const selected = memberId && entry.id === memberId ? " selected" : "";
+        return `
+          <div class="dashboard-entry status-${statusKey}${selected}">
+            <div class="dashboard-entry-main">
+              <div class="dashboard-entry-name">
+                <span>${displayName}</span>
+                <span class="dashboard-entry-id">${safeId}</span>
+              </div>
+              <div class="dashboard-entry-meta">
+                <span>担当：${careLabel}</span>
+                <span>最新記録：${latest}</span>
+                <span>今月：${count}件</span>
+              </div>
+            </div>
+            <div class="dashboard-entry-actions">
+              <span class="dashboard-status-badge ${statusKey}">${statusIcon} ${statusText}</span>
+              <button class="secondary btn-compact dashboard-select" data-id="${safeId}" data-name="${safeNameAttr}">表示</button>
+              <a class="link-button" href="${link}">詳細</a>
+            </div>
+          </div>
+        `;
+      }).join("");
+      return `
+        <section class="dashboard-section" id="${sectionId}" data-section-label="${escapeHtml(section.label)}">
+          ${headerHtml}
+          <div class="dashboard-section-body${isOpen ? " is-open" : ""}" id="${sectionId}-body">
+            ${rows}
+          </div>
+        </section>
+      `;
+    }).join("");
+  }
+
+  if (indexContainer) {
+    if (!indexGroups.length) {
+      indexContainer.innerHTML = `<div class="dashboard-index-empty">該当なし</div>`;
+    } else {
+      indexContainer.innerHTML = indexGroups.map(label => {
+        const sectionId = getDashboardSectionDomId(label);
+        const active = dashboardState.activeInitial === label ? " active" : "";
+        return `<button type="button" class="dashboard-index-btn${active}" data-index="${escapeHtml(label)}" data-target="${sectionId}">${escapeHtml(label)}</button>`;
+      }).join("");
+    }
+  }
+
+  bindDashboardActions();
+  bindDashboardUi();
+  updateDashboardFilterQueryParams();
+
+  if (dashboardState.pendingScrollLabel) {
+    const scrollId = getDashboardSectionDomId(dashboardState.pendingScrollLabel);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(scrollId);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+    dashboardState.pendingScrollLabel = null;
+  }
+}
+
+function bindDashboardUi() {
+  const filterContainer = document.getElementById("dashboardFilters");
+  if (filterContainer) {
+    if (!dashboardState.filters || typeof dashboardState.filters !== "object") {
+      dashboardState.filters = { status: "all", careManagers: [] };
+    }
+    const validStatus = ["all", "pending", "completed"];
+    const statusSelect = filterContainer.querySelector("#dashboardStatusFilter");
+    if (statusSelect) {
+      statusSelect.onchange = (event) => {
+        const value = String(event.target.value || "all");
+        dashboardState.filters.status = validStatus.includes(value) ? value : "all";
+        renderDashboard();
+      };
+    }
+    filterContainer.querySelectorAll(".dashboard-chip").forEach(btn => {
+      const name = btn.dataset.care || "";
+      btn.onclick = () => {
+        if (!name) return;
+        const current = Array.isArray(dashboardState.filters.careManagers) ? dashboardState.filters.careManagers.slice() : [];
+        const idx = current.indexOf(name);
+        if (idx >= 0) {
+          current.splice(idx, 1);
+        } else {
+          current.push(name);
+        }
+        dashboardState.filters.careManagers = current;
+        renderDashboard();
+      };
+    });
+    const clearBtn = filterContainer.querySelector("#dashboardClearFilters");
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        dashboardState.filters = { status: "all", careManagers: [] };
+        renderDashboard();
+      };
+    }
+  }
+
+  const container = document.getElementById("dashboardTable");
+  if (container) {
+    container.querySelectorAll(".dashboard-section-toggle").forEach(btn => {
+      const label = btn.dataset.section || "";
+      btn.onclick = () => {
+        if (!label) return;
+        if (!dashboardState.collapsedSections || typeof dashboardState.collapsedSections !== "object") {
+          dashboardState.collapsedSections = {};
+        }
+        const collapsed = dashboardState.collapsedSections[label] !== false;
+        if (collapsed) {
+          dashboardState.collapsedSections[label] = false;
+          dashboardState.activeInitial = label;
+        } else {
+          dashboardState.collapsedSections[label] = true;
+        }
+        saveDashboardCollapsedSections();
+        renderDashboard();
+      };
+    });
+  }
+
+  const nav = document.getElementById("dashboardIndex");
+  if (nav) {
+    nav.querySelectorAll(".dashboard-index-btn").forEach(btn => {
+      const label = btn.dataset.index || "";
+      btn.onclick = () => { jumpToDashboardInitial(label); };
+    });
+  }
+}
+
+function bindDashboardActions() {
+  document.querySelectorAll(".dashboard-select").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.id || "";
+      const name = btn.dataset.name || "";
+      selectMember(toHalfDigits(id), name);
+    };
+  });
+}
 
 let input = null;
 let listBox = null;
@@ -874,128 +1474,16 @@ function loadMemberData(userId, options = {}) {
   } else {
     console.warn("[member] loadMemberData:memberTag-not-found");
   }
-  recordsCache = [];
-  recordsLoading = true;
-  selectedRecord = null;
-  selectedRecordId = "";
-  const recordListEl = document.getElementById("recordList");
-  if (recordListEl) recordListEl.textContent = "記録を読み込み中です…";
   updateMediaGallery([]);
   closeShareForm();
   resetShareListPlaceholder();
-  updateShareAttachmentOptions([]);
-  renderDashboardPanel();
-  loadMemberCenterInfo(safeId);
+  renderDashboard();
   loadRecords();
   fetchExternalShareList();
   console.log("[member] loadMemberData:complete", { userId: safeId, name });
 }
 
-function setCenterInfoStatus(message, isError = false) {
-  const statusEl = document.getElementById("centerInfoStatus");
-  if (!statusEl) return;
-  statusEl.textContent = message || "";
-  statusEl.style.color = isError ? "#b91c1c" : "#4a5a75";
-  if (centerInfoStatusTimer) {
-    clearTimeout(centerInfoStatusTimer);
-    centerInfoStatusTimer = null;
-  }
-  if (message && !isError) {
-    const currentMessage = String(message);
-    centerInfoStatusTimer = setTimeout(() => {
-      if (statusEl.textContent === currentMessage) {
-        statusEl.textContent = "";
-      }
-    }, 4000);
-  }
-}
-
-async function loadMemberCenterInfo(targetMemberId) {
-  const centerInput = document.getElementById("memberCenterInput");
-  const staffInput = document.getElementById("memberStaffInput");
-  if (!centerInput || !staffInput) return;
-  const normalizedId = targetMemberId != null ? String(targetMemberId).trim() : "";
-  if (!normalizedId) {
-    centerInfoLoadToken++;
-    centerInput.value = "";
-    staffInput.value = "";
-    setCenterInfoStatus("利用者を選択してください");
-    return;
-  }
-  const requestId = ++centerInfoLoadToken;
-  setCenterInfoStatus("センター情報を読み込み中…");
-  try {
-    const res = await callGoogle("getMemberCenterInfo", normalizedId);
-    if (requestId !== centerInfoLoadToken) return;
-    if (res && res.ok) {
-      centerInput.value = res.center || "";
-      staffInput.value = res.staff || "";
-      setCenterInfoStatus("保存済み情報を読み込みました");
-    } else if (res && res.ok === false) {
-      centerInput.value = "";
-      staffInput.value = "";
-      const msg = res.message ? String(res.message) : "センター情報は未登録です";
-      setCenterInfoStatus(msg);
-    } else if (res && res.status === "error") {
-      const msg = res.message ? String(res.message) : "センター情報の取得に失敗しました";
-      setCenterInfoStatus("エラー: " + msg, true);
-    } else {
-      setCenterInfoStatus("");
-    }
-  } catch (err) {
-    if (requestId !== centerInfoLoadToken) return;
-    const msg = err && err.message ? err.message : err;
-    setCenterInfoStatus("エラー: " + msg, true);
-  }
-}
-
-async function handleCenterInfoSave(event) {
-  if (event && typeof event.preventDefault === "function") {
-    event.preventDefault();
-  }
-  const centerInput = document.getElementById("memberCenterInput");
-  const staffInput = document.getElementById("memberStaffInput");
-  if (!centerInput || !staffInput) return;
-  if (!memberId) { alert("利用者を選択してください"); return; }
-  const centerValue = centerInput.value.trim();
-  const staffValue = staffInput.value.trim();
-  setCenterInfoStatus("保存中…");
-  try {
-    const res = await callGoogle("saveMemberCenterInfo", memberId, centerValue, staffValue);
-    if (!res || res.status !== "success") {
-      const msg = res && res.message ? res.message : "保存に失敗しました";
-      throw new Error(msg);
-    }
-    centerInput.value = res.center != null ? res.center : centerValue;
-    staffInput.value = res.staff != null ? res.staff : staffValue;
-    setCenterInfoStatus("保存しました");
-  } catch (err) {
-    const msg = err && err.message ? err.message : err;
-    setCenterInfoStatus("失敗: " + msg, true);
-  }
-}
-
-function setupCenterInfoUi() {
-  if (centerInfoUiInitialized) return;
-  const form = document.getElementById("centerInfoForm");
-  if (!form) return;
-  centerInfoUiInitialized = true;
-  form.addEventListener("submit", handleCenterInfoSave);
-  const refreshBtn = document.getElementById("btnCenterInfoRefresh");
-  if (refreshBtn) {
-    refreshBtn.addEventListener("click", () => {
-      if (!memberId) {
-        setCenterInfoStatus("利用者を選択してください");
-        return;
-      }
-      loadMemberCenterInfo(memberId);
-    });
-  }
-  loadMemberCenterInfo(memberId);
-}
-
 function setupMemberUi() {
-  setupCenterInfoUi();
   const btnAddMember = document.getElementById("btnAddMember");
   if (btnAddMember) {
     btnAddMember.onclick = () => {
@@ -1014,7 +1502,8 @@ function setupMemberUi() {
             selectMember(res.id, res.name || "");
           }
           refreshMemberList();
-                  } else {
+          loadDashboard();
+        } else {
           status.textContent = "失敗: " + res.message;
         }
       }).withFailureHandler(err => {
@@ -1062,10 +1551,7 @@ function setupMemberUi() {
 
   const btnReload = document.getElementById("btnReload");
   if (btnReload) {
-    btnReload.onclick = () => {
-      loadRecords();
-      loadMemberCenterInfo(memberId);
-    };
+    btnReload.onclick = () => loadRecords();
   }
 
   const range = document.getElementById("recordRange");
@@ -1105,7 +1591,8 @@ async function handleSave() {
     document.getElementById("fileInput").value = "";
     setTimeout(() => { status.textContent = ""; }, 3000);
     loadRecords();
-      } catch (err) {
+    loadDashboard();
+  } catch (err) {
     status.textContent = "失敗: " + (err && err.message ? err.message : err);
   }
 }
@@ -1192,110 +1679,71 @@ function formatDateTime(value){
 }
 
 // ===== 過去記録（編集・削除付き） =====
-
-function loadRecords(options = {}) {
+function loadRecords(){
   const list = document.getElementById("recordList");
-  const gallery = document.getElementById("mediaGallery");
   const rangeEl = document.getElementById("recordRange");
+  const gallery = document.getElementById("mediaGallery");
   const days = rangeEl ? rangeEl.value : 'all';
-  if (!memberId) {
-    if (list) list.textContent = "利用者を選択してください";
-    recordsLoading = false;
+  if(!memberId){
+    if(list) list.textContent = "利用者を選択してください";
     recordsCache = [];
-    selectedRecord = null;
-    selectedRecordId = "";
-    renderDashboardPanel();
     updateMediaGallery([]);
     updateShareAttachmentOptions([]);
-    return Promise.resolve();
+    return;
   }
-  recordsLoading = true;
-  if (list) list.textContent = "読込中…";
-  if (gallery) gallery.textContent = "添付を読み込んでいます…";
-  renderDashboardPanel();
-  return callGoogle("getRecordsByMemberId_v3", memberId, days).then(res => {
-    recordsLoading = false;
-    if (!res || res.status !== "success") {
-      const msg = res && res.message ? res.message : "取得に失敗しました";
-      if (list) list.textContent = "エラー:" + msg;
+  if(list) list.textContent = "読込中…";
+  if(gallery) gallery.textContent = "添付を読み込んでいます…";
+  google.script.run.withSuccessHandler(res=>{
+    if(!res || res.status!=="success"){
+      if(list) list.textContent = "エラー:" + (res && res.message ? res.message : "取得に失敗しました");
       recordsCache = [];
-      selectedRecord = null;
-      selectedRecordId = "";
-      renderDashboardPanel();
       updateMediaGallery([]);
       updateShareAttachmentOptions([]);
       return;
     }
-    recordsCache = (Array.isArray(res.records) ? res.records : []).map(normalizeRecord);
-    const keepRowIndex = options.keepRowIndex ? String(options.keepRowIndex) : "";
-    const keepRecordId = options.keepRecordId ? String(options.keepRecordId) : "";
-    if (keepRowIndex || keepRecordId) {
-      const match = recordsCache.find(rec => {
-        const id = getRecordIdentifier(rec);
-        if (keepRecordId && id === keepRecordId) return true;
-        if (keepRowIndex && String(rec.rowIndex || '') === keepRowIndex) return true;
-        return false;
-      });
-      selectedRecord = match || null;
-      selectedRecordId = match ? getRecordIdentifier(match) : "";
-    } else {
-      selectedRecord = null;
-      selectedRecordId = "";
-    }
+    recordsCache = (Array.isArray(res.records)?res.records:[]).map(normalizeRecord);
     renderRecords();
     updateShareAttachmentOptions(recordsCache);
-    updateMediaGallery(recordsCache);
-    ensureSelectedRecord();
-  }).catch(err => {
-    recordsLoading = false;
+  }).withFailureHandler(err=>{
     const msg = err && err.message ? err.message : err;
-    if (list) list.textContent = "エラー:" + msg;
+    if(list) list.textContent = "エラー:" + msg;
     recordsCache = [];
-    selectedRecord = null;
-    selectedRecordId = "";
-    renderDashboardPanel();
     updateMediaGallery([]);
     updateShareAttachmentOptions([]);
-  });
+  }).getRecordsByMemberId_v3(memberId, days);
 }
 
-function renderRecords() {
+function renderRecords(){
   const list = document.getElementById("recordList");
-  if (!list) return;
-  if (!memberId) {
+  if(!list) return;
+  if(!memberId){
     list.textContent = "利用者を選択してください";
     updateMediaGallery([]);
     return;
   }
-  if (!recordsCache.length) {
-    list.textContent = "記録が存在しません";
+  if(!recordsCache.length){
+    list.textContent = "記録なし";
     updateMediaGallery([]);
     return;
   }
   const filtered = filterRecords(recordsCache);
-  if (!filtered.length) {
+  if(!filtered.length){
     list.textContent = "条件に一致する記録がありません";
     updateMediaGallery([]);
     return;
   }
   const html = filtered.map(record => {
-    const safeText = escapeHtml(record.text || "").replace(/\n/g, '<br>');
+    const safeText = escapeHtml(record.text || '').replace(/\n/g, '<br>');
     const attachmentsHtml = (record.attachments && record.attachments.length)
       ? `<div class="attachments">${record.attachments.map((att, i) => renderAttachment(att, record, i)).join('')}</div>`
       : '';
-    const identifier = getRecordIdentifier(record);
-    const isSelected = identifier && identifier === selectedRecordId;
-    const classes = isSelected ? 'record selected' : 'record';
-    const details = [];
-    if (record.center) details.push(`地域包括支援センター: ${escapeHtml(record.center)}`);
-    if (record.staff) details.push(`担当者名: ${escapeHtml(record.staff)}`);
-    return `<div class="${classes}" data-row="${record.rowIndex}" data-record-id="${escapeHtml(identifier)}">
+    return `<div class="record" data-row="${record.rowIndex}">
       <div><b>${escapeHtml(record.dateText || '')}</b>【${escapeHtml(record.kind || '')}】</div>
-      ${details.length ? `<div class="muted">${details.join(' / ')}</div>` : ''}
       <div class="text">${safeText || '<span class="muted">（本文なし）</span>'}</div>
       ${attachmentsHtml}
       <div class="toolbar">
-        <button class="secondary btnEdit">詳細</button>
+        <button class="secondary btnEdit">編集</button>
+        <button class="danger btnDelete">削除</button>
       </div>
     </div>`;
   }).join('');
@@ -1309,10 +1757,61 @@ function bindRecordActions() {
     btn.onclick = () => {
       const rec = btn.closest(".record");
       if (!rec) return;
-      selectRecordByRow(rec.dataset.row, rec.dataset.recordId);
+      const row = rec.dataset.row;
+      const textEl = rec.querySelector(".text");
+      const oldText = textEl ? textEl.textContent : "";
+      const nv = prompt("内容を修正:", oldText);
+      if (nv === null) return;
+      google.script.run.withSuccessHandler(() => {
+        loadRecords();
+      }).withFailureHandler(err => {
+        alert("更新に失敗しました: " + (err && err.message ? err.message : err));
+      }).updateRecord(row, nv);
+    };
+  });
+  document.querySelectorAll(".btnDelete").forEach(btn => {
+    btn.onclick = () => {
+      const rec = btn.closest(".record");
+      if (!rec) return;
+      const row = rec.dataset.row;
+      if (!confirm("この記録を削除しますか？")) return;
+      google.script.run.withSuccessHandler(() => {
+        loadRecords();
+        loadDashboard();
+      }).withFailureHandler(err => {
+        alert("削除に失敗しました: " + (err && err.message ? err.message : err));
+      }).deleteRecord(row);
     };
   });
 }
+
+
+  function setupFilters() {
+    ["filterKind", "filterDateFrom", "filterDateTo"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("change", () => { renderRecords(); });
+      }
+    });
+    const text = document.getElementById("filterText");
+    if (text) {
+      text.addEventListener("input", () => { renderRecords(); });
+    }
+    const clear = document.getElementById("btnClearFilters");
+    if (clear) {
+      clear.addEventListener("click", () => {
+        const kindEl = document.getElementById("filterKind");
+        const fromEl = document.getElementById("filterDateFrom");
+        const toEl = document.getElementById("filterDateTo");
+        const textEl = document.getElementById("filterText");
+        if (kindEl) kindEl.value = "all";
+        if (fromEl) fromEl.value = "";
+        if (toEl) toEl.value = "";
+        if (textEl) textEl.value = "";
+        renderRecords();
+      });
+    }
+  }
 
 function collectAttachmentOptions(records){
   const map=new Map();
@@ -1503,7 +2002,6 @@ function renderShareList(){
   }
   list.classList.remove("muted");
   list.innerHTML=externalShares.map(renderShareItem).join("\n");
-  injectShareQrImages(list);
 }
 
 function renderShareItem(share){
@@ -1527,11 +2025,8 @@ function renderShareItem(share){
   const qrSrc=share.qrDataUrl||share.qrUrl||"";
   const fallbackQr=!qrSrc && shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"";
   const qrUrl=qrSrc||fallbackQr;
-  const usingFallback=!qrSrc && !!fallbackQr;
-  const fallbackNote=usingFallback?`<div class="share-qr-note">QRコードの生成に失敗したためGoogle Chart APIで代替表示しています。</div>`:"";
-  const encodedQr=qrUrl?encodeURIComponent(qrUrl):"";
-  const qrHtml=qrUrl?`<div class="share-qr" data-qr-url="${encodedQr}"><div class="share-qr-image" data-qr-image><div class="share-qr-placeholder">QRコードを表示しています…</div></div><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
-    + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div>${fallbackNote}</div>`:"";
+  const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
+    + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div></div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
   return `<div class="${itemClass}">`
     + `<div class="share-item-header"><span class="badge">${badgeLabel}</span>`
@@ -1545,36 +2040,6 @@ function renderShareItem(share){
     + `<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`
     + `</div>`
     + `</div>`;
-}
-
-function injectShareQrImages(root){
-  const scope=root instanceof Element?root:document;
-  const containers=scope.querySelectorAll('.share-qr[data-qr-url]');
-  containers.forEach(container=>{
-    if(container.dataset.qrInitialized==='1') return;
-    const encoded=container.getAttribute('data-qr-url')||'';
-    if(!encoded) return;
-    let src='';
-    try {
-      src=decodeURIComponent(encoded);
-    } catch(_err){
-      src=encoded;
-    }
-    if(!src) return;
-    const holder=container.querySelector('[data-qr-image]')||container;
-    const img=document.createElement('img');
-    img.className='share-qr-img';
-    img.alt='共有QRコード';
-    img.loading='lazy';
-    img.src=src;
-    if(holder){
-      holder.innerHTML='';
-      holder.appendChild(img);
-    }else{
-      container.appendChild(img);
-    }
-    container.dataset.qrInitialized='1';
-  });
 }
 
 async function handleShareListClick(event){
@@ -1638,6 +2103,7 @@ function openSharePrintView(share){
   }
 }
 async function handleCreateShare(event){
+  console.log("🔎 handleCreateShare start", { memberId, config: collectShareFormConfig() });
   if(event) event.preventDefault();
   if(!memberId){ alert("利用者を選択してください"); return; }
   const status=document.getElementById("shareFormStatus");
@@ -1751,7 +2217,8 @@ function initInternalApp(){
   setupFilters();
   setupShareUi();
   resetShareListPlaceholder();
-  }
+  loadDashboard();
+}
 
 function runAfterDomReady(fn){
   if(document.readyState === "loading"){
@@ -1766,6 +2233,104 @@ runAfterDomReady(()=>{
   setupSearchBox();
   initInternalApp();
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+    const audience = document.getElementById("shareAudience");
+    const expiry   = document.getElementById("shareExpiryPreset");
+    const range    = document.getElementById("shareRange");
+
+    if (audience) audience.value = "center";
+    if (expiry)   expiry.value   = "10";
+    if (range)    range.value    = "90";
+  });
+
+  document.getElementById("btnOpenShareForm")?.addEventListener("click", () => {
+    const audience = document.getElementById("shareAudience");
+    const expiry   = document.getElementById("shareExpiryPreset");
+    const range    = document.getElementById("shareRange");
+
+    if (audience) audience.value = "center";
+    if (expiry)   expiry.value   = "10";
+    if (range)    range.value    = "90";
+  });
+// 利用者を選択したらセンター情報を取得して表示
+function loadCenterInfo(memberId){
+  google.script.run.withSuccessHandler((res)=>{
+    if(res.status==="success"){
+      document.getElementById("centerSelect").value = res.center || "";
+      document.getElementById("staffInput").value = res.staff || "";
+    }else{
+      document.getElementById("centerSelect").value = "";
+      document.getElementById("staffInput").value = "";
+    }
+  }).getMemberCenterInfo(memberId);
+}
+
+// 保存
+document.getElementById("btnSaveCenter").addEventListener("click", () => {
+  // 「5767 新谷 治子」などから先頭の数字だけ取り出すfunction loadMemberCenterInfo(memberId) 
+  const memberIdRaw = document.getElementById("memberIdInput").value || "";
+  const memberId = (memberIdRaw.trim().match(/^\s*([０-９0-9]+)/) || [,""])[1]; // 先頭の数字（全角可）
+  const center = document.getElementById("centerSelect").value;
+  const staff  = document.getElementById("staffInput").value;
+
+  google.script.run.withSuccessHandler(res => {
+    if (res && res.ok) {
+      alert("保存しました");
+    } else {
+      alert("保存に失敗しました: " + (res && res.message ? res.message : ""));
+    }
+  }).saveMemberCenterInfo(memberId, center, staff);
+});
+
+document.getElementById("btnClearCenter").addEventListener("click", () => {
+  const memberIdRaw = document.getElementById("memberIdInput").value || "";
+  const memberId = (memberIdRaw.trim().match(/^\s*([０-９0-9]+)/) || [,""])[1];
+
+  google.script.run.withSuccessHandler(res => {
+    if (res && res.ok) {
+      alert("削除しました");
+      document.getElementById("centerSelect").value = "";
+      document.getElementById("staffInput").value  = "";
+    } else {
+      alert("削除に失敗しました: " + (res && res.message ? res.message : ""));
+    }
+  }).clearMemberCenterInfo(memberId);
+});
+
+
+
+// 削除
+document.getElementById("btnClearCenter").addEventListener("click", ()=>{
+  const memberId = document.getElementById("memberIdInput").value;
+  google.script.run.withSuccessHandler((res)=>{
+    alert("削除しました");
+    document.getElementById("centerSelect").value="";
+    document.getElementById("staffInput").value="";
+  }).saveMemberCenterInfo(memberId, "");
+});
+function loadMemberCenterInfo(memberId) {
+  google.script.run.withSuccessHandler(res => {
+    if (res && res.ok) {
+      document.getElementById("centerSelect").value = res.center || "";
+      document.getElementById("staffInput").value  = res.staff  || "";
+    } else {
+      // 見つからなければ空にする
+      document.getElementById("centerSelect").value = "";
+      document.getElementById("staffInput").value  = "";
+    }
+  }).getMemberCenterInfo(memberId);
+}
+
+// 利用者選択時（更新ボタン押下時など）に呼ぶ
+document.getElementById("btnReload").addEventListener("click", () => {
+  const memberIdRaw = document.getElementById("memberIdInput").value || "";
+  const memberId = (memberIdRaw.trim().match(/^\s*([０-９0-9]+)/) || [,""])[1];
+  if (memberId) {
+    loadMemberCenterInfo(memberId);
+  }
+});
+
 </script>
 </body>
 </html>
