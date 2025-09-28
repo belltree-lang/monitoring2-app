@@ -2175,24 +2175,28 @@ function test_fetchRecords() {
 
 /** 取得・保存・削除 */
 function getMemberCenterInfo(memberIdRaw) {
-  const row = findMemberRowById_(memberIdRaw);
-  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + normalizeMemberId_(memberIdRaw) };
+  const safeId = normalizeMemberId_(memberIdRaw);
+  const row = findMemberRowById_(safeId);
+  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + safeId };
   const sh = ensureMemberCenterHeaders_();
   return {
     ok: true,
-    id: normalizeMemberId_(memberIdRaw),
-    center: String(sh.getRange(row, 4).getValue() || ''), // D
-    staff:  String(sh.getRange(row, 5).getValue() || '')  // E
+    id: safeId,
+    center: String(sh.getRange(row, 4).getValue() || '').trim(), // D
+    staff:  String(sh.getRange(row, 5).getValue() || '').trim()  // E
   };
 }
 
 function saveMemberCenterInfo(memberIdRaw, center, staff) {
-  const row = findMemberRowById_(memberIdRaw);
-  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + normalizeMemberId_(memberIdRaw) };
+  const safeId = normalizeMemberId_(memberIdRaw);
+  const row = findMemberRowById_(safeId);
+  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + safeId };
   const sh = ensureMemberCenterHeaders_();
-  sh.getRange(row, 4).setValue(String(center || '')); // D=センター
-  sh.getRange(row, 5).setValue(String(staff  || '')); // E=担当者
-  return { ok:true };
+  const centerSafe = String(center || '').trim();
+  const staffSafe = String(staff  || '').trim();
+  sh.getRange(row, 4).setValue(centerSafe); // D=センター
+  sh.getRange(row, 5).setValue(staffSafe); // E=担当者
+  return { ok:true, id: safeId, center: centerSafe, staff: staffSafe };
 }
 /** ほのぼのIDシート: D=センター, E=担当者 を保証 */
 function ensureMemberCenterHeaders_() {
@@ -2219,10 +2223,11 @@ function findMemberRowById_(memberIdRaw) {
   return 0;
 }
 function clearMemberCenterInfo(memberIdRaw) {
-  const row = findMemberRowById_(memberIdRaw);
-  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + normalizeMemberId_(memberIdRaw) };
+  const safeId = normalizeMemberId_(memberIdRaw);
+  const row = findMemberRowById_(safeId);
+  if (!row) return { ok:false, message:'対象のIDが見つかりません: ' + safeId };
   const sh = ensureMemberCenterHeaders_();
   sh.getRange(row, 4, 1, 2).clearContent(); // D,E を空に
-  return { ok:true };
+  return { ok:true, id: safeId };
 }
 
