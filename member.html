@@ -138,6 +138,10 @@ button:hover { opacity:0.9;}
 .share-item .tag-group { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .share-form .toolbar { gap:8px; }
 .share-attachments-all { font-size:0.82rem; display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.share-form .share-qr-preview { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.share-form .share-qr-preview img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+.share-form .share-qr-preview-info { display:flex; flex-direction:column; gap:4px; font-size:0.78rem; color:#445; }
+.share-form .share-qr-preview-url { font-weight:600; word-break:break-all; color:#1957a3; }
 </style>
 </head>
 <body>
@@ -831,6 +835,20 @@ function normalizeMemberIdForLookup(value) {
   return digits.padStart(4, "0");
 }
 
+function getCurrentMemberIdForCenter() {
+  if (memberId) return memberId;
+  const inputEl = document.getElementById("memberIdInput");
+  if (!inputEl) return "";
+  return normalizeMemberIdForLookup(inputEl.value || "");
+}
+
+function updateCenterFormValues(centerValue, staffValue) {
+  const centerEl = document.getElementById("centerSelect");
+  const staffEl = document.getElementById("staffInput");
+  if (centerEl) centerEl.value = centerValue ?? "";
+  if (staffEl) staffEl.value = staffValue ?? "";
+}
+
 let initialMemberId = (() => {
   const raw = queryParams.get("id") || "";
   if (!raw) return "";
@@ -1450,6 +1468,7 @@ function selectMember(id, name) {
   if (adviceEl) adviceEl.textContent = "ここに提案が表示されます";
   console.log("[member] selectMember:load", { id: safeId });
   loadMemberData(safeId, { name: memberName, label });
+  loadMemberCenterInfo(safeId);
   console.log("[member] selectMember:complete", { id: safeId, name: memberName });
 }
 
@@ -1551,7 +1570,61 @@ function setupMemberUi() {
 
   const btnReload = document.getElementById("btnReload");
   if (btnReload) {
-    btnReload.onclick = () => loadRecords();
+    btnReload.onclick = () => {
+      loadRecords();
+      const currentId = getCurrentMemberIdForCenter();
+      if (currentId) {
+        loadMemberCenterInfo(currentId);
+      }
+    };
+  }
+
+  const btnSaveCenter = document.getElementById("btnSaveCenter");
+  if (btnSaveCenter) {
+    btnSaveCenter.onclick = () => {
+      const targetId = getCurrentMemberIdForCenter();
+      if (!targetId) { alert("利用者を選択してください"); return; }
+      const centerValue = document.getElementById("centerSelect")?.value || "";
+      const staffValue = document.getElementById("staffInput")?.value || "";
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res && res.ok) {
+            alert("保存しました");
+            loadMemberCenterInfo(targetId);
+          } else {
+            const msg = res && res.message ? res.message : "";
+            alert("保存に失敗しました: " + msg);
+          }
+        })
+        .withFailureHandler(err => {
+          const msg = err && err.message ? err.message : String(err);
+          alert("保存に失敗しました: " + msg);
+        })
+        .saveMemberCenterInfo(targetId, centerValue, staffValue);
+    };
+  }
+
+  const btnClearCenter = document.getElementById("btnClearCenter");
+  if (btnClearCenter) {
+    btnClearCenter.onclick = () => {
+      const targetId = getCurrentMemberIdForCenter();
+      if (!targetId) { alert("利用者を選択してください"); return; }
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res && res.ok) {
+            alert("削除しました");
+            updateCenterFormValues("", "");
+          } else {
+            const msg = res && res.message ? res.message : "";
+            alert("削除に失敗しました: " + msg);
+          }
+        })
+        .withFailureHandler(err => {
+          const msg = err && err.message ? err.message : String(err);
+          alert("削除に失敗しました: " + msg);
+        })
+        .clearMemberCenterInfo(targetId);
+    };
   }
 
   const range = document.getElementById("recordRange");
@@ -1930,7 +2003,10 @@ function toggleShareForm(open){
   shareFormOpen=!!open;
   form.style.display=shareFormOpen?"":"none";
   const status=document.getElementById("shareFormStatus");
-  if(status) status.textContent="";
+  if(status){
+    status.textContent="";
+    status.classList.add("muted");
+  }
   if(shareFormOpen){
     updateShareAttachmentOptions(recordsCache);
     applyShareExpiryPreset();
@@ -2115,8 +2191,17 @@ async function handleCreateShare(event){
       const msg=res && res.message ? res.message : "共有リンクの発行に失敗しました";
       throw new Error(msg);
     }
-    if(status) status.textContent="共有リンクを発行しました。リストからURLコピーやQR印刷ができます。";
-    toggleShareForm(false);
+    if(status){
+      const qrUrl=res.qrDataUrl || res.qrUrl || "";
+      const shareUrl=res.url || res.shareLink || "";
+      const safeUrl=escapeHtml(shareUrl);
+      const safeQr=qrUrl ? escapeHtml(qrUrl) : "";
+      const qrHtml=qrUrl
+        ? `<div class="share-qr-preview"><img src="${safeQr}" alt="共有QRコード"><div class="share-qr-preview-info"><div>スマートフォンで読み取ると共有ページを開けます。</div>${shareUrl?`<div class="share-qr-preview-url">${safeUrl}</div>`:""}</div></div>`
+        : "";
+      status.classList.remove("muted");
+      status.innerHTML=`<div>共有リンクを発行しました。リストからURLコピーやQR印刷ができます。</div>${qrHtml}`;
+    }
     fetchExternalShareList();
   } catch(err){
     if(status) status.textContent="失敗: " + (err && err.message ? err.message : err);
@@ -2244,7 +2329,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (range)    range.value    = "90";
   });
 
-  document.getElementById("btnOpenShareForm")?.addEventListener("click", () => {
+document.getElementById("btnOpenShareForm")?.addEventListener("click", () => {
     const audience = document.getElementById("shareAudience");
     const expiry   = document.getElementById("shareExpiryPreset");
     const range    = document.getElementById("shareRange");
@@ -2253,83 +2338,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if (expiry)   expiry.value   = "10";
     if (range)    range.value    = "90";
   });
-// 利用者を選択したらセンター情報を取得して表示
-function loadCenterInfo(memberId){
-  google.script.run.withSuccessHandler((res)=>{
-    if(res.status==="success"){
-      document.getElementById("centerSelect").value = res.center || "";
-      document.getElementById("staffInput").value = res.staff || "";
-    }else{
-      document.getElementById("centerSelect").value = "";
-      document.getElementById("staffInput").value = "";
-    }
-  }).getMemberCenterInfo(memberId);
-}
 
-// 保存
-document.getElementById("btnSaveCenter").addEventListener("click", () => {
-  // 「5767 新谷 治子」などから先頭の数字だけ取り出すfunction loadMemberCenterInfo(memberId) 
-  const memberIdRaw = document.getElementById("memberIdInput").value || "";
-  const memberId = (memberIdRaw.trim().match(/^\s*([０-９0-9]+)/) || [,""])[1]; // 先頭の数字（全角可）
-  const center = document.getElementById("centerSelect").value;
-  const staff  = document.getElementById("staffInput").value;
-
-  google.script.run.withSuccessHandler(res => {
-    if (res && res.ok) {
-      alert("保存しました");
-    } else {
-      alert("保存に失敗しました: " + (res && res.message ? res.message : ""));
-    }
-  }).saveMemberCenterInfo(memberId, center, staff);
-});
-
-document.getElementById("btnClearCenter").addEventListener("click", () => {
-  const memberIdRaw = document.getElementById("memberIdInput").value || "";
-  const memberId = (memberIdRaw.trim().match(/^\s*([０-９0-9]+)/) || [,""])[1];
-
-  google.script.run.withSuccessHandler(res => {
-    if (res && res.ok) {
-      alert("削除しました");
-      document.getElementById("centerSelect").value = "";
-      document.getElementById("staffInput").value  = "";
-    } else {
-      alert("削除に失敗しました: " + (res && res.message ? res.message : ""));
-    }
-  }).clearMemberCenterInfo(memberId);
-});
-
-
-
-// 削除
-document.getElementById("btnClearCenter").addEventListener("click", ()=>{
-  const memberId = document.getElementById("memberIdInput").value;
-  google.script.run.withSuccessHandler((res)=>{
-    alert("削除しました");
-    document.getElementById("centerSelect").value="";
-    document.getElementById("staffInput").value="";
-  }).saveMemberCenterInfo(memberId, "");
-});
-function loadMemberCenterInfo(memberId) {
-  google.script.run.withSuccessHandler(res => {
-    if (res && res.ok) {
-      document.getElementById("centerSelect").value = res.center || "";
-      document.getElementById("staffInput").value  = res.staff  || "";
-    } else {
-      // 見つからなければ空にする
-      document.getElementById("centerSelect").value = "";
-      document.getElementById("staffInput").value  = "";
-    }
-  }).getMemberCenterInfo(memberId);
-}
-
-// 利用者選択時（更新ボタン押下時など）に呼ぶ
-document.getElementById("btnReload").addEventListener("click", () => {
-  const memberIdRaw = document.getElementById("memberIdInput").value || "";
-  const memberId = (memberIdRaw.trim().match(/^\s*([０-９0-9]+)/) || [,""])[1];
-  if (memberId) {
-    loadMemberCenterInfo(memberId);
+function loadMemberCenterInfo(targetMemberId) {
+  const safeId = normalizeMemberIdForLookup(targetMemberId || getCurrentMemberIdForCenter());
+  if (!safeId) {
+    updateCenterFormValues("", "");
+    return;
   }
-});
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res && res.ok) {
+        updateCenterFormValues(res.center || "", res.staff || "");
+      } else if (res && res.ok === false) {
+        updateCenterFormValues("", "");
+      }
+    })
+    .withFailureHandler(err => {
+      console.error("[member] loadMemberCenterInfo failed", err);
+    })
+    .getMemberCenterInfo(safeId);
+}
 
 </script>
 </body>
