@@ -107,7 +107,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
         <span class="profile-value" id="shareMemberCenter">確認中…</span>
       </div>
       <div class="profile-item">
-        <span class="profile-label">担当ケアマネジャー</span>
+        <span class="profile-label">ご担当者</span>
         <span class="profile-value" id="shareMemberStaff">確認中…</span>
       </div>
     </div>
@@ -283,12 +283,14 @@ function callGoogle(functionName, ...args){
 
 const EXEC_BASE_URL = window.location.href.split('#')[0].split('?')[0];
 
-async function callShareApi(action, options = {}){
+async function callShareApi(action, options = {}) {
   const token = options.token || externalToken;
   if (!token) throw new Error('共有リンクが見つかりません。');
   const requestedRecordId = options.recordId !== undefined ? options.recordId : resolvedRecordId;
   const recordIdValue = requestedRecordId ? String(requestedRecordId) : '';
   const canUseGoogleRun = typeof google !== 'undefined' && google.script && google.script.run;
+
+  // まず google.script.run が使える場合（GAS クライアント経由）を優先
   if (canUseGoogleRun) {
     if (action === 'meta') {
       return callGoogle('getExternalShareMeta', token, recordIdValue || '');
@@ -297,19 +299,25 @@ async function callShareApi(action, options = {}){
       return callGoogle('enterExternalShare', token, options.password || '', recordIdValue || '');
     }
   }
+
+  // API 呼び出し用に shareApi パラメータを必ず付与する（HTML表示と区別）
   if (action === 'meta') {
-    const params = new URLSearchParams({ shareApi: 'meta', shareId: token });
+    const params = new URLSearchParams({ api: 'shareMeta', shareId: token });
     if (recordIdValue) params.set('recordId', recordIdValue);
-    const res = await fetch(`${EXEC_BASE_URL}?${params.toString()}`, { credentials: 'include' });
+
+    const res = await fetch(`${EXEC_BASE_URL}?${params.toString()}`);
     if (!res.ok) throw new Error('共有設定の取得に失敗しました。');
+
     try {
       return await res.json();
     } catch (err) {
       throw new Error('共有設定の解析に失敗しました。');
     }
   }
+
   if (action === 'enter') {
-    const body = new URLSearchParams({ action: 'shareEnter', shareId: token, password: options.password || '' });
+    // POST で JSON を要求（shareApi=enter を付与）
+    const body = new URLSearchParams({ shareApi: 'enter', shareId: token, password: options.password || '' });
     if (recordIdValue) body.append('recordId', recordIdValue);
     const res = await fetch(EXEC_BASE_URL, {
       method: 'POST',
@@ -324,8 +332,10 @@ async function callShareApi(action, options = {}){
       throw new Error('閲覧レスポンスの解析に失敗しました。');
     }
   }
+
   throw new Error('未知の共有APIアクションです');
 }
+
 
 function setLoading(message){
   const statusEl = document.getElementById('shareStatus');
@@ -475,52 +485,51 @@ function handlePrintClick(){
   window.open(url, '_blank', 'noopener');
 }
 
+/** キーワード装飾は try/catch で必ず成功させる */
 function decorateText(value){
   let safe = escapeHtml(value || '');
-  KEYWORD_RULES.forEach(rule => {
-    const regex = new RegExp(rule.pattern, 'gi');
-    safe = safe.replace(regex, match => `<span class="keyword-hit ${rule.className}">${match}</span>`);
-  });
+  try {
+    KEYWORD_RULES.forEach(rule => {
+      const regex = new RegExp(rule.pattern, 'gi');
+      safe = safe.replace(regex, match => `<span class="keyword-hit ${rule.className}">${escapeHtml(match)}</span>`);
+    });
+  } catch(_e) { /* 無視して素の本文を表示 */ }
   return safe.replace(/\n/g, '<br>');
 }
 
 function buildRecordHtml(record, showKind){
-  const metaParts = [];
-  metaParts.push(escapeHtml(record.dateText || '---'));
-  if(showKind){
-    metaParts.push(escapeHtml(record.kind || '種別未設定'));
-  }
-  if(record.center){
-    metaParts.push(`地域包括支援センター：${escapeHtml(record.center)}`);
-  }
-  if(record.staff){
-    metaParts.push(`担当：${escapeHtml(record.staff)}`);
-  }
-  const metaHtml = metaParts.map(part => `<span>${part}</span>`).join('<span>｜</span>');
+  const meta = [];
+  meta.push(escapeHtml(record.dateText || '---'));
+  if (showKind) meta.push(escapeHtml(record.kind || '種別未設定'));
+  if (record.center) meta.push(`地域包括支援センター：${escapeHtml(record.center)}`);
+  if (record.staff)  meta.push(`担当：${escapeHtml(record.staff)}`);
+
   const attachments = Array.isArray(record.attachments) ? record.attachments : [];
   const attachmentsHtml = attachments.length
-    ? `<div class="record-attachments">${attachments.map(att => {
-        const name = escapeHtml(att && att.name ? att.name : '添付ファイル');
-        const url = escapeHtml(att && att.url ? att.url : '#');
-        return `<a href="${url}" target="_blank" rel="noopener">📎 ${name}</a>`;
-      }).join('')}</div>`
+    ? `<div class="record-attachments">${
+        attachments.map(att => {
+          const name = escapeHtml(att && att.name ? att.name : '添付ファイル');
+          const url  = escapeHtml(att && att.url  ? att.url  : '#');
+          return `<a href="${url}" target="_blank" rel="noopener">📎 ${name}</a>`;
+        }).join('')
+      }</div>`
     : '';
-  const detailSections = [];
-  if(record.status){
-    detailSections.push(`<div class="record-submeta"><strong>状態・経過：</strong>${escapeHtml(record.status)}</div>`);
-  }
-  if(record.special){
-    detailSections.push(`<div class="record-submeta"><strong>特記事項：</strong>${escapeHtml(record.special)}</div>`);
-  }
-  const classes = (latestTimestamp && Number(record.timestamp||0) === latestTimestamp)
-    ? 'share-record latest'
-    : 'share-record';
-  return `<article class="${classes}">
-    <div class="record-meta">${metaHtml}</div>
-    <div class="record-text">${decorateText(record.text || '') || '<span class="share-muted">（本文なし）</span>'}</div>
-    ${detailSections.join('')}
-    ${attachmentsHtml}
-  </article>`;
+
+  const details = [];
+  if (record.status)  details.push(`<div class="record-submeta"><strong>状態・経過：</strong>${escapeHtml(record.status)}</div>`);
+  if (record.special) details.push(`<div class="record-submeta"><strong>特記事項：</strong>${escapeHtml(record.special)}</div>`);
+
+  const isLatest = (latestTimestamp && Number(record.timestamp || 0) === latestTimestamp);
+  const cls = isLatest ? 'share-record latest' : 'share-record';
+
+  return [
+    `<article class="${cls}">`,
+      `<div class="record-meta">${meta.map(m => `<span>${m}</span>`).join('<span>｜</span>')}</div>`,
+      `<div class="record-text">${decorateText(record.text || '') || '<span class="share-muted">（本文なし）</span>'}</div>`,
+      details.join(''),
+      attachmentsHtml,
+    `</article>`
+  ].join('');
 }
 
 function updateKindOptions(){
@@ -597,58 +606,62 @@ function getFilterValues(){
   return { searchValue, kindValue, sortValue, fromTime, toTime };
 }
 
+/** フィルタ＆ソート（安全に） */
 function applyFilters(resetLimit){
-  if(resetLimit) displayLimit = DISPLAY_LIMIT_DEFAULT;
-  if(singleRecordMode){
+  if (resetLimit) displayLimit = DISPLAY_LIMIT_DEFAULT;
+
+  if (singleRecordMode) {
     filteredRecords = recordsCache.slice();
     displayLimit = filteredRecords.length;
     renderRecords();
     updateStatus('');
     return;
   }
+
   const { searchValue, kindValue, sortValue, fromTime, toTime } = getFilterValues();
   let results = recordsCache.slice();
-  if(kindValue && kindValue !== 'all'){
-    results = results.filter(rec => String(rec.kind||'') === kindValue);
+
+  if (kindValue && kindValue !== 'all') {
+    results = results.filter(rec => String(rec.kind || '') === kindValue);
   }
-  if(fromTime){
-    results = results.filter(rec => typeof rec.timestamp === 'number' ? rec.timestamp >= fromTime : true);
-  }
-  if(toTime){
-    results = results.filter(rec => typeof rec.timestamp === 'number' ? rec.timestamp <= toTime : true);
-  }
-  if(searchValue){
+  if (fromTime) results = results.filter(rec => typeof rec.timestamp === 'number' ? rec.timestamp >= fromTime : true);
+  if (toTime)   results = results.filter(rec => typeof rec.timestamp === 'number' ? rec.timestamp <= toTime   : true);
+
+  if (searchValue) {
     const lower = searchValue.toLowerCase();
-    results = results.filter(rec => rec.searchIndex.includes(lower));
+    results = results.filter(rec => (rec.searchIndex || '').includes(lower));
   }
-  const compareDesc = (a,b) => (Number(b.timestamp||0)||0) - (Number(a.timestamp||0)||0);
-  if(sortValue === 'asc'){
+
+  const cmpDesc = (a, b) => (Number(b.timestamp || 0) || 0) - (Number(a.timestamp || 0) || 0);
+  if (sortValue === 'asc') {
     results.sort((a,b) => (Number(a.timestamp||0)||0) - (Number(b.timestamp||0)||0));
-  }else if(sortValue === 'kind'){
+  } else if (sortValue === 'kind') {
     results.sort((a,b) => {
-      const diff = String(a.kind||'').localeCompare(String(b.kind||''), 'ja');
-      if(diff !== 0) return diff;
-      return compareDesc(a,b);
+      const d = String(a.kind||'').localeCompare(String(b.kind||''), 'ja');
+      return d !== 0 ? d : cmpDesc(a,b);
     });
-  }else{
-    results.sort(compareDesc);
+  } else {
+    results.sort(cmpDesc);
   }
+
   filteredRecords = results;
   renderRecords();
   updateStatus(searchValue);
 }
 
+/** 安定レンダリング（空配列や件数に耐性） */
 function renderRecords(){
   const container = document.getElementById('recordsContainer');
-  const emptyEl = document.getElementById('emptyState');
-  const loadMore = document.getElementById('loadMore');
-  if(!container) return;
-  if(!filteredRecords.length){
+  const emptyEl   = document.getElementById('emptyState');
+  const loadMore  = document.getElementById('loadMore');
+  if (!container) return;
+
+  if (!filteredRecords.length) {
     container.innerHTML = '';
-    if(emptyEl){
-      if(recordsCache.length){
+    if (emptyEl) {
+      if (recordsCache.length) {
         emptyEl.textContent = '条件に合致する記録がありません。';
-      }else{
+      } else {
         const noRecordMessage = currentShare && currentShare.hasRecords === false
           ? '記録が存在しません'
           : '共有可能な記録はまだありません。';
@@ -656,16 +669,34 @@ function renderRecords(){
       }
       emptyEl.style.display = 'block';
     }
-    if(loadMore) loadMore.style.display = 'none';
+    if (loadMore) loadMore.style.display = 'none';
     return;
   }
-  if(emptyEl) emptyEl.style.display = 'none';
+
+  if (emptyEl) emptyEl.style.display = 'none';
   const showKind = currentShare ? (currentShare.audience !== 'family') : true;
   const items = filteredRecords.slice(0, displayLimit).map(rec => buildRecordHtml(rec, showKind)).join('\n');
   container.innerHTML = items;
-  if(loadMore){
-    loadMore.style.display = filteredRecords.length > displayLimit ? 'block' : 'none';
+  if (loadMore) loadMore.style.display = filteredRecords.length > displayLimit ? 'block' : 'none';
+}
+
+/** ステータス行（件数表示の安定化） */
+function updateStatus(searchValue){
+  const statusEl = document.getElementById('shareStatus');
+  if (!statusEl) return;
+
+  if (singleRecordMode) {
+    statusEl.textContent = filteredRecords.length ? `${filteredRecords.length}件表示` : '表示できる記録がありません。';
+    return;
   }
+  if (!filteredRecords.length) {
+    statusEl.textContent = searchValue ? `該当する記録はありません（キーワード「${searchValue}」）。` : '';
+    return;
+  }
+  const total = recordsCache.length;
+  const shown = Math.min(displayLimit, filteredRecords.length);
+  const base  = (filteredRecords.length === total) ? `${filteredRecords.length}件表示` : `${shown}件表示（全${total}件中）`;
+  statusEl.textContent = searchValue ? `${base} ｜ キーワード「${searchValue}」` : base;
 }
 
 function updateStatus(searchValue){
@@ -748,25 +779,32 @@ function fetchShareMeta(){
   }
   setLoading('共有設定を確認しています…');
   return callShareApi('meta', { token: externalToken, recordId: resolvedRecordId }).then(res => {
+    console.log("📥 fetchShareMeta response", res);   // デバッグ用ログ
     if(!res || res.status !== 'success'){
       const msg = res && res.message ? res.message : '共有設定の取得に失敗しました。';
       showAlert('error', msg);
       setLoading('閲覧を開始できませんでした。');
       return null;
     }
+
     const share = res.share || {};
     currentShare = share;
     updateHeader(share);
     setIntro(share);
     setFooter(share);
+
     let normalizedRecords = [];
     primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : null);
+    console.log("📥 primaryRecordData", primaryRecordData);   // デバッグ用ログ
+
+    // recordId が指定されていない場合は primaryRecord から拾う
     if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
       resolvedRecordId = String(primaryRecordData.recordId);
     }
-    setSingleRecordMode(Boolean(resolvedRecordId));
+
     if(!share.requirePassword){
       normalizedRecords = normalizeRecords(Array.isArray(res.records) ? res.records : []);
+      console.log("📥 normalizedRecords", normalizedRecords);   // デバッグ用ログ
       recordsCache = normalizedRecords;
       latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
       updateKindOptions();
@@ -777,12 +815,19 @@ function fetchShareMeta(){
       updateKindOptions();
       updatePrintControls(null);
     }
+
+    // ✅ recordsCache の代入が終わったあとに呼ぶ
+    // しかも「URLに recordId がある場合のみ true」にする
+    setSingleRecordMode(Boolean(RECORD_ID_PARAM));
+
     updateFilterVisibility();
+
     if(share.expired){
       showAlert('warning', 'この共有リンクは期限切れです。最新のリンクを発行してください。');
       setLoading('期限切れのため閲覧できません。');
       return null;
     }
+
     showAlert('', '');
     const responseMessage = res && res.message ? res.message : (share && share.hasRecords === false ? '記録が存在しません' : '');
     return { share, records: normalizedRecords, message: responseMessage };
@@ -793,6 +838,7 @@ function fetchShareMeta(){
     return null;
   });
 }
+
 
 function loadShareData(password){
   setLoading('記録を読み込んでいます…');
@@ -807,33 +853,47 @@ function loadShareData(password){
       setLoading('閲覧できませんでした。');
       return;
     }
+
     const status = document.getElementById('authStatus');
     if(status) status.textContent = '';
+
     currentShare = res.share || currentShare;
     updateHeader(currentShare);
     setIntro(currentShare);
     setFooter(currentShare);
+
     const auth = document.getElementById('shareAuth');
     if(auth) auth.style.display = 'none';
+
+    // primaryRecord の更新
     primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : primaryRecordData);
     if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
       resolvedRecordId = String(primaryRecordData.recordId);
     }
-    setSingleRecordMode(Boolean(resolvedRecordId));
+
     showAlert(currentShare.expired ? 'warning' : '', currentShare.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
+
+    // ✅ ここで recordsCache を更新
     recordsCache = normalizeRecords(Array.isArray(res.records) ? res.records : []);
     latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
+
+    // ✅ recordsCache 更新のあとに呼ぶ
+    setSingleRecordMode(Boolean(RECORD_ID_PARAM));
+
     updateKindOptions();
     updateFilterVisibility();
     updatePrintControls(primaryRecordData);
     applyQuickRange(getDefaultQuickRange(currentShare));
+
     const responseMessage = res && res.message ? res.message : (currentShare && currentShare.hasRecords === false ? '記録が存在しません' : '');
+
     if(!recordsCache.length){
       const message = responseMessage || '共有可能な記録はまだありません。';
       setLoading(message);
       showEmptyState(message);
       return;
     }
+
     applyFilters(true);
   }).catch(err => {
     const msg = err && err.message ? err.message : '閲覧に失敗しました。';
@@ -843,6 +903,7 @@ function loadShareData(password){
     setLoading('閲覧できませんでした。');
   });
 }
+
 
 function initSharePage(){
   if(!externalToken){
