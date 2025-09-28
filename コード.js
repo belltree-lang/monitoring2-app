@@ -1210,6 +1210,93 @@ function updateMemberName(id, newName){
   return { status:'error', message:'IDが見つかりません: '+id };
 }
 
+/** ほのぼのIDシートからセンター・担当者情報を取得 */
+function getMemberCenterInfo(memberId) {
+  try {
+    const normalizedId = normalizeMemberId_(memberId);
+    if (!normalizedId) {
+      return { status: 'error', message: '利用者IDが未指定です' };
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName('ほのぼのID');
+    if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
+
+    const values = sh.getDataRange().getValues();
+    if (!values || values.length <= 1) {
+      return { status: 'not_found', ok: false, memberId: normalizedId, center: '', staff: '' };
+    }
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const rawId = row && row.length ? row[0] : '';
+      const rowId = normalizeMemberId_(rawId);
+      if (!rowId || rowId !== normalizedId) continue;
+      const center = row.length >= 4 ? String(row[3] || '').trim() : '';
+      const staff = row.length >= 5 ? String(row[4] || '').trim() : '';
+      return {
+        status: 'success',
+        ok: true,
+        memberId: normalizedId,
+        center,
+        staff
+      };
+    }
+
+    return { status: 'not_found', ok: false, memberId: normalizedId, center: '', staff: '' };
+  } catch (e) {
+    return { status: 'error', message: String(e && e.message || e) };
+  }
+}
+
+/** ほのぼのIDシートにセンター・担当者情報を保存 */
+function saveMemberCenterInfo(memberId, center, staff) {
+  try {
+    const normalizedId = normalizeMemberId_(memberId);
+    if (!normalizedId) {
+      throw new Error('利用者IDが未指定です');
+    }
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sh = ss.getSheetByName('ほのぼのID');
+    if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
+
+    const values = sh.getDataRange().getValues();
+    if (!values || values.length <= 1) {
+      throw new Error('対象の利用者が見つかりません');
+    }
+
+    let targetRow = -1;
+    for (let i = 1; i < values.length; i++) {
+      const rowId = normalizeMemberId_(values[i] && values[i].length ? values[i][0] : '');
+      if (rowId && rowId === normalizedId) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+
+    if (targetRow < 0) {
+      throw new Error('対象の利用者が見つかりません');
+    }
+
+    const centerValue = String(center == null ? '' : center).trim();
+    const staffValue = String(staff == null ? '' : staff).trim();
+
+    sh.getRange(targetRow, 4).setValue(centerValue); // D列（センター）
+    sh.getRange(targetRow, 5).setValue(staffValue); // E列（担当者）
+
+    return {
+      status: 'success',
+      ok: true,
+      memberId: normalizedId,
+      center: centerValue,
+      staff: staffValue
+    };
+  } catch (e) {
+    return { status: 'error', message: String(e && e.message || e) };
+  }
+}
+
 /***** ── 外部共有リンク ─────────────────*****/
 function getExecUrlSafe_(){
   try {
