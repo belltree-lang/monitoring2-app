@@ -5,6 +5,7 @@ const OPENAI_MODEL    = 'gpt-4o-mini';
 const SHARE_SHEET_NAME = 'ExternalShares';
 const SHARE_LOG_SHEET_NAME = 'ExternalShareAccessLog';
 const SHARE_QR_SIZE = '220x220';
+const SHARE_QR_FOLDER_ID = '1QZTrJ0_c07ILdqLg1jelYhOQ7hSGAdmt';
 
 // 画像/動画/PDF の既定保存先（利用者IDごとにサブフォルダを自動作成）
 const DEFAULT_FOLDER_ID         = '1glDniVONBBD8hIvRGMPPT1iLXdtHJpEC';
@@ -594,7 +595,17 @@ function findMemberSheetColumnIndex_(headerNormalized, candidates) {
 }
 
 function getMemberSheetColumnInfo_(values) {
-  const info = { header: [], headerNormalized: [], width: 0, idCol: -1, nameCol: -1, yomiCol: -1, careCol: -1, centerCol: -1 };
+  const info = {
+    header: [],
+    headerNormalized: [],
+    width: 0,
+    idCol: -1,
+    nameCol: -1,
+    yomiCol: -1,
+    careCol: -1,
+    centerCol: -1,
+    qrCol: -1
+  };
   if (!Array.isArray(values) || !values.length) return info;
 
   const header = Array.isArray(values[0]) ? values[0].map(v => String(v || '').trim()) : [];
@@ -630,16 +641,30 @@ function getMemberSheetColumnInfo_(values) {
   ];
   const careCandidates = ['担当ケアマネ', '担当けあまね', 'ケアマネ', 'けあまね', '担当者', 'たんとうしゃ', '担当', 'たんとう'];
   const centerCandidates = ['包括支援センター', '地域包括支援センター', '包括', '地域包括'];
+  const qrCandidates = [
+    '共有qrコードurl',
+    '共有qrこーどurl',
+    '共有きゅーあーるこーどurl',
+    'qrコードurl',
+    'qrこーどurl',
+    'きゅーあーるこーどurl',
+    'qrurl',
+    'qrコードリンク',
+    'qrコード',
+    'qr'
+  ];
 
   const yomiCol = findMemberSheetColumnIndex_(headerNormalized, yomiCandidates);
   const careCol = findMemberSheetColumnIndex_(headerNormalized, careCandidates);
   const centerCol = findMemberSheetColumnIndex_(headerNormalized, centerCandidates);
+  const qrCol = findMemberSheetColumnIndex_(headerNormalized, qrCandidates);
 
   info.idCol = idCol;
   info.nameCol = nameCol;
   info.yomiCol = yomiCol;
   info.careCol = careCol;
   info.centerCol = centerCol;
+  info.qrCol = qrCol;
   return info;
 }
 
@@ -1370,6 +1395,50 @@ function buildExternalShareQrDataUrl_(url) {
 function buildExternalShareQrUrl_(shareUrl, size){
   return buildExternalShareQrDataUrl_(shareUrl, size);
 }
+
+function saveQrCodeToDrive_(memberId, shareUrl) {
+  if (!memberId || !shareUrl) return '';
+  try {
+    const qrUrl = 'https://chart.googleapis.com/chart?chs=' + SHARE_QR_SIZE + '&cht=qr&chl=' + encodeURIComponent(shareUrl);
+    const response = UrlFetchApp.fetch(qrUrl);
+    const blob = response.getBlob().setName(`QR_${memberId}.png`);
+
+    const folder = DriveApp.getFolderById(SHARE_QR_FOLDER_ID);
+    const existing = folder.getFilesByName(blob.getName());
+    while (existing.hasNext()) {
+      existing.next().setTrashed(true);
+    }
+
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const fileUrl = file.getUrl();
+
+    const row = findMemberRowById_(memberId);
+    if (row) {
+      const sh = ensureMemberCenterHeaders_();
+      sh.getRange(row, 6).setValue(fileUrl);
+    }
+
+    return fileUrl;
+  } catch (err) {
+    Logger.log('⚠️ saveQrCodeToDrive_ failed: ' + (err && err.message ? err.message : err));
+    return '';
+  }
+}
+
+function getMemberQrDriveUrl_(memberId) {
+  if (!memberId) return '';
+  try {
+    const row = findMemberRowById_(memberId);
+    if (!row) return '';
+    const sh = ensureMemberCenterHeaders_();
+    const value = sh.getRange(row, 6).getValue();
+    return String(value || '').trim();
+  } catch (err) {
+    Logger.log('⚠️ getMemberQrDriveUrl_ failed: ' + (err && err.message ? err.message : err));
+    return '';
+  }
+}
 /** tokenを確実に保存し、列順固定でappend */
 function createExternalShare(memberId, options){
   Logger.log("🟢 createExternalShare called with", memberId, JSON.stringify(options));
@@ -1439,6 +1508,10 @@ function createExternalShare(memberId, options){
     ]);
 
     const url = buildExternalShareUrl_(token);
+    let qrDriveUrl = '';
+    try {
+      qrDriveUrl = saveQrCodeToDrive_(resolvedId, url) || '';
+    } catch (_err) {}
     const qrDataUrl = buildExternalShareQrDataUrl_(url);
 
     return {
@@ -1448,6 +1521,7 @@ function createExternalShare(memberId, options){
       memberId: resolvedId,
       url,
       shareLink: url,
+      qrDriveUrl,
       qrUrl: qrDataUrl,
       qrDataUrl,
       qrCode: qrDataUrl,
@@ -1475,6 +1549,7 @@ function getExternalShares(memberId){
 
     const now = Date.now();
     const shares = [];
+    const memberQrDriveUrl = getMemberQrDriveUrl_(id);
 
     for (let i = 1; i < values.length; i++) {
       const share = parseShareRow_(values[i]);
@@ -1491,6 +1566,7 @@ function getExternalShares(memberId){
         token: share.token,
         url,
         shareLink: url,
+        qrDriveUrl: memberQrDriveUrl,
         qrUrl: qrDataUrl,
         qrDataUrl,
         qrCode: qrDataUrl,
@@ -1548,6 +1624,7 @@ function getExternalShareMeta(token, recordId) {
     const audienceInfo = getShareAudienceInfo_(share.audience);
     const profile = lookupMemberProfile_(share.memberId);
     if (!profile.found) throw new Error('利用者情報が見つかりません');
+    const qrDriveUrl = profile.qrDriveUrl || getMemberQrDriveUrl_(share.memberId);
 
     const summary = {
       token: share.token,
@@ -1566,6 +1643,7 @@ function getExternalShareMeta(token, recordId) {
       rangeLabel: share.rangeLabel,
       url,
       shareLink: url,
+      qrDriveUrl,
       qrUrl: qrDataUrl,
       qrDataUrl,
       qrCode: qrDataUrl,
@@ -1672,6 +1750,7 @@ function enterExternalShare(token, password, recordId){
     const audienceInfo = getShareAudienceInfo_(share.audience);
     const profile = lookupMemberProfile_(share.memberId);
     if (!profile.found) throw new Error('利用者情報が見つかりません');
+    const qrDriveUrl = profile.qrDriveUrl || getMemberQrDriveUrl_(share.memberId);
 
     const summary = {
       token: share.token,
@@ -1690,6 +1769,7 @@ function enterExternalShare(token, password, recordId){
       rangeLabel: share.rangeLabel,
       url,
       shareLink: url,
+      qrDriveUrl,
       qrUrl: qrDataUrl,
       qrDataUrl,
       qrCode: qrDataUrl,
@@ -2044,7 +2124,7 @@ function computeRemainingLabel_(expiresAt){
 }
 
 function lookupMemberProfile_(memberId){
-  const empty = { id: String(memberId || ''), name: '', center: '', staff: '', found: false };
+  const empty = { id: String(memberId || ''), name: '', center: '', staff: '', qrDriveUrl: '', found: false };
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sh = ss.getSheetByName('ほのぼのID');
@@ -2062,11 +2142,13 @@ function lookupMemberProfile_(memberId){
       const nameRaw = (layout.nameCol >= 0 && layout.nameCol < row.length) ? row[layout.nameCol] : '';
       const centerRaw = (layout.centerCol >= 0 && layout.centerCol < row.length) ? row[layout.centerCol] : '';
       const staffRaw = (layout.careCol >= 0 && layout.careCol < row.length) ? row[layout.careCol] : '';
+      const qrRaw = (layout.qrCol >= 0 && layout.qrCol < row.length) ? row[layout.qrCol] : '';
       return {
         id: targetId,
         name: String(nameRaw || '').trim(),
         center: String(centerRaw || '').trim(),
         staff: String(staffRaw || '').trim(),
+        qrDriveUrl: String(qrRaw || '').trim(),
         found: true
       };
     }
@@ -2203,11 +2285,12 @@ function ensureMemberCenterHeaders_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sh = ss.getSheetByName('ほのぼのID');
   if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
-  // 少なくともE列まで用意
-  if (sh.getMaxColumns() < 5) sh.insertColumnsAfter(sh.getMaxColumns(), 5 - sh.getMaxColumns());
+  // 少なくともF列まで用意
+  if (sh.getMaxColumns() < 6) sh.insertColumnsAfter(sh.getMaxColumns(), 6 - sh.getMaxColumns());
   // ヘッダを確定（A=ID, B=氏名 は触らない）
   sh.getRange(1, 4).setValue('包括支援センター'); // D1
   sh.getRange(1, 5).setValue('担当者名');         // E1
+  sh.getRange(1, 6).setValue('共有QRコードURL');  // F1
   return sh;
 }
 /** 行番号を A列（ほのぼのID）だけで厳密に探す */

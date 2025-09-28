@@ -2098,7 +2098,7 @@ function renderShareItem(share){
   const accessLabel=share.accessCount?`閲覧回数: ${share.accessCount}回`:"";
   const metaParts=[audienceLabel,expiresLabel,attachmentsLabel,passwordLabel,maskLabel,rangeLabel,remaining,lastAccess,accessLabel].filter(Boolean);
   const metaHtml=metaParts.map(p=>`<span>${p}</span>`).join("\n");
-  const qrSrc=share.qrDataUrl||share.qrUrl||"";
+  const qrSrc=share.qrDriveUrl||share.qrDataUrl||share.qrUrl||"";
   const fallbackQr=!qrSrc && shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"";
   const qrUrl=qrSrc||fallbackQr;
   const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
@@ -2192,7 +2192,7 @@ async function handleCreateShare(event){
       throw new Error(msg);
     }
     if(status){
-      const qrUrl=res.qrDataUrl || res.qrUrl || "";
+      const qrUrl=res.qrDriveUrl || res.qrDataUrl || res.qrUrl || "";
       const shareUrl=res.url || res.shareLink || "";
       const safeUrl=escapeHtml(shareUrl);
       const safeQr=qrUrl ? escapeHtml(qrUrl) : "";
