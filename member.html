@@ -74,6 +74,11 @@ button:hover { opacity:0.9;}
 .dashboard-form label { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#334; }
 .dashboard-form input[type="text"], .dashboard-form textarea { font-family:inherit; border:1px solid #ccd5e6; border-radius:8px; padding:8px 10px; font-size:0.9rem; background:#fff; }
 .dashboard-form textarea { min-height:110px; resize:vertical; }
+.center-info-form { display:flex; flex-direction:column; gap:12px; }
+.center-info-form label { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#334; }
+.center-info-form input[type="text"] { font-family:inherit; border:1px solid #ccd5e6; border-radius:8px; padding:8px 10px; font-size:0.9rem; background:#fff; }
+.center-info-actions { align-items:center; }
+.center-info-status { font-size:0.78rem; color:#4a5a75; }
 .dashboard-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 .dashboard-message { font-size:0.78rem; color:#4a5a75; }
 .record.selected { border-color:var(--brand); box-shadow:0 0 0 2px rgba(25,118,210,0.18); }
@@ -97,7 +102,10 @@ button:hover { opacity:0.9;}
 .share-item .share-actions { display:flex; gap:6px; margin-top:8px; }
 .share-item .share-actions .btn-compact { white-space:nowrap; }
 .share-qr { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-.share-qr img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+.share-qr img, .share-qr-image { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+.share-qr-image { display:flex; align-items:center; justify-content:center; }
+.share-qr-img { max-width:100%; max-height:100%; display:block; }
+.share-qr-placeholder { font-size:0.75rem; color:#60708f; text-align:center; line-height:1.4; }
 .share-qr .share-qr-actions { display:flex; flex-wrap:wrap; gap:6px; }
 .share-qr .share-qr-url { font-size:0.75rem; color:#334; word-break:break-all; }
 .share-qr .share-qr-note { font-size:0.72rem; color:#60708f; }
@@ -155,6 +163,24 @@ button:hover { opacity:0.9;}
         <button id="btnAddMember">登録</button>
       </div>
       <div id="addMemberStatus" class="muted"></div>
+    </div>
+
+    <!-- センター・担当情報 -->
+    <div class="card">
+      <h2>センター・担当情報</h2>
+      <form id="centerInfoForm" class="center-info-form">
+        <label>地域包括支援センター
+          <input type="text" id="memberCenterInput" placeholder="例：○○地域包括支援センター">
+        </label>
+        <label>担当者名
+          <input type="text" id="memberStaffInput" placeholder="例：担当ケアマネ氏名">
+        </label>
+        <div class="toolbar center-info-actions">
+          <button type="submit">保存</button>
+          <button type="button" id="btnCenterInfoRefresh" class="secondary btn-compact">最新を再読込</button>
+          <span id="centerInfoStatus" class="muted center-info-status"></span>
+        </div>
+      </form>
     </div>
   </aside>
 
@@ -332,6 +358,9 @@ let recordsLoading = false;
 let selectedRecord = null;
 let selectedRecordId = "";
 let dashboardMessageTimer = null;
+let centerInfoStatusTimer = null;
+let centerInfoLoadToken = 0;
+let centerInfoUiInitialized = false;
 const queryParams = new URLSearchParams(window.location.search);
 
 function getRecordTimestamp(record) {
@@ -856,12 +885,117 @@ function loadMemberData(userId, options = {}) {
   resetShareListPlaceholder();
   updateShareAttachmentOptions([]);
   renderDashboardPanel();
+  loadMemberCenterInfo(safeId);
   loadRecords();
   fetchExternalShareList();
   console.log("[member] loadMemberData:complete", { userId: safeId, name });
 }
 
+function setCenterInfoStatus(message, isError = false) {
+  const statusEl = document.getElementById("centerInfoStatus");
+  if (!statusEl) return;
+  statusEl.textContent = message || "";
+  statusEl.style.color = isError ? "#b91c1c" : "#4a5a75";
+  if (centerInfoStatusTimer) {
+    clearTimeout(centerInfoStatusTimer);
+    centerInfoStatusTimer = null;
+  }
+  if (message && !isError) {
+    const currentMessage = String(message);
+    centerInfoStatusTimer = setTimeout(() => {
+      if (statusEl.textContent === currentMessage) {
+        statusEl.textContent = "";
+      }
+    }, 4000);
+  }
+}
+
+async function loadMemberCenterInfo(targetMemberId) {
+  const centerInput = document.getElementById("memberCenterInput");
+  const staffInput = document.getElementById("memberStaffInput");
+  if (!centerInput || !staffInput) return;
+  const normalizedId = targetMemberId != null ? String(targetMemberId).trim() : "";
+  if (!normalizedId) {
+    centerInfoLoadToken++;
+    centerInput.value = "";
+    staffInput.value = "";
+    setCenterInfoStatus("利用者を選択してください");
+    return;
+  }
+  const requestId = ++centerInfoLoadToken;
+  setCenterInfoStatus("センター情報を読み込み中…");
+  try {
+    const res = await callGoogle("getMemberCenterInfo", normalizedId);
+    if (requestId !== centerInfoLoadToken) return;
+    if (res && res.ok) {
+      centerInput.value = res.center || "";
+      staffInput.value = res.staff || "";
+      setCenterInfoStatus("保存済み情報を読み込みました");
+    } else if (res && res.ok === false) {
+      centerInput.value = "";
+      staffInput.value = "";
+      const msg = res.message ? String(res.message) : "センター情報は未登録です";
+      setCenterInfoStatus(msg);
+    } else if (res && res.status === "error") {
+      const msg = res.message ? String(res.message) : "センター情報の取得に失敗しました";
+      setCenterInfoStatus("エラー: " + msg, true);
+    } else {
+      setCenterInfoStatus("");
+    }
+  } catch (err) {
+    if (requestId !== centerInfoLoadToken) return;
+    const msg = err && err.message ? err.message : err;
+    setCenterInfoStatus("エラー: " + msg, true);
+  }
+}
+
+async function handleCenterInfoSave(event) {
+  if (event && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
+  const centerInput = document.getElementById("memberCenterInput");
+  const staffInput = document.getElementById("memberStaffInput");
+  if (!centerInput || !staffInput) return;
+  if (!memberId) { alert("利用者を選択してください"); return; }
+  const centerValue = centerInput.value.trim();
+  const staffValue = staffInput.value.trim();
+  setCenterInfoStatus("保存中…");
+  try {
+    const res = await callGoogle("saveMemberCenterInfo", memberId, centerValue, staffValue);
+    if (!res || res.status !== "success") {
+      const msg = res && res.message ? res.message : "保存に失敗しました";
+      throw new Error(msg);
+    }
+    centerInput.value = res.center != null ? res.center : centerValue;
+    staffInput.value = res.staff != null ? res.staff : staffValue;
+    setCenterInfoStatus("保存しました");
+  } catch (err) {
+    const msg = err && err.message ? err.message : err;
+    setCenterInfoStatus("失敗: " + msg, true);
+  }
+}
+
+function setupCenterInfoUi() {
+  if (centerInfoUiInitialized) return;
+  const form = document.getElementById("centerInfoForm");
+  if (!form) return;
+  centerInfoUiInitialized = true;
+  form.addEventListener("submit", handleCenterInfoSave);
+  const refreshBtn = document.getElementById("btnCenterInfoRefresh");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      if (!memberId) {
+        setCenterInfoStatus("利用者を選択してください");
+        return;
+      }
+      loadMemberCenterInfo(memberId);
+    });
+  }
+  loadMemberCenterInfo(memberId);
+}
+
 function setupMemberUi() {
+  setupCenterInfoUi();
   const btnAddMember = document.getElementById("btnAddMember");
   if (btnAddMember) {
     btnAddMember.onclick = () => {
@@ -928,7 +1062,10 @@ function setupMemberUi() {
 
   const btnReload = document.getElementById("btnReload");
   if (btnReload) {
-    btnReload.onclick = () => loadRecords();
+    btnReload.onclick = () => {
+      loadRecords();
+      loadMemberCenterInfo(memberId);
+    };
   }
 
   const range = document.getElementById("recordRange");
@@ -1366,6 +1503,7 @@ function renderShareList(){
   }
   list.classList.remove("muted");
   list.innerHTML=externalShares.map(renderShareItem).join("\n");
+  injectShareQrImages(list);
 }
 
 function renderShareItem(share){
@@ -1391,7 +1529,8 @@ function renderShareItem(share){
   const qrUrl=qrSrc||fallbackQr;
   const usingFallback=!qrSrc && !!fallbackQr;
   const fallbackNote=usingFallback?`<div class="share-qr-note">QRコードの生成に失敗したためGoogle Chart APIで代替表示しています。</div>`:"";
-  const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
+  const encodedQr=qrUrl?encodeURIComponent(qrUrl):"";
+  const qrHtml=qrUrl?`<div class="share-qr" data-qr-url="${encodedQr}"><div class="share-qr-image" data-qr-image><div class="share-qr-placeholder">QRコードを表示しています…</div></div><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
     + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div>${fallbackNote}</div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
   return `<div class="${itemClass}">`
@@ -1406,6 +1545,36 @@ function renderShareItem(share){
     + `<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`
     + `</div>`
     + `</div>`;
+}
+
+function injectShareQrImages(root){
+  const scope=root instanceof Element?root:document;
+  const containers=scope.querySelectorAll('.share-qr[data-qr-url]');
+  containers.forEach(container=>{
+    if(container.dataset.qrInitialized==='1') return;
+    const encoded=container.getAttribute('data-qr-url')||'';
+    if(!encoded) return;
+    let src='';
+    try {
+      src=decodeURIComponent(encoded);
+    } catch(_err){
+      src=encoded;
+    }
+    if(!src) return;
+    const holder=container.querySelector('[data-qr-image]')||container;
+    const img=document.createElement('img');
+    img.className='share-qr-img';
+    img.alt='共有QRコード';
+    img.loading='lazy';
+    img.src=src;
+    if(holder){
+      holder.innerHTML='';
+      holder.appendChild(img);
+    }else{
+      container.appendChild(img);
+    }
+    container.dataset.qrInitialized='1';
+  });
 }
 
 async function handleShareListClick(event){
