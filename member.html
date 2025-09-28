@@ -29,15 +29,21 @@ button:hover { opacity:0.9;}
 .autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
 .autocomplete-item:hover { background:var(--accent);}
 .autocomplete-item.autocomplete-empty { color:var(--muted); cursor:default; pointer-events:none; }
+.app-shell { display:grid; grid-template-columns:minmax(240px,300px) minmax(0,1fr); gap:16px; align-items:start; }
+.sidebar-column { display:flex; flex-direction:column; gap:16px; }
+.main-area { min-width:0; }
 .layout { display:grid; grid-template-columns:minmax(260px,320px) minmax(0,1fr) minmax(260px,320px); gap:16px; align-items:start; }
 .layout-column { display:flex; flex-direction:column; gap:16px; }
 .layout-right { display:flex; flex-direction:column; gap:16px; }
 @media(max-width:1200px){
+  .app-shell { grid-template-columns:minmax(220px,280px) minmax(0,1fr); }
   .layout { grid-template-columns:minmax(260px,320px) minmax(0,1fr); }
   .layout-right { grid-column:1 / -1; }
 }
 @media(max-width:960px){
+  .app-shell { grid-template-columns:1fr; }
   .layout { grid-template-columns:1fr; }
+  .sidebar-column { flex-direction:column; }
 }
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
 .record .muted { font-size:0.85rem; color:#666;}
@@ -121,37 +127,40 @@ button:hover { opacity:0.9;}
   <span class="pill" id="memberTag">未選択</span>
 </h1>
 
-<!-- 利用者選択 -->
-<div class="card">
-  <h2>利用者を選択</h2>
-  <div class="toolbar" style="position:relative;">
-    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
-    <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
-    <select id="recordRange">
-      <option value="all">全件</option>
-      <option value="90">直近90日</option>
-      <option value="30" selected>直近30日</option>
-      <option value="7">直近7日</option>
-    </select>
-    <button id="btnReload" class="secondary">更新</button>
-  </div>
-  <div id="idStatus" class="muted"></div>
-</div>
+<div class="app-shell">
+  <aside id="sidebar" class="sidebar-column">
+    <!-- 利用者選択 -->
+    <div class="card">
+      <h2>利用者を選択</h2>
+      <div class="toolbar" style="position:relative;">
+        <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
+        <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
+        <select id="recordRange">
+          <option value="all">全件</option>
+          <option value="90">直近90日</option>
+          <option value="30" selected>直近30日</option>
+          <option value="7">直近7日</option>
+        </select>
+        <button id="btnReload" class="secondary">更新</button>
+      </div>
+      <div id="idStatus" class="muted"></div>
+    </div>
 
-<!-- 新規利用者登録 -->
-<div class="card">
-  <h2>新規利用者登録</h2>
-  <div class="toolbar">
-    <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
-    <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
-    <button id="btnAddMember">登録</button>
-  </div>
-  <div id="addMemberStatus" class="muted"></div>
-</div>
+    <!-- 新規利用者登録 -->
+    <div class="card">
+      <h2>新規利用者登録</h2>
+      <div class="toolbar">
+        <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
+        <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
+        <button id="btnAddMember">登録</button>
+      </div>
+      <div id="addMemberStatus" class="muted"></div>
+    </div>
+  </aside>
 
-<!-- メインUI -->
-<div id="mainArea" style="display:none;">
-  <div class="layout">
+  <!-- メインUI -->
+  <div id="mainArea" class="main-area" style="display:none;">
+    <div class="layout">
     <div class="layout-column layout-compose">
       <!-- 新規記録 -->
       <div class="card">
@@ -307,8 +316,10 @@ button:hover { opacity:0.9;}
         </div>
       </div>
     </aside>
-  </div>
-</div>
+    </div><!-- /.layout -->
+  </div><!-- /#mainArea -->
+</div><!-- /.app-shell -->
+</div><!-- /#internalApp -->
 
 <script>
 let memberId = null, memberName = "";
@@ -395,7 +406,7 @@ function renderDashboardPanel() {
   const container = document.getElementById("dashboardContent");
   if (!container) return;
   if (!memberId) {
-    container.innerHTML = '<div class="dashboard-empty">利用者を選択してください</div>';
+    container.innerHTML = '';
     setDashboardMessage("", false);
     return;
   }
