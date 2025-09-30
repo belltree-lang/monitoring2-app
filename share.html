@@ -203,6 +203,9 @@ const TEMPLATE_RECORD_ID = <?= typeof shareRecordId === 'string' ? JSON.stringif
 const queryParams = new URLSearchParams(window.location.search);
 const externalToken = TEMPLATE_TOKEN || queryParams.get('shareId') || queryParams.get('share') || queryParams.get('token') || '';
 const RECORD_ID_PARAM = TEMPLATE_RECORD_ID || queryParams.get('recordId') || queryParams.get('record') || '';
+console.log("🐛 TEMPLATE_TOKEN =", TEMPLATE_TOKEN);
+console.log("🐛 URL query shareId =", queryParams.get('shareId'));
+console.log("🐛 externalToken =", externalToken);
 const shareAudienceInfo = {
   family: {
     label: '家族向け共有',
