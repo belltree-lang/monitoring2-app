@@ -1635,6 +1635,11 @@ function setupMemberUi() {
   }
 }
 
+
+
+
+
+
 async function handleSave() {
   const text = document.getElementById("inputText").value.trim();
   const files = Array.from(document.getElementById("fileInput").files || []);
@@ -1669,6 +1674,32 @@ async function handleSave() {
     status.textContent = "失敗: " + (err && err.message ? err.message : err);
   }
 }
+
+function fetchShareMeta(token, recordId) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(reject)
+      .getExternalShareMeta(token, recordId);
+  });
+}
+
+async function initShareView() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const token = urlParams.get("shareId");
+  const recordId = urlParams.get("recordId");
+
+  try {
+    const meta = await fetchShareMeta(token, recordId);
+    console.log("✅ fetchShareMeta result:", meta);
+    // ここで UI に反映する処理を書く
+  } catch (err) {
+    console.error("❌ fetchShareMeta failed:", err);
+  }
+}
+
+window.addEventListener("DOMContentLoaded", initShareView);
+
 
 function renderAttachment(att, record, index) {
   const url = escapeHtml(buildAttachmentViewUrl(att));
@@ -1785,6 +1816,8 @@ function loadRecords(){
     updateShareAttachmentOptions([]);
   }).getRecordsByMemberId_v3(memberId, days);
 }
+
+
 
 function renderRecords(){
   const list = document.getElementById("recordList");
@@ -2179,32 +2212,57 @@ function openSharePrintView(share){
   }
 }
 async function handleCreateShare(event){
+  console.log("🔎 DEBUG before handleCreateShare: memberId=", memberId, "memberName=", memberName);
+
   console.log("🔎 handleCreateShare start", { memberId, config: collectShareFormConfig() });
   if(event) event.preventDefault();
-  if(!memberId){ alert("利用者を選択してください"); return; }
-  const status=document.getElementById("shareFormStatus");
-  if(status) status.textContent="共有リンクを発行しています…";
+  if(!memberId){ 
+    alert("利用者を選択してください"); 
+    return; 
+  }
+
+  const status = document.getElementById("shareFormStatus");
+  if(status) status.textContent = "共有リンクを発行しています…";
+
   try {
-    const config=collectShareFormConfig();
-    const res=await callGoogle("createExternalShare", memberId, config);
-    if(!res || res.status!=="success"){
-      const msg=res && res.message ? res.message : "共有リンクの発行に失敗しました";
+    const config = collectShareFormConfig();
+    const res = await callGoogle("createExternalShare", memberId, config);
+    
+    console.log("📥 res from createExternalShare", res);
+    console.log("🔎 debug: qrDriveUrl =", res.qrDriveUrl);
+    console.log("🔎 debug: qrViewUrl  =", res.qrViewUrl);
+    console.log("🔎 debug: url/shareLink =", res.url, res.shareLink);
+
+    if(!res || res.status !== "success"){
+      const msg = res && res.message ? res.message : "共有リンクの発行に失敗しました";
       throw new Error(msg);
     }
-    if(status){
-      const qrUrl=res.qrDriveUrl || res.qrDataUrl || res.qrUrl || "";
-      const shareUrl=res.url || res.shareLink || "";
-      const safeUrl=escapeHtml(shareUrl);
-      const safeQr=qrUrl ? escapeHtml(qrUrl) : "";
-      const qrHtml=qrUrl
-        ? `<div class="share-qr-preview"><img src="${safeQr}" alt="共有QRコード"><div class="share-qr-preview-info"><div>スマートフォンで読み取ると共有ページを開けます。</div>${shareUrl?`<div class="share-qr-preview-url">${safeUrl}</div>`:""}</div></div>`
-        : "";
-      status.classList.remove("muted");
-      status.innerHTML=`<div>共有リンクを発行しました。リストからURLコピーやQR印刷ができます。</div>${qrHtml}`;
-    }
+
+  if(status){
+  const qrUrl   = res.qrDriveUrl || res.qrDataUrl || res.qrUrl || "";
+  const shareUrl = res.url || res.shareLink || "";
+  
+  // ← escapeHtmlを使わずにそのままURLを埋め込む
+  const qrHtml = qrUrl
+    ? `<div class="share-qr-preview">
+         <img src="${qrUrl}" alt="共有QRコード" style="width:120px;height:120px;display:block;border:1px solid red;background:white;">
+         <div class="share-qr-preview-info">
+           <div>スマートフォンで読み取ると共有ページを開けます。</div>
+           ${shareUrl ? `<div class="share-qr-preview-url">${shareUrl}</div>` : ""}
+         </div>
+       </div>`
+    : "<div class='warn'>⚠️ QRコードURLが返ってきませんでした</div>";
+
+  status.classList.remove("muted");
+  status.innerHTML = `<div>共有リンクを発行しました。リストからURLコピーやQR印刷ができます。</div>${qrHtml}`;
+  console.log("🖼️ final status.innerHTML =", status.innerHTML);
+}
+
     fetchExternalShareList();
+
   } catch(err){
-    if(status) status.textContent="失敗: " + (err && err.message ? err.message : err);
+    console.error("❌ handleCreateShare error", err);
+    if(status) status.textContent = "失敗: " + (err && err.message ? err.message : err);
   }
 }
 
@@ -2233,7 +2291,7 @@ function collectShareFormConfig(){
     password: password ? password.value.trim() : "",
     maskMode: mask && mask.checked ? "simple" : "none",
     allowedAttachmentIds: allowed,
-    range: rangeValue
+    rangeSpec: rangeValue
   };
   if(preset === "custom"){
     if(!expires || !expires.value){
@@ -2358,6 +2416,15 @@ function loadMemberCenterInfo(targetMemberId) {
     })
     .getMemberCenterInfo(safeId);
 }
+google.script.run
+  .withSuccessHandler(res => {
+    console.log("Driveに保存されたQR:", res);
+    if (res.embedUrl) {
+      document.getElementById("qrPreview").innerHTML =
+        `<img src="${res.embedUrl}" style="width:120px;height:120px;">`;
+    }
+  })
+  .saveQrCodeToDrive_(memberId, shareUrl);
 
 </script>
 </body>
