@@ -744,6 +744,40 @@ const SMALL_KANA_MAP_ = {
   'っ':'つ','ゃ':'や','ゅ':'ゆ','ょ':'よ','ゎ':'わ','ゕ':'か','ゖ':'け'
 };
 
+const MEMBER_STATUS_VALUES_ = ['active', 'pause', 'stop', 'fit'];
+const MEMBER_STATUS_DEFAULT_ = 'active';
+const MEMBER_STATUS_ALIAS_MAP_ = {
+  '稼働中': 'active',
+  '稼働': 'active',
+  'かどうちゅう': 'active',
+  'active': 'active',
+  '休止': 'pause',
+  '休会': 'pause',
+  'きゅうし': 'pause',
+  'pause': 'pause',
+  '中止': 'stop',
+  '停止': 'stop',
+  'ちゅうし': 'stop',
+  'stop': 'stop',
+  'fit': 'fit',
+  'べるふぃっと': 'fit',
+  'べるフィット': 'fit',
+  'ベルフィット': 'fit'
+};
+
+function normalizeMemberStatusValue_(value) {
+  if (value == null) return '';
+  const normalized = String(value)
+    .normalize('NFKC')
+    .trim();
+  if (!normalized) return '';
+  const simple = normalized.replace(/[\s　]+/g, '').toLowerCase();
+  if (MEMBER_STATUS_VALUES_.includes(simple)) return simple;
+  if (MEMBER_STATUS_ALIAS_MAP_[simple]) return MEMBER_STATUS_ALIAS_MAP_[simple];
+  if (MEMBER_STATUS_ALIAS_MAP_[normalized]) return MEMBER_STATUS_ALIAS_MAP_[normalized];
+  return '';
+}
+
 function toHiragana_(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -810,15 +844,18 @@ function getDashboardSummary() {
           countThisMonth: 0,
           latestTimestamp: null,
           latestDateText: '',
-          monitoringStatus: 'pending'
+          monitoringStatus: 'pending',
+          memberStatus: MEMBER_STATUS_DEFAULT_
         };
       });
       return { status: 'success', data: emptyData, monthLabel, debug: dbg };
     }
 
     const header = vals[0].map(v => String(v || '').trim());
-    const colDate = header.indexOf('日付');
-    const colId   = header.indexOf('利用者ID');
+    const indexes = resolveRecordColumnIndexes_(header);
+    const colDate = indexes.date;
+    const colId = indexes.memberId;
+    const colStatus = indexes.status;
     if (colDate < 0 || colId < 0) {
       throw new Error(`ヘッダー不一致（必要: 日付/利用者ID, 実際: ${JSON.stringify(header)}）`);
     }
@@ -834,6 +871,7 @@ function getDashboardSummary() {
           careManager: info.careManager || '',
           countThisMonth: 0,
           latestTimestamp: null,
+          memberStatus: MEMBER_STATUS_DEFAULT_
         });
       } else {
         const entry = summaryMap.get(id);
@@ -846,10 +884,7 @@ function getDashboardSummary() {
 
     for (let i = 1; i < vals.length; i++) {
       const row = vals[i];
-      const rawId = String(row[colId] || '').trim();
-      if (!rawId) continue;
-      const half = rawId.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, '');
-      const id = ('0000' + half).slice(-4);
+      const id = normalizeMemberId_(row[colId]);
       if (!id) continue;
       const entry = ensureEntry(id);
 
@@ -862,6 +897,12 @@ function getDashboardSummary() {
       }
       if (ts >= monthStart.getTime()) {
         entry.countThisMonth += 1;
+      }
+      if (colStatus >= 0) {
+        const normalizedStatus = normalizeMemberStatusValue_(row[colStatus]);
+        if (normalizedStatus) {
+          entry.memberStatus = normalizedStatus;
+        }
       }
     }
 
@@ -883,7 +924,8 @@ function getDashboardSummary() {
         latestDateText: latestTimestamp
           ? Utilities.formatDate(new Date(latestTimestamp), tz, 'yyyy/MM/dd HH:mm')
           : '',
-        monitoringStatus: entry.countThisMonth > 0 ? 'completed' : 'pending'
+        monitoringStatus: entry.countThisMonth > 0 ? 'completed' : 'pending',
+        memberStatus: entry.memberStatus || MEMBER_STATUS_DEFAULT_
       };
     });
 
@@ -1187,6 +1229,72 @@ function updateMonitoringRecord(data){
     return { status:'success', rowIndex };
   } catch (e) {
     return { status:'error', message:String(e && e.message || e) };
+  }
+}
+
+function updateMemberStatus(memberId, status) {
+  try {
+    const member = normalizeMemberId_(memberId);
+    if (!member) throw new Error('memberIdが未指定です');
+    const normalizedStatus = normalizeMemberStatusValue_(status);
+    if (!normalizedStatus) throw new Error('statusが不正です');
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+
+    let range = sheet.getDataRange();
+    let values = range.getValues();
+    if (!values || values.length === 0) {
+      throw new Error('モニタリングシートにヘッダーが存在しません');
+    }
+    let header = values[0].map(v => String(v || '').trim());
+    let indexes = resolveRecordColumnIndexes_(header);
+    if (indexes.memberId < 0) {
+      throw new Error('ヘッダーに利用者ID列が見つかりません');
+    }
+    if (indexes.status < 0) {
+      if (header.length === 0) {
+        sheet.insertColumnBefore(1);
+        sheet.getRange(1, 1).setValue('status');
+      } else {
+        sheet.insertColumnAfter(header.length);
+        sheet.getRange(1, header.length + 1).setValue('status');
+      }
+      range = sheet.getDataRange();
+      values = range.getValues();
+      header = values[0].map(v => String(v || '').trim());
+      indexes = resolveRecordColumnIndexes_(header);
+    }
+    if (indexes.status < 0) {
+      throw new Error('status列を追加できませんでした');
+    }
+
+    const statusCol = indexes.status + 1;
+    const memberCol = indexes.memberId;
+    const targetRows = [];
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const rowMember = normalizeMemberId_(row[memberCol]);
+      if (rowMember === member) {
+        targetRows.push(i + 1);
+      }
+    }
+
+    if (targetRows.length) {
+      targetRows.forEach(rowIndex => {
+        sheet.getRange(rowIndex, statusCol).setValue(normalizedStatus);
+      });
+      return { status: 'success', updated: targetRows.length };
+    }
+
+    const width = header.length;
+    const newRow = new Array(width).fill('');
+    if (indexes.memberId < width) newRow[indexes.memberId] = member;
+    if (indexes.status < width) newRow[indexes.status] = normalizedStatus;
+    sheet.appendRow(newRow);
+    return { status: 'success', updated: 1, appended: true };
+  } catch (e) {
+    return { status: 'error', message: String(e && e.message || e) };
   }
 }
 

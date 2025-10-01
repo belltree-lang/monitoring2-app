@@ -61,6 +61,7 @@ button:hover { opacity:0.9;}
 .dashboard-filter-row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
 .dashboard-filter { display:flex; flex-direction:column; gap:6px; font-size:0.8rem; color:#4a5a75; min-width:160px; }
 .dashboard-filter label { font-weight:600; }
+.dashboard-filter-label { font-weight:600; }
 .dashboard-filter select { font-size:0.85rem; padding:6px 8px; border-radius:6px; border:1px solid #ccd5e6; background:#fff; }
 .dashboard-care-chips { display:flex; flex-wrap:wrap; gap:6px; }
 .dashboard-chip { border:1px solid #b8c7e6; background:#fff; color:#2b3d6d; border-radius:999px; padding:6px 12px; font-size:0.78rem; cursor:pointer; transition:.2s; }
@@ -77,8 +78,10 @@ button:hover { opacity:0.9;}
 .dashboard-section-body.is-open { display:block; }
 .dashboard-entry { display:flex; flex-wrap:wrap; align-items:flex-start; gap:12px; padding:12px 16px; border-top:1px solid #e3ebf8; }
 .dashboard-entry:first-of-type { border-top:none; }
-.dashboard-entry.status-pending { background:#fff9f4; }
-.dashboard-entry.status-completed { background:#f5faf4; }
+.dashboard-entry.status-active { background:#f5faf4; }
+.dashboard-entry.status-pause { background:#fff8e6; }
+.dashboard-entry.status-stop { background:#fff0f0; }
+.dashboard-entry.status-fit { background:#f5f3ff; }
 .dashboard-entry.selected { box-shadow:0 0 0 2px rgba(25,118,210,0.2); border-radius:10px; }
 .dashboard-entry-main { flex:1; min-width:220px; }
 .dashboard-entry-name { font-weight:600; font-size:0.95rem; color:#1f2f4b; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
@@ -86,8 +89,16 @@ button:hover { opacity:0.9;}
 .dashboard-entry-meta { margin-top:6px; display:flex; flex-wrap:wrap; gap:8px 14px; font-size:0.8rem; color:#5a6a85; }
 .dashboard-entry-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-end; min-width:140px; }
 .dashboard-status-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:0.78rem; font-weight:600; }
-.dashboard-status-badge.pending { background:#ffe4d6; color:#c55400; }
-.dashboard-status-badge.completed { background:#e4f3e8; color:#2e7d32; }
+.dashboard-status-badge.active { background:#e4f3e8; color:#2e7d32; }
+.dashboard-status-badge.pause { background:#ffecc7; color:#c77800; }
+.dashboard-status-badge.stop { background:#ffd6d9; color:#c62828; }
+.dashboard-status-badge.fit { background:#e8e4ff; color:#5b3cc4; }
+.dashboard-status-buttons { display:flex; flex-wrap:wrap; gap:6px; }
+.dashboard-status-btn { border:1px solid #b8c7e6; background:#fff; color:#2b3d6d; border-radius:999px; padding:6px 12px; font-size:0.78rem; cursor:pointer; transition:.2s; }
+.dashboard-status-btn.active { background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 2px 8px rgba(25,118,210,0.25); }
+.dashboard-status-btn[disabled] { opacity:0.6; cursor:wait; }
+.dashboard-status-controls { display:flex; flex-direction:column; gap:6px; align-items:flex-end; width:100%; }
+.dashboard-status-controls .dashboard-status-buttons { justify-content:flex-end; }
 .dashboard-entry-actions .link-button { text-decoration:none; }
 .dashboard-index-note { font-size:0.75rem; color:#5a6a85; }
 @media(max-width:960px){
@@ -199,12 +210,10 @@ button:hover { opacity:0.9;}
         <div class="toolbar">
           <label for="kindSelect">種別:</label>
           <select id="kindSelect">
+            <option value="電話" selected>電話</option>
             <option value="訪問">訪問</option>
-            <option value="電話">電話</option>
-            <option value="施設面談">施設面談</option>
             <option value="通所先">通所先</option>
-            <option value="サービス担当者会議">サービス担当者会議</option>
-            <option value="その他" selected>その他</option>
+            <option value="その他">その他</option>
           </select>
         </div>
         <textarea id="inputText" placeholder="記録を入力..."></textarea>
@@ -413,6 +422,55 @@ const shareAudienceDefault = "family";
 const shareExpiryPresetDefault = "30";
 const shareRangeDefault = "30";
 
+const MEMBER_STATUS_ORDER = ["active", "pause", "stop", "fit"];
+const MEMBER_STATUS_FILTER_VALUES = ["all", ...MEMBER_STATUS_ORDER];
+const MEMBER_STATUS_DEFAULT = "active";
+const MEMBER_STATUS_META = {
+  active: { label: "稼働中", icon: "🟢" },
+  pause: { label: "休止", icon: "⏸" },
+  stop: { label: "中止", icon: "⛔" },
+  fit: { label: "べるフィット", icon: "💪" }
+};
+
+function normalizeMemberStatusValue(status) {
+  const normalized = String(status == null ? "" : status)
+    .normalize("NFKC")
+    .trim();
+  if (!normalized) return "";
+  const simple = normalized.replace(/[\s　]+/g, "").toLowerCase();
+  if (MEMBER_STATUS_META[simple]) return simple;
+  if (MEMBER_STATUS_META[normalized.toLowerCase()]) return normalized.toLowerCase();
+  const aliases = {
+    "稼働中": "active",
+    "かどうちゅう": "active",
+    "稼働": "active",
+    "休止": "pause",
+    "休会": "pause",
+    "きゅうし": "pause",
+    "中止": "stop",
+    "ちゅうし": "stop",
+    "停止": "stop",
+    "終了": "stop",
+    "べるふぃっと": "fit",
+    "べるフィット": "fit",
+    "ベルフィット": "fit",
+    "fit": "fit"
+  };
+  if (aliases[simple]) return aliases[simple];
+  if (aliases[normalized]) return aliases[normalized];
+  return "";
+}
+
+function getMemberStatusValue(status) {
+  const value = normalizeMemberStatusValue(status);
+  return value || MEMBER_STATUS_DEFAULT;
+}
+
+function getMemberStatusMeta(status) {
+  const key = getMemberStatusValue(status);
+  return MEMBER_STATUS_META[key] || { label: key, icon: "" };
+}
+
 function getAudienceInfo(audience){
   const key = String(audience || "").toLowerCase();
   return shareAudienceInfo[key] || shareAudienceInfo[shareAudienceDefault];
@@ -500,9 +558,11 @@ function saveDashboardCollapsedSections() {
 }
 
 function getInitialDashboardFiltersFromQuery() {
-  const validStatus = ["all", "pending", "completed"];
-  const statusParam = String(queryParams.get("monitoringStatus") || "").toLowerCase();
-  const status = validStatus.includes(statusParam) ? statusParam : "all";
+  let statusParam = String(queryParams.get("memberStatus") || "").toLowerCase();
+  if (!statusParam) {
+    statusParam = String(queryParams.get("monitoringStatus") || "").toLowerCase();
+  }
+  const status = MEMBER_STATUS_FILTER_VALUES.includes(statusParam) ? statusParam : "all";
   const careManagers = queryParams.getAll("careManager").map(v => String(v || "").trim()).filter(Boolean);
   return {
     status,
@@ -729,13 +789,12 @@ function getDashboardCareManagerOptions(data) {
 
 function applyDashboardFilters(data) {
   const filters = dashboardState && dashboardState.filters ? dashboardState.filters : {};
-  const status = filters.status || "all";
+  const status = MEMBER_STATUS_FILTER_VALUES.includes(filters.status) ? filters.status : "all";
   const careManagers = Array.isArray(filters.careManagers) ? filters.careManagers : [];
   return (Array.isArray(data) ? data : []).filter(entry => {
     if (!entry) return false;
-    const statusKey = (entry.monitoringStatus === "completed") ? "completed" : "pending";
-    if (status === "pending" && statusKey !== "pending") return false;
-    if (status === "completed" && statusKey !== "completed") return false;
+    const statusKey = getMemberStatusValue(entry.memberStatus);
+    if (status !== "all" && statusKey !== status) return false;
     if (careManagers.length) {
       const entryManagers = parseCareManagerList(entry.careManager);
       if (!entryManagers.some(name => careManagers.includes(name))) {
@@ -773,12 +832,13 @@ function updateDashboardFilterQueryParams() {
   try {
     const params = new URLSearchParams(window.location.search);
     const filters = dashboardState && dashboardState.filters ? dashboardState.filters : {};
-    const status = filters.status || "all";
+    const status = MEMBER_STATUS_FILTER_VALUES.includes(filters.status) ? filters.status : "all";
     if (status && status !== "all") {
-      params.set("monitoringStatus", status);
+      params.set("memberStatus", status);
     } else {
-      params.delete("monitoringStatus");
+      params.delete("memberStatus");
     }
+    params.delete("monitoringStatus");
     params.delete("careManager");
     const careManagers = Array.isArray(filters.careManagers) ? filters.careManagers : [];
     careManagers.forEach(name => params.append("careManager", name));
@@ -1058,7 +1118,7 @@ function renderDashboard() {
   if (!dashboardState.filters || typeof dashboardState.filters !== "object") {
     dashboardState.filters = { status: "all", careManagers: [] };
   }
-  const validStatus = ["all", "pending", "completed"];
+  const validStatus = MEMBER_STATUS_FILTER_VALUES;
   if (!validStatus.includes(dashboardState.filters.status)) {
     dashboardState.filters.status = "all";
   }
@@ -1117,12 +1177,19 @@ function renderDashboard() {
   }
 
   if (filterContainer) {
+    const currentStatus = dashboardState.filters.status;
     const statusOptions = [
-      { value: "all", label: "すべて" },
-      { value: "pending", label: "モニタリング未実施" },
-      { value: "completed", label: "モニタリング実施済み" }
+      { value: "all", label: "すべて", icon: "🌐" },
+      ...MEMBER_STATUS_ORDER.map(value => {
+        const meta = getMemberStatusMeta(value);
+        return { value, label: meta.label, icon: meta.icon };
+      })
     ];
-    const statusHtml = statusOptions.map(opt => `<option value="${opt.value}"${opt.value === dashboardState.filters.status ? " selected" : ""}>${opt.label}</option>`).join("");
+    const statusButtonsHtml = statusOptions.map(opt => {
+      const active = opt.value === currentStatus;
+      const label = opt.icon ? `${opt.icon} ${opt.label}` : opt.label;
+      return `<button type="button" class="dashboard-status-btn${active ? " active" : ""}" data-status="${opt.value}" aria-pressed="${active}">${escapeHtml(label)}</button>`;
+    }).join("");
 
     const chipsHtml = careManagerOptions.length
       ? careManagerOptions.map(name => {
@@ -1134,8 +1201,8 @@ function renderDashboard() {
     filterContainer.innerHTML = `
       <div class="dashboard-filter-row">
         <div class="dashboard-filter">
-          <label for="dashboardStatusFilter">モニタリング状況</label>
-          <select id="dashboardStatusFilter">${statusHtml}</select>
+          <span class="dashboard-filter-label">利用者ステータス</span>
+          <div class="dashboard-status-buttons" id="dashboardStatusButtons">${statusButtonsHtml}</div>
         </div>
         <div class="dashboard-filter">
           <label>担当ケアマネ</label>
@@ -1163,10 +1230,16 @@ function renderDashboard() {
         </button>
       `;
       const rows = section.entries.map(entry => {
-        const statusKey = entry && entry.monitoringStatus === "completed" ? "completed" : "pending";
-        const statusText = statusKey === "completed" ? "モニタリング実施済み" : "モニタリング未実施";
-        const statusIcon = statusKey === "completed" ? "✅" : "⚠️";
+        const statusKey = getMemberStatusValue(entry && entry.memberStatus);
+        const statusMeta = getMemberStatusMeta(statusKey);
+        const statusLabel = statusMeta.icon ? `${statusMeta.icon} ${statusMeta.label}` : statusMeta.label;
         const safeId = escapeHtml(entry.id || "");
+        const statusButtons = MEMBER_STATUS_ORDER.map(value => {
+          const meta = getMemberStatusMeta(value);
+          const active = value === statusKey;
+          const label = meta.icon ? `${meta.icon} ${meta.label}` : meta.label;
+          return `<button type="button" class="dashboard-status-btn${active ? " active" : ""}" data-status="${value}" data-member="${safeId}" aria-pressed="${active}">${escapeHtml(label)}</button>`;
+        }).join("");
         const safeNameAttr = escapeHtml(entry.name || "");
         const displayName = entry.name ? escapeHtml(entry.name) : "（氏名未登録）";
         const latest = entry.latestDateText ? escapeHtml(entry.latestDateText) : "---";
@@ -1192,7 +1265,10 @@ function renderDashboard() {
               </div>
             </div>
             <div class="dashboard-entry-actions">
-              <span class="dashboard-status-badge ${statusKey}">${statusIcon} ${statusText}</span>
+              <div class="dashboard-status-controls" data-member="${safeId}">
+                <span class="dashboard-status-badge ${statusKey}">${escapeHtml(statusLabel)}</span>
+                <div class="dashboard-status-buttons">${statusButtons}</div>
+              </div>
               <button class="secondary btn-compact dashboard-select" data-id="${safeId}" data-name="${safeNameAttr}">表示</button>
               <a class="link-button" href="${link}">詳細</a>
             </div>
@@ -1244,15 +1320,15 @@ function bindDashboardUi() {
     if (!dashboardState.filters || typeof dashboardState.filters !== "object") {
       dashboardState.filters = { status: "all", careManagers: [] };
     }
-    const validStatus = ["all", "pending", "completed"];
-    const statusSelect = filterContainer.querySelector("#dashboardStatusFilter");
-    if (statusSelect) {
-      statusSelect.onchange = (event) => {
-        const value = String(event.target.value || "all");
+    const validStatus = MEMBER_STATUS_FILTER_VALUES;
+    const statusButtons = filterContainer.querySelectorAll("#dashboardStatusButtons .dashboard-status-btn");
+    statusButtons.forEach(btn => {
+      const value = btn.dataset.status || "all";
+      btn.onclick = () => {
         dashboardState.filters.status = validStatus.includes(value) ? value : "all";
         renderDashboard();
       };
-    }
+    });
     filterContainer.querySelectorAll(".dashboard-chip").forEach(btn => {
       const name = btn.dataset.care || "";
       btn.onclick = () => {
@@ -1309,13 +1385,54 @@ function bindDashboardUi() {
 }
 
 function bindDashboardActions() {
-  document.querySelectorAll(".dashboard-select").forEach(btn => {
+  const container = document.getElementById("dashboardTable");
+  if (!container) return;
+  container.querySelectorAll(".dashboard-select").forEach(btn => {
     btn.onclick = () => {
       const id = btn.dataset.id || "";
       const name = btn.dataset.name || "";
       selectMember(toHalfDigits(id), name);
     };
   });
+  container.querySelectorAll(".dashboard-status-controls .dashboard-status-btn").forEach(btn => {
+    const member = btn.dataset.member || "";
+    const status = btn.dataset.status || "";
+    btn.onclick = () => {
+      updateDashboardMemberStatus(member, status);
+    };
+  });
+}
+
+async function updateDashboardMemberStatus(memberId, status) {
+  const member = String(memberId || "").trim();
+  const normalizedStatus = normalizeMemberStatusValue(status);
+  if (!member || !normalizedStatus) return;
+  const currentEntry = (Array.isArray(dashboardState.data) ? dashboardState.data : []).find(entry => entry && entry.id === member);
+  if (currentEntry && getMemberStatusValue(currentEntry.memberStatus) === normalizedStatus) {
+    return;
+  }
+  const relatedButtons = Array.from(document.querySelectorAll(`.dashboard-status-controls[data-member="${member}"] .dashboard-status-btn`));
+  relatedButtons.forEach(btn => { btn.disabled = true; });
+  try {
+    const res = await callGoogle("updateMemberStatus", member, normalizedStatus);
+    if (!res || res.status !== "success") {
+      const msg = res && res.message ? res.message : "更新に失敗しました";
+      throw new Error(msg);
+    }
+    dashboardState.data = (Array.isArray(dashboardState.data) ? dashboardState.data : []).map(entry => {
+      if (entry && entry.id === member) {
+        return { ...entry, memberStatus: normalizedStatus };
+      }
+      return entry;
+    });
+    renderDashboard();
+  } catch (err) {
+    console.error("updateMemberStatus", err);
+    const message = err && err.message ? err.message : err;
+    window.alert(`ステータスの更新に失敗しました: ${message}`);
+  } finally {
+    relatedButtons.forEach(btn => { btn.disabled = false; });
+  }
 }
 
 let input = null;
