@@ -1978,6 +1978,10 @@ function monitoringReportsFindLatest_(memberId) {
   const idxText = idx.reporttext;
   const idxGenerated = idx.generatedat;
   const idxStatus = idx.status;
+  const idxSpecial = idx.special != null ? idx.special
+    : (idx['ai要約'] != null ? idx['ai要約']
+      : (idx['aisummary'] != null ? idx['aisummary']
+        : (idx['ai_summary'] != null ? idx['ai_summary'] : null)));
   if (idxMember == null || idxText == null) return null;
 
   let latest = null;
@@ -2000,7 +2004,8 @@ function monitoringReportsFindLatest_(memberId) {
         reportText: String(row[idxText] || ''),
         generatedAt,
         generatedAtText: shareFormatDateTime_(generatedAt),
-        status: idxStatus != null ? String(row[idxStatus] || '') : ''
+        status: idxStatus != null ? String(row[idxStatus] || '') : '',
+        special: idxSpecial != null ? String(row[idxSpecial] || '') : ''
       };
     }
   }
@@ -2019,6 +2024,7 @@ function shareLoadMonitoringReport_(share) {
     monthLabel: report.monthLabel || String(report.monthRaw || ''),
     generatedAtText: report.generatedAtText || '',
     status: report.status || '',
+    special: report.special || '',
     reportText: text,
   };
 }
@@ -2151,14 +2157,18 @@ function shareBuildSummary_(share, profile, hasRecords) {
   const qrDataUrl = buildExternalShareQrDataUrl_(url);
   const expired = share.expiresAt ? share.expiresAt.getTime() < Date.now() : false;
   const qrSource = profile.qrUrl || share.qrUrl || getMemberQrDriveUrl_(share.memberId);
-  const qrEmbedUrl = shareNormalizeQrEmbedUrl_(qrSource) || qrDataUrl;
+  const qrEmbedUrl = shareNormalizeQrEmbedUrl_(qrSource) || '';
+
+  const memberName = profile.name || share.memberName || '';
+  const memberCenter = profile.center || profile.centerName || share.memberCenter || share.centerName || '';
+  const memberStaff = profile.staff || profile.staffName || share.memberStaff || share.staffName || '';
 
   return {
     token: share.token,
     memberId: share.memberId,
-    memberName: profile.name || '',
-    memberCenter: profile.center || '',
-    memberStaff: profile.staff || '',
+    memberName,
+    memberCenter,
+    memberStaff,
     expiresAtText: shareFormatDateTime_(share.expiresAt),
     expired,
     audience: share.audience,
@@ -2172,9 +2182,9 @@ function shareBuildSummary_(share, profile, hasRecords) {
     rangeLabel: share.rangeLabel,
     url,
     shareLink: url,
-    qrDriveUrl: qrEmbedUrl,
-    qrEmbedUrl,
-    qrUrl: qrDataUrl,
+    qrDriveUrl: qrSource || '',
+    qrEmbedUrl: qrEmbedUrl || qrDataUrl,
+    qrUrl: qrEmbedUrl || qrSource || qrDataUrl,
     qrDataUrl,
     qrCode: qrDataUrl,
     hasRecords: hasRecords
@@ -2310,7 +2320,9 @@ function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
     primaryRecord,
     message,
     recordCount: recordResult.records.length,
-    report
+    report,
+    qrUrl: summary.qrUrl,
+    shareLink: summary.url
   };
 }
 
