@@ -24,6 +24,8 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .qr-image { width:200px; height:200px; object-fit:contain; display:none; }
 .qr-placeholder { width:200px; height:200px; display:flex; align-items:center; justify-content:center; text-align:center; font-size:0.9rem; color:#4a5a75; background:rgba(43,108,176,0.08); border-radius:12px; padding:12px; }
 .qr-caption { margin:0; font-size:0.78rem; color:#4a5a75; text-align:center; }
+.qr-link { font-size:0.78rem; color:var(--accent); text-decoration:none; display:none; word-break:break-all; }
+.qr-link:hover { text-decoration:underline; }
 .report-body { font-size:0.98rem; line-height:1.8; color:#1f2a44; background:#f8fbff; border-radius:14px; padding:18px 20px; min-height:160px; }
 .report-body p { margin:0 0 1em; white-space:pre-wrap; }
 .report-body p:last-child { margin-bottom:0; }
@@ -163,6 +165,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       <div class="qr-block" id="qrBlock">
         <img id="qrImage" class="qr-image" alt="共有QRコード">
         <div id="qrPlaceholder" class="qr-placeholder">QRコードを準備しています…</div>
+        <a id="qrLink" class="qr-link" target="_blank" rel="noopener">共有リンクを開く</a>
         <p class="qr-caption">印刷してご活用ください。</p>
       </div>
     </div>
@@ -565,7 +568,25 @@ function updateHeader(share){
 function updateQrSection(share){
   const qrImage = document.getElementById('qrImage');
   const placeholder = document.getElementById('qrPlaceholder');
+  const linkEl = document.getElementById('qrLink');
   if(!qrImage || !placeholder) return;
+  const shareLink = sanitizeShareValue(share && (share.shareLink || share.url));
+  if(linkEl){
+    if(shareLink){
+      linkEl.href = shareLink;
+      linkEl.rel = 'noopener noreferrer';
+      linkEl.target = '_blank';
+      linkEl.style.display = 'block';
+      linkEl.title = shareLink;
+      linkEl.textContent = '共有リンクを開く';
+    }else{
+      linkEl.removeAttribute('href');
+      linkEl.removeAttribute('rel');
+      linkEl.removeAttribute('target');
+      linkEl.style.display = 'none';
+      linkEl.title = '';
+    }
+  }
   const candidates = [
     share && share.qrEmbedUrl,
     share && share.qrDataUrl,
@@ -582,7 +603,9 @@ function updateQrSection(share){
     qrImage.removeAttribute('src');
     qrImage.style.display = 'none';
     placeholder.style.display = 'flex';
-    placeholder.textContent = 'QRコードが登録されていません。';
+    placeholder.textContent = shareLink
+      ? 'QRコードを生成できませんでした。下の共有リンクをご利用ください。'
+      : 'QRコードが登録されていません。';
   }
 }
 

@@ -1432,12 +1432,15 @@ function parseQrDimensions_(value){
   return { width: defaultWidth, height: defaultHeight };
 }
 
-function buildExternalShareQrDataUrl_(url) {
+function buildExternalShareQrDataUrl_(url, size) {
   try {
-    if (!url) return '';
-    // Chart API の URL をそのまま返す
-    const encoded = encodeURIComponent(url);
-    return `https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encoded}`;
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return '';
+    const dims = parseQrDimensions_(size || SHARE_QR_SIZE);
+    const width = Math.max(1, Number(dims.width || 0) || 220);
+    const height = Math.max(1, Number(dims.height || 0) || width);
+    const encoded = encodeURIComponent(trimmed);
+    return `https://chart.googleapis.com/chart?cht=qr&chs=${width}x${height}&choe=UTF-8&chl=${encoded}`;
   } catch (e) {
     Logger.log("buildExternalShareQrDataUrl_ error: " + e);
     return '';
@@ -2152,12 +2155,72 @@ function shareResolveProfile_(memberId) {
   return { name: '', center: '', staff: '', qrUrl: '' };
 }
 
+function sharePickFirstString_(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
+function shareNormalizeQrCandidate_(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return shareNormalizeQrEmbedUrl_(trimmed) || trimmed;
+}
+
+function shareBuildQrPayload_(share, profile) {
+  const safeShare = share || {};
+  const safeProfile = profile || {};
+  const baseUrl = buildExternalShareUrl_(safeShare.token);
+  const shareLink = sharePickFirstString_(safeShare.shareLink, safeShare.url, baseUrl);
+  const computedDriveUrl = getMemberQrDriveUrl_(safeShare.memberId);
+  const qrDriveUrl = sharePickFirstString_(
+    safeShare.qrDriveUrl,
+    safeShare.qrUrl,
+    safeProfile.qrUrl,
+    computedDriveUrl
+  );
+
+  const embedCandidates = [
+    safeShare.qrEmbedUrl,
+    safeShare.qrDataUrl,
+    safeShare.qrCode,
+    qrDriveUrl
+  ];
+
+  let qrEmbedUrl = '';
+  for (const candidate of embedCandidates) {
+    const normalized = shareNormalizeQrCandidate_(candidate);
+    if (normalized) {
+      qrEmbedUrl = normalized;
+      break;
+    }
+  }
+
+  const qrDataUrl = shareLink ? buildExternalShareQrDataUrl_(shareLink) : '';
+  const finalEmbed = sharePickFirstString_(qrEmbedUrl, qrDataUrl);
+  const resolvedQrUrl = sharePickFirstString_(finalEmbed, qrDriveUrl, qrDataUrl, shareLink);
+  const qrCode = sharePickFirstString_(qrDataUrl, finalEmbed, resolvedQrUrl);
+
+  return {
+    url: sharePickFirstString_(shareLink, baseUrl),
+    shareLink: sharePickFirstString_(shareLink, baseUrl),
+    qrDriveUrl: qrDriveUrl,
+    qrEmbedUrl: finalEmbed,
+    qrDataUrl,
+    qrUrl: resolvedQrUrl,
+    qrCode
+  };
+}
+
 function shareBuildSummary_(share, profile, hasRecords) {
-  const url = buildExternalShareUrl_(share.token);
-  const qrDataUrl = buildExternalShareQrDataUrl_(url);
+  const qrPayload = shareBuildQrPayload_(share, profile);
+  const url = sharePickFirstString_(qrPayload.url, buildExternalShareUrl_(share.token));
+  const shareLink = sharePickFirstString_(qrPayload.shareLink, url);
   const expired = share.expiresAt ? share.expiresAt.getTime() < Date.now() : false;
-  const qrSource = profile.qrUrl || share.qrUrl || getMemberQrDriveUrl_(share.memberId);
-  const qrEmbedUrl = shareNormalizeQrEmbedUrl_(qrSource) || '';
 
   const memberName = profile.name || share.memberName || '';
   const memberCenter = profile.center || profile.centerName || share.memberCenter || share.centerName || '';
@@ -2181,12 +2244,12 @@ function shareBuildSummary_(share, profile, hasRecords) {
     remainingLabel: shareRemainingLabel_(share.expiresAt),
     rangeLabel: share.rangeLabel,
     url,
-    shareLink: url,
-    qrDriveUrl: qrSource || '',
-    qrEmbedUrl: qrEmbedUrl || qrDataUrl,
-    qrUrl: qrEmbedUrl || qrSource || qrDataUrl,
-    qrDataUrl,
-    qrCode: qrDataUrl,
+    shareLink,
+    qrDriveUrl: qrPayload.qrDriveUrl,
+    qrEmbedUrl: sharePickFirstString_(qrPayload.qrEmbedUrl, qrPayload.qrDataUrl),
+    qrUrl: sharePickFirstString_(qrPayload.qrUrl, qrPayload.qrEmbedUrl, qrPayload.qrDataUrl, shareLink),
+    qrDataUrl: qrPayload.qrDataUrl,
+    qrCode: sharePickFirstString_(qrPayload.qrCode, qrPayload.qrDataUrl),
     hasRecords: hasRecords
   };
 }
@@ -2321,12 +2384,13 @@ function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
     message,
     recordCount: recordResult.records.length,
     report,
+    url: summary.url,
+    shareLink: summary.shareLink,
     qrUrl: summary.qrUrl,
     qrEmbedUrl: summary.qrEmbedUrl,
     qrDriveUrl: summary.qrDriveUrl,
     qrDataUrl: summary.qrDataUrl,
-    qrCode: summary.qrCode,
-    shareLink: summary.url
+    qrCode: summary.qrCode
   };
 }
 
@@ -2357,6 +2421,7 @@ function getExternalShareMeta(token, recordId) {
       primaryRecord: response.primaryRecord,
       report: response.report,
       message: includeRecords ? response.message : '',
+      url: response.url,
       qrUrl: response.qrUrl,
       qrEmbedUrl: response.qrEmbedUrl,
       qrDriveUrl: response.qrDriveUrl,
@@ -2405,6 +2470,7 @@ function enterExternalShare(token, password, recordId) {
       primaryRecord: response.primaryRecord,
       report: response.report,
       message: response.message,
+      url: response.url,
       qrUrl: response.qrUrl,
       qrEmbedUrl: response.qrEmbedUrl,
       qrDriveUrl: response.qrDriveUrl,
