@@ -394,7 +394,31 @@ function pickFirstArray(...candidates){
 function resolveSharePayload(res){
   if(!res || typeof res !== 'object'){ return { share:null, records:[], report:null, primaryRecord:null, message:'', status:'' }; }
   const meta = res.meta && typeof res.meta === 'object' ? res.meta : null;
-  const share = res.share || (meta && meta.share) || null;
+  const baseShare = res.share || (meta && meta.share) || null;
+  const share = baseShare && typeof baseShare === 'object' ? { ...baseShare } : baseShare;
+  const mergeTargets = Array.isArray(share) || typeof share !== 'object' ? null : share;
+  if(mergeTargets){
+    const candidateSources = [res, meta];
+    const fields = ['qrEmbedUrl','qrDataUrl','qrDriveUrl','qrUrl','qrCode','shareLink','url'];
+    for(const field of fields){
+      const existing = mergeTargets[field];
+      if(typeof existing === 'string' && existing.trim()) continue;
+      for(const source of candidateSources){
+        if(source && typeof source === 'object' && field in source){
+          const value = source[field];
+          if(typeof value === 'string' && value.trim()){
+            mergeTargets[field] = value;
+            break;
+          }
+        }
+      }
+    }
+    if(!mergeTargets.shareLink && typeof mergeTargets.url === 'string' && mergeTargets.url.trim()){
+      mergeTargets.shareLink = mergeTargets.url;
+    }else if(!mergeTargets.url && typeof mergeTargets.shareLink === 'string' && mergeTargets.shareLink.trim()){
+      mergeTargets.url = mergeTargets.shareLink;
+    }
+  }
   const report = res.report || (meta && meta.report) || null;
   const records = pickFirstArray(res.records, res.rawRecords, meta && meta.records, meta && meta.rawRecords);
   const primaryRecord = res.primaryRecord || (meta && meta.primaryRecord) || (records.length ? records[0] : null);
