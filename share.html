@@ -455,6 +455,46 @@ function resolveSharePayload(res){
   })();
   if(mergeTargets && profile){
     mergeTargets.profile = { ...profile };
+
+    const resolvedMemberName = pickFirstString(
+      mergeTargets.memberName,
+      profile && (profile.name || profile.memberName)
+    );
+    if(resolvedMemberName){
+      mergeTargets.memberName = resolvedMemberName;
+    }
+
+    const resolvedMemberId = pickFirstString(
+      mergeTargets.memberId,
+      profile && (profile.memberId || profile.id)
+    );
+    if(resolvedMemberId){
+      mergeTargets.memberId = resolvedMemberId;
+    }
+
+    const resolvedCenter = pickFirstString(
+      mergeTargets.memberCenter,
+      mergeTargets.centerName,
+      profile && (profile.center || profile.centerName || profile.memberCenter)
+    );
+    if(resolvedCenter){
+      mergeTargets.memberCenter = resolvedCenter;
+      if(!sanitizeShareValue(mergeTargets.centerName)){
+        mergeTargets.centerName = resolvedCenter;
+      }
+    }
+
+    const resolvedStaff = pickFirstString(
+      mergeTargets.memberStaff,
+      mergeTargets.staffName,
+      profile && (profile.staff || profile.staffName || profile.memberStaff)
+    );
+    if(resolvedStaff){
+      mergeTargets.memberStaff = resolvedStaff;
+      if(!sanitizeShareValue(mergeTargets.staffName)){
+        mergeTargets.staffName = resolvedStaff;
+      }
+    }
   }
   return { share, records, report, primaryRecord, message, status, profile };
 }
@@ -1165,7 +1205,7 @@ function fetchShareMeta(){
     const share = payload.share || {};
     if(payload.profile && share && typeof share === 'object'){
       const baseProfile = share.profile && typeof share.profile === 'object' ? share.profile : {};
-      share.profile = { ...payload.profile, ...baseProfile };
+      share.profile = { ...baseProfile, ...payload.profile };
     }
     currentShare = share;
     updateHeader(share);
@@ -1265,7 +1305,7 @@ function loadShareData(password){
     currentShare = payload.share || currentShare;
     if(payload.profile && currentShare && typeof currentShare === 'object'){
       const baseProfile = currentShare.profile && typeof currentShare.profile === 'object' ? currentShare.profile : {};
-      currentShare.profile = { ...payload.profile, ...baseProfile };
+      currentShare.profile = { ...baseProfile, ...payload.profile };
     }
     updateHeader(currentShare);
     setIntro(currentShare);
