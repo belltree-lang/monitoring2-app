@@ -243,19 +243,50 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
   </footer>
 </div>
 <script>
-const TEMPLATE_TOKEN = <?= typeof shareToken === 'string' ? JSON.stringify(shareToken) : '""' ?>;
-const TEMPLATE_RECORD_ID = <?= typeof shareRecordId === 'string' ? JSON.stringify(shareRecordId) : '""' ?>;
+const TEMPLATE_TOKEN_RAW = <?= typeof shareToken === 'string' ? JSON.stringify(shareToken) : '""' ?>;
+const TEMPLATE_RECORD_ID_RAW = <?= typeof shareRecordId === 'string' ? JSON.stringify(shareRecordId) : '""' ?>;
 const queryParams = new URLSearchParams(window.location.search);
+
+function toTrimmedString(value){
+  if(value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function isNullishPseudoString(value){
+  const lowered = toTrimmedString(value).toLowerCase();
+  return !lowered || lowered === 'null' || lowered === 'undefined';
+}
+
+function sanitizeShareValue(value){
+  let str = toTrimmedString(value);
+  if(isNullishPseudoString(str)) return '';
+  for(let i = 0; i < 3 && str.length >= 2; i += 1){
+    const first = str[0];
+    const last = str[str.length - 1];
+    if((first === '"' && last === '"') || (first === "'" && last === "'")){
+      str = str.slice(1, -1).trim();
+      if(isNullishPseudoString(str)) return '';
+    }else{
+      break;
+    }
+  }
+  return str;
+}
 
 function getTokenFromUrl(){
   const sp = new URLSearchParams(window.location.search);
-  return (sp.get('shareId') || sp.get('share') || sp.get('token') || '').trim();
+  const raw = sp.get('shareId') || sp.get('share') || sp.get('token') || '';
+  return sanitizeShareValue(raw);
 }
 
-const externalToken = (TEMPLATE_TOKEN || getTokenFromUrl() || '').trim();
-const RECORD_ID_PARAM = TEMPLATE_RECORD_ID || queryParams.get('recordId') || queryParams.get('record') || '';
-console.log("🐛 TEMPLATE_TOKEN =", TEMPLATE_TOKEN);
+const TEMPLATE_TOKEN = sanitizeShareValue(TEMPLATE_TOKEN_RAW);
+const TEMPLATE_RECORD_ID = sanitizeShareValue(TEMPLATE_RECORD_ID_RAW);
+const externalToken = sanitizeShareValue(TEMPLATE_TOKEN) || getTokenFromUrl();
+const RECORD_ID_PARAM = TEMPLATE_RECORD_ID || sanitizeShareValue(queryParams.get('recordId') || queryParams.get('record') || '');
+console.log("🐛 TEMPLATE_TOKEN_RAW =", TEMPLATE_TOKEN_RAW);
+console.log("🐛 TEMPLATE_TOKEN (sanitized) =", TEMPLATE_TOKEN);
 console.log("🐛 URL query shareId =", queryParams.get('shareId'));
+console.log("🐛 URL token (sanitized) =", getTokenFromUrl());
 console.log("🐛 externalToken =", externalToken);
 const shareAudienceInfo = {
   family: {
@@ -319,7 +350,7 @@ let filteredRecords = [];
 let displayLimit = DISPLAY_LIMIT_DEFAULT;
 let latestTimestamp = null;
 let searchTimer = null;
-let resolvedRecordId = RECORD_ID_PARAM ? String(RECORD_ID_PARAM) : '';
+let resolvedRecordId = RECORD_ID_PARAM;
 let primaryRecordData = null;
 let singleRecordMode = !!resolvedRecordId;
 let currentReport = null;
@@ -371,10 +402,10 @@ function resolveSharePayload(res){
 }
 
 async function callShareApi(action, options = {}) {
-  const token = options.token || externalToken;
+  const token = sanitizeShareValue(options.token || externalToken);
   if (!token) throw new Error('共有リンクが見つかりません。');
   const requestedRecordId = options.recordId !== undefined ? options.recordId : resolvedRecordId;
-  const recordIdValue = requestedRecordId ? String(requestedRecordId) : '';
+  const recordIdValue = sanitizeShareValue(requestedRecordId);
   const canUseGoogleRun = typeof google !== 'undefined' && google.script && google.script.run;
 
   // まず google.script.run が使える場合（GAS クライアント経由）を優先
@@ -383,7 +414,9 @@ async function callShareApi(action, options = {}) {
       return callGoogle('getExternalShareMeta', token, recordIdValue || '');
     }
     if (action === 'enter') {
-      return callGoogle('enterExternalShare', token, options.password || '', recordIdValue || '');
+      const passwordValue = typeof options.password === 'string' ? options.password : '';
+      const sanitizedPassword = isNullishPseudoString(passwordValue) ? '' : passwordValue;
+      return callGoogle('enterExternalShare', token, sanitizedPassword, recordIdValue || '');
     }
   }
 
@@ -404,7 +437,9 @@ async function callShareApi(action, options = {}) {
 
   if (action === 'enter') {
     // POST で JSON を要求（shareApi=enter を付与）
-    const body = new URLSearchParams({ shareApi: 'enter', shareId: token, password: options.password || '' });
+    const passwordValue = typeof options.password === 'string' ? options.password : '';
+    const sanitizedPassword = isNullishPseudoString(passwordValue) ? '' : passwordValue;
+    const body = new URLSearchParams({ shareApi: 'enter', shareId: token, password: sanitizedPassword });
     if (recordIdValue) body.append('recordId', recordIdValue);
     const res = await fetch(EXEC_BASE_URL, {
       method: 'POST',
@@ -635,8 +670,18 @@ function setSingleRecordMode(enabled){
 
 function getResolvedRecordId(){
   if(resolvedRecordId) return resolvedRecordId;
-  if(primaryRecordData && primaryRecordData.recordId) return String(primaryRecordData.recordId);
-  if(recordsCache.length && recordsCache[0].recordId) return String(recordsCache[0].recordId);
+  const primaryId = sanitizeShareValue(primaryRecordData && primaryRecordData.recordId);
+  if(primaryId){
+    resolvedRecordId = primaryId;
+    return resolvedRecordId;
+  }
+  if(recordsCache.length){
+    const firstId = sanitizeShareValue(recordsCache[0] && recordsCache[0].recordId);
+    if(firstId){
+      resolvedRecordId = firstId;
+      return resolvedRecordId;
+    }
+  }
   return '';
 }
 
@@ -1002,8 +1047,8 @@ function fetchShareMeta(){
     console.log("📥 primaryRecordData", primaryRecordData);   // デバッグ用ログ
 
     // recordId が指定されていない場合は primaryRecord から拾う
-    if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
-      resolvedRecordId = String(primaryRecordData.recordId);
+    if(!resolvedRecordId && primaryRecordData){
+      resolvedRecordId = sanitizeShareValue(primaryRecordData.recordId);
     }
 
     if(!share.requirePassword){
@@ -1034,6 +1079,21 @@ function fetchShareMeta(){
 
     showAlert('', '');
     const responseMessage = payload.message || (share && share.hasRecords === false ? '記録が存在しません' : '');
+    const gotRecords = Array.isArray(normalizedRecords) && normalizedRecords.length > 0;
+    const hasRecordsFlag = share && share.hasRecords;
+    const shouldAutoEnter = !share.requirePassword && !share.expired && !gotRecords && hasRecordsFlag !== false;
+
+    if(shouldAutoEnter){
+      return loadShareData('').then(result => {
+        if(result && Array.isArray(result.records) && result.records.length){
+          return result;
+        }
+        const fallbackRecords = result && Array.isArray(result.records) ? result.records : normalizedRecords;
+        const fallbackMessage = result && typeof result.message === 'string' ? result.message : responseMessage;
+        return { share: currentShare, records: fallbackRecords, message: fallbackMessage };
+      });
+    }
+
     return { share, records: normalizedRecords, message: responseMessage };
   }).catch(err => {
     const msg = err && err.message ? err.message : '共有設定の取得に失敗しました。';
@@ -1057,7 +1117,7 @@ function loadShareData(password){
       const auth = document.getElementById('shareAuth');
       if(auth) auth.style.display = 'block';
       setLoading('閲覧できませんでした。');
-      return;
+      return null;
     }
 
     const statusEl = document.getElementById('authStatus');
@@ -1077,8 +1137,8 @@ function loadShareData(password){
 
     // primaryRecord の更新
     primaryRecordData = payload.primaryRecord || (Array.isArray(payload.records) ? payload.records[0] : primaryRecordData);
-    if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
-      resolvedRecordId = String(primaryRecordData.recordId);
+    if(!resolvedRecordId && primaryRecordData){
+      resolvedRecordId = sanitizeShareValue(primaryRecordData.recordId);
     }
 
     showAlert(currentShare.expired ? 'warning' : '', currentShare.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
@@ -1101,16 +1161,18 @@ function loadShareData(password){
       const message = responseMessage || '共有可能な記録はまだありません。';
       setLoading(message);
       showEmptyState(message);
-      return;
+      return { share: currentShare, records: recordsCache, message };
     }
 
     applyFilters(true);
+    return { share: currentShare, records: recordsCache, message: responseMessage };
   }).catch(err => {
     const msg = err && err.message ? err.message : '閲覧に失敗しました。';
     showAlert('error', msg);
     const statusEl = document.getElementById('authStatus');
     if(statusEl) statusEl.textContent = msg;
     setLoading('閲覧できませんでした。');
+    return null;
   });
 }
 
