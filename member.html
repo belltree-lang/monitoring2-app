@@ -427,7 +427,6 @@ const shareExpiryPresetDefault = "30";
 const shareRangeDefault = "30";
 
 const MEMBER_STATUS_ORDER = ["active", "pause", "stop", "fit"];
-const MEMBER_STATUS_FILTER_VALUES = ["all", ...MEMBER_STATUS_ORDER];
 const MEMBER_STATUS_DEFAULT = "active";
 const MEMBER_STATUS_META = {
   active: { label: "稼働中", icon: "🟢" },
@@ -435,6 +434,31 @@ const MEMBER_STATUS_META = {
   stop: { label: "中止", icon: "⛔" },
   fit: { label: "べるフィット", icon: "💪" }
 };
+const DASHBOARD_MONITORING_PENDING_FILTER_KEY = "monitoring-missing";
+const DASHBOARD_STATUS_FILTER_OPTIONS = [
+  { value: "pause" },
+  { value: "stop" },
+  { value: "fit" },
+  { value: DASHBOARD_MONITORING_PENDING_FILTER_KEY, label: "前月未実施", icon: "⚠️" }
+].map(opt => {
+  if (MEMBER_STATUS_META[opt.value]) {
+    const meta = MEMBER_STATUS_META[opt.value];
+    return {
+      ...opt,
+      label: opt.label || meta.label,
+      icon: opt.icon != null ? opt.icon : meta.icon
+    };
+  }
+  return opt;
+});
+const MEMBER_STATUS_FILTER_VALUES = [
+  "all",
+  MEMBER_STATUS_DEFAULT,
+  ...DASHBOARD_STATUS_FILTER_OPTIONS.map(opt => opt.value)
+];
+const DASHBOARD_INACTIVE_STATUS_SET = new Set(
+  MEMBER_STATUS_ORDER.filter(value => value !== MEMBER_STATUS_DEFAULT)
+);
 
 const DASHBOARD_SPECIAL_STATUS_SECTIONS = [
   { key: "pause", label: "休止中の利用者" },
@@ -827,7 +851,14 @@ function applyDashboardFilters(data) {
   return (Array.isArray(data) ? data : []).filter(entry => {
     if (!entry) return false;
     const statusKey = getMemberStatusValue(entry.memberStatus);
-    if (status !== "all" && statusKey !== status) return false;
+    if (status === DASHBOARD_MONITORING_PENDING_FILTER_KEY) {
+      if (DASHBOARD_INACTIVE_STATUS_SET.has(statusKey)) return false;
+      if (getMonitoringStatusKey(entry.monitoringStatusPrevious) !== "pending") return false;
+    } else if (status === MEMBER_STATUS_DEFAULT) {
+      if (statusKey !== MEMBER_STATUS_DEFAULT) return false;
+    } else if (status !== "all" && statusKey !== status) {
+      return false;
+    }
     if (careManagers.length) {
       const entryManagers = parseCareManagerList(entry.careManager);
       if (!entryManagers.some(name => careManagers.includes(name))) {
@@ -884,6 +915,10 @@ function deriveMonthBadgeLabel(rawLabel) {
 
 function getMonitoringStatusKey(value) {
   return value === "completed" ? "completed" : "pending";
+}
+
+function getDashboardStatusFilterOptions() {
+  return DASHBOARD_STATUS_FILTER_OPTIONS;
 }
 
 function buildMonitoringBadge(monthLabel, status) {
@@ -1272,16 +1307,11 @@ function renderDashboard() {
 
   if (filterContainer) {
     const currentStatus = dashboardState.filters.status;
-    const statusOptions = [
-      { value: "all", label: "すべて", icon: "🌐" },
-      ...MEMBER_STATUS_ORDER.map(value => {
-        const meta = getMemberStatusMeta(value);
-        return { value, label: meta.label, icon: meta.icon };
-      })
-    ];
+    const statusOptions = getDashboardStatusFilterOptions();
     const statusButtonsHtml = statusOptions.map(opt => {
       const active = opt.value === currentStatus;
-      const label = opt.icon ? `${opt.icon} ${opt.label}` : opt.label;
+      const text = opt.label || opt.value;
+      const label = opt.icon ? `${opt.icon} ${text}` : text;
       return `<button type="button" class="dashboard-status-btn${active ? " active" : ""}" data-status="${opt.value}" aria-pressed="${active}">${escapeHtml(label)}</button>`;
     }).join("");
 
