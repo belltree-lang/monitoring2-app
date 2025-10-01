@@ -13,6 +13,7 @@
 body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var(--bg); color:var(--fg); }
 .share-app { max-width:840px; margin:0 auto; padding:28px 18px 48px; }
 .share-header { background:var(--card); border-radius:20px; padding:22px; box-shadow:0 12px 30px rgba(24,72,140,0.12); }
+.share-header-main { display:flex; flex-wrap:wrap; justify-content:space-between; gap:20px; align-items:flex-start; }
 .report-card { margin-top:20px; background:var(--card); border-radius:18px; padding:24px; box-shadow:0 12px 28px rgba(24,72,140,0.1); display:flex; flex-direction:column; gap:18px; }
 .report-card-header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:18px; align-items:flex-start; }
 .report-card-info { flex:1 1 280px; }
@@ -23,7 +24,6 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .qr-block { flex:0 0 220px; display:flex; flex-direction:column; align-items:center; gap:10px; background:#f6f9ff; border:1px dashed rgba(43,108,176,0.35); border-radius:16px; padding:16px; }
 .qr-image { width:200px; height:200px; object-fit:contain; display:none; }
 .qr-placeholder { width:200px; height:200px; display:flex; align-items:center; justify-content:center; text-align:center; font-size:0.9rem; color:#4a5a75; background:rgba(43,108,176,0.08); border-radius:12px; padding:12px; }
-.qr-caption { margin:0; font-size:0.78rem; color:#4a5a75; text-align:center; }
 .qr-link { font-size:0.78rem; color:var(--accent); text-decoration:none; display:none; word-break:break-all; }
 .qr-link:hover { text-decoration:underline; }
 .report-body { font-size:0.98rem; line-height:1.8; color:#1f2a44; background:#f8fbff; border-radius:14px; padding:18px 20px; min-height:160px; }
@@ -31,12 +31,13 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .report-body p:last-child { margin-bottom:0; }
 .report-placeholder { font-style:italic; color:var(--muted); }
 .report-empty-line { min-height:1em; }
-.share-heading { display:flex; flex-direction:column; gap:10px; }
+.share-heading { flex:1 1 320px; display:flex; flex-direction:column; gap:12px; }
 .share-title { margin:0; font-size:1.6rem; color:var(--accent); }
 .share-badges { display:flex; flex-wrap:wrap; gap:8px; }
 .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:999px; font-size:0.78rem; background:#e3f2fd; color:#134b93; font-weight:600; }
 .badge.subtle { background:#edf2f9; color:#4a5a75; }
 .badge.audience { background:#dbeafe; color:#1d4ed8; }
+.share-member-name { font-size:1.3rem; font-weight:700; color:var(--fg); }
 .share-member { font-size:1.05rem; font-weight:600; }
 .share-profile { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
 .profile-item { background:#f3f7ff; border:1px solid rgba(43,108,176,0.18); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:4px; }
@@ -101,6 +102,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 @media (max-width:640px){
   .share-app { padding:18px 14px 36px; }
   .share-header { padding:18px; }
+  .share-header-main { flex-direction:column; }
   .report-card { padding:18px; }
   .report-card-header { flex-direction:column; align-items:stretch; }
   .qr-block { width:100%; }
@@ -123,12 +125,20 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 <body>
 <div class="share-app" id="shareApp">
   <header class="share-header">
-    <div class="share-heading">
-      <h1 class="share-title">モニタリング共有ビュー</h1>
-      <div class="share-badges">
-        <span class="badge">閲覧専用</span>
-        <span class="badge subtle">個人情報は必要最小限のみ表示</span>
-        <span class="badge audience" id="shareAudienceBadge">共有先を確認中…</span>
+    <div class="share-header-main">
+      <div class="share-heading">
+        <h1 class="share-title">モニタリング共有ビュー</h1>
+        <div class="share-member-name" id="shareMemberName" style="display:none;"></div>
+        <div class="share-badges">
+          <span class="badge">閲覧専用</span>
+          <span class="badge subtle">個人情報は必要最小限のみ表示</span>
+          <span class="badge audience" id="shareAudienceBadge">共有先を確認中…</span>
+        </div>
+      </div>
+      <div class="qr-block" id="qrSection" style="display:none;">
+        <img id="qrImage" class="qr-image" alt="共有QRコード" style="display:none;">
+        <div id="qrPlaceholder" class="qr-placeholder" style="display:flex;">QRコードがありません。</div>
+        <a id="qrLink" class="qr-link" href="#" style="display:none;">共有リンクを開く</a>
       </div>
     </div>
     <div class="share-member" id="shareMember">閲覧対象を確認しています…</div>
@@ -161,12 +171,6 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
         <p class="report-subtitle" id="reportSubtitle">対象月を確認しています…</p>
         <p class="report-meta" id="reportGeneratedAt"></p>
         <div id="reportStatus" class="report-status" style="display:none;"></div>
-      </div>
-      <div class="qr-block" id="qrBlock">
-        <img id="qrImage" class="qr-image" alt="共有QRコード">
-        <div id="qrPlaceholder" class="qr-placeholder">QRコードを準備しています…</div>
-        <a id="qrLink" class="qr-link" target="_blank" rel="noopener">共有リンクを開く</a>
-        <p class="qr-caption">印刷してご活用ください。</p>
       </div>
     </div>
     <div class="report-body" id="reportContent">読み込み中です…</div>
@@ -531,9 +535,16 @@ function updateHeader(share){
   const info = getAudienceInfo(share && share.audience);
   const audienceBadge = document.getElementById('shareAudienceBadge');
   if(audienceBadge) audienceBadge.textContent = info.label;
+  const memberNameEl = document.getElementById('shareMemberName');
+  if(memberNameEl){
+    const sanitizedName = sanitizeShareValue(share && share.memberName);
+    memberNameEl.textContent = sanitizedName;
+    memberNameEl.style.display = sanitizedName ? 'block' : 'none';
+  }
   const memberEl = document.getElementById('shareMember');
   if(memberEl){
-    memberEl.textContent = share && share.memberName ? `${share.memberName} 様のモニタリング` : '対象を確認しています…';
+    const name = sanitizeShareValue(share && share.memberName);
+    memberEl.textContent = name ? `${name} 様のモニタリング` : '対象を確認しています…';
   }
   const profileEl = document.getElementById('shareProfile');
   const memberIdEl = document.getElementById('shareMemberId');
@@ -574,9 +585,13 @@ function updateHeader(share){
 }
 
 function updateQrSection(share){
+  const qrSection = document.getElementById('qrSection');
   const qrImage = document.getElementById('qrImage');
   const placeholder = document.getElementById('qrPlaceholder');
   const linkEl = document.getElementById('qrLink');
+  if(qrSection){
+    qrSection.style.display = share ? 'flex' : 'none';
+  }
   if(!qrImage || !placeholder) return;
   const shareLink = pickFirstString(share && share.shareLink, share && share.url);
   if(linkEl){
@@ -611,8 +626,8 @@ function updateQrSection(share){
     qrImage.style.display = 'none';
     placeholder.style.display = 'flex';
     placeholder.textContent = shareLink
-      ? 'QRコードを生成できませんでした。下の共有リンクをご利用ください。'
-      : 'QRコードが登録されていません。';
+      ? 'QRコードを生成できませんでした。共有リンクをご利用ください。'
+      : 'QRコードがありません。';
   }
 }
 
