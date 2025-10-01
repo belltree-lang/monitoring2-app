@@ -42,13 +42,12 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .profile-value { font-size:0.95rem; color:#1f2a44; font-weight:600; word-break:break-word; }
 .share-meta { margin-top:10px; display:flex; flex-wrap:wrap; gap:10px; font-size:0.82rem; color:var(--muted); }
 .share-meta .meta-item { display:inline-flex; align-items:center; gap:4px; }
-.share-actions { margin-top:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
-.print-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; }
-.print-controls label { display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:#35507a; }
-.print-select { padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:#f8fbff; color:#1f2a44; font-size:0.9rem; min-width:200px; }
-.print-button { padding:10px 18px; border-radius:999px; border:none; background:var(--accent); color:#fff; font-size:0.92rem; cursor:pointer; box-shadow:0 8px 18px rgba(43,108,176,0.24); }
-.print-button:disabled { background:#a8c2e8; cursor:not-allowed; box-shadow:none; }
-.print-button:not(:disabled):hover { opacity:0.92; }
+.ai-summary-card { margin-top:20px; background:var(--card); border-radius:18px; padding:20px; box-shadow:0 10px 26px rgba(24,72,140,0.1); display:none; flex-direction:column; gap:12px; }
+.ai-summary-title { margin:0; font-size:1.3rem; color:#2b5ca8; }
+.ai-summary-content { display:flex; flex-direction:column; gap:8px; font-size:0.95rem; color:#1f2a44; line-height:1.6; }
+.ai-summary-item { background:#f3f7ff; border:1px solid rgba(43,108,176,0.18); border-radius:12px; padding:10px 12px; }
+.ai-summary-label { display:block; font-size:0.75rem; color:#4c5d7c; letter-spacing:0.05em; margin-bottom:4px; text-transform:uppercase; }
+.ai-summary-empty { font-size:0.9rem; color:var(--muted); }
 .share-intro { margin-top:18px; background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25); border-radius:16px; padding:16px 18px; line-height:1.6; font-size:0.93rem; color:#2c4674; }
 .share-alert { margin-top:18px; padding:14px; border-radius:14px; font-size:0.9rem; display:none; }
 .share-alert.error { display:block; background:#fde8e8; border:1px solid #f5b5b5; color:#b91c1c; }
@@ -80,9 +79,15 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .keyword-hit.health { background:#ffe4e6; color:#b91c1c; }
 .keyword-hit.alert { background:#fde68a; color:#92400e; }
 .keyword-hit.new { background:#e0f2f1; color:#047857; }
-.record-attachments { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; }
-.record-attachments a { padding:6px 12px; border-radius:12px; background:#eef4ff; color:#1a56a3; font-size:0.82rem; text-decoration:none; }
-.record-attachments a:hover { background:#d9e6ff; }
+.record-attachments { margin-top:12px; display:flex; flex-wrap:wrap; gap:10px; }
+.record-attachment { display:flex; flex-direction:column; gap:6px; background:#eef4ff; border-radius:12px; padding:8px; color:#1a56a3; font-size:0.82rem; text-decoration:none; width:140px; box-shadow:0 4px 10px rgba(26,86,163,0.1); transition:transform .2s, box-shadow .2s; }
+.record-attachment:hover { transform:translateY(-2px); box-shadow:0 8px 18px rgba(26,86,163,0.18); }
+.record-attachment.image { padding:6px; background:#f6f9ff; }
+.record-attachment-thumb { width:100%; aspect-ratio:1/1; border-radius:8px; overflow:hidden; background:#fff; display:flex; align-items:center; justify-content:center; }
+.record-attachment-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+.record-attachment-name { font-weight:600; color:#1a56a3; word-break:break-word; text-align:center; }
+.record-attachment-icon { font-size:1.2rem; }
+.record-attachment.file { flex-direction:row; align-items:center; justify-content:center; gap:6px; }
 .empty-state { margin-top:28px; text-align:center; color:var(--muted); font-size:0.9rem; }
 .load-more { margin:12px auto 0; display:none; padding:10px 22px; border-radius:999px; border:none; background:var(--accent); color:#fff; font-size:0.9rem; cursor:pointer; box-shadow:0 8px 18px rgba(43,108,176,0.26); }
 .load-more:hover { opacity:0.92; }
@@ -109,8 +114,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
   .report-card { box-shadow:none; border:1px solid #cbd5f5; page-break-inside:avoid; }
   .qr-block { border:1px solid #cbd5f5; background:#fff; }
   .report-body { background:#fff; }
-  .print-button { display:none !important; }
-  .share-actions, .share-filters, .share-footer { display:none !important; }
+  .share-filters, .share-footer { display:none !important; }
 }
 </style>
 </head>
@@ -147,18 +151,6 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       <span class="meta-item" id="shareMask"></span>
       <span class="meta-item" id="shareAttachmentPolicy"></span>
     </div>
-    <div class="share-actions" id="printControls" style="display:none;">
-      <div class="print-controls">
-        <label>印刷対象
-          <select id="printScope" class="print-select">
-            <option value="record">この記録のみ</option>
-            <option value="center">地域包括支援センター全件</option>
-            <option value="staff">担当者全件</option>
-          </select>
-        </label>
-      </div>
-      <button type="button" class="print-button" id="printButton" disabled>印刷</button>
-    </div>
   </header>
   <section class="report-card" id="reportCard" style="display:none;">
     <div class="report-card-header">
@@ -175,6 +167,20 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       </div>
     </div>
     <div class="report-body" id="reportContent">読み込み中です…</div>
+  </section>
+  <section class="ai-summary-card" id="aiSummary">
+    <h2 class="ai-summary-title">AI要約</h2>
+    <div class="ai-summary-content">
+      <div class="ai-summary-item" id="aiSummaryStatus" style="display:none;">
+        <span class="ai-summary-label">状態・経過</span>
+        <div class="ai-summary-text" id="aiSummaryStatusText"></div>
+      </div>
+      <div class="ai-summary-item" id="aiSummarySpecial" style="display:none;">
+        <span class="ai-summary-label">特記事項</span>
+        <div class="ai-summary-text" id="aiSummarySpecialText"></div>
+      </div>
+      <div class="ai-summary-empty" id="aiSummaryEmpty">AIによる要約情報はまだ登録されていません。</div>
+    </div>
   </section>
   <section id="shareIntro" class="share-intro">
     共有いただいたモニタリング記録を安全に閲覧できるページです。最新の様子を時系列で確認できます。
@@ -468,7 +474,7 @@ function setLoading(message){
   if(emptyEl) emptyEl.style.display = 'none';
   const loadMore = document.getElementById('loadMore');
   if(loadMore) loadMore.style.display = 'none';
-  updatePrintControls(null);
+  updateAiSummary(null, currentShare);
 }
 
 function showEmptyState(message){
@@ -598,8 +604,11 @@ function updateReportCard(report, share, options = {}){
     generatedAtEl.textContent = '';
     statusEl.style.display = 'none';
     bodyEl.innerHTML = `<p class="report-placeholder">${escapeHtml(options.showLoading)}</p>`;
+    updateAiSummary(null, share);
     return;
   }
+
+  updateAiSummary(report, share);
 
   if(!shouldShowReportSection(report, share)){
     card.style.display = 'none';
@@ -634,6 +643,49 @@ function updateReportCard(report, share, options = {}){
   }else{
     bodyEl.innerHTML = '<p class="report-placeholder">レポート内容がありません。</p>';
   }
+}
+
+function updateAiSummary(report, share){
+  const section = document.getElementById('aiSummary');
+  const statusBlock = document.getElementById('aiSummaryStatus');
+  const statusTextEl = document.getElementById('aiSummaryStatusText');
+  const specialBlock = document.getElementById('aiSummarySpecial');
+  const specialTextEl = document.getElementById('aiSummarySpecialText');
+  const emptyEl = document.getElementById('aiSummaryEmpty');
+  if(!section || !statusBlock || !statusTextEl || !specialBlock || !specialTextEl || !emptyEl){
+    return;
+  }
+
+  const statusValue = sanitizeShareValue(report && report.status);
+  const specialValue = sanitizeShareValue(report && report.special);
+  const hasStatus = Boolean(statusValue);
+  const hasSpecial = Boolean(specialValue);
+  const audience = String(share && share.audience || '').toLowerCase();
+  const hasContent = hasStatus || hasSpecial;
+
+  if(hasStatus){
+    statusTextEl.textContent = statusValue;
+    statusBlock.style.display = 'block';
+  }else{
+    statusTextEl.textContent = '';
+    statusBlock.style.display = 'none';
+  }
+
+  if(hasSpecial){
+    specialTextEl.textContent = specialValue;
+    specialBlock.style.display = 'block';
+  }else{
+    specialTextEl.textContent = '';
+    specialBlock.style.display = 'none';
+  }
+
+  if(!hasContent && audience !== 'caremanager'){
+    section.style.display = 'none';
+    return;
+  }
+
+  emptyEl.style.display = hasContent ? 'none' : 'block';
+  section.style.display = 'flex';
 }
 
 function setIntro(share){
@@ -685,42 +737,6 @@ function getResolvedRecordId(){
   return '';
 }
 
-function updatePrintControls(record){
-  const container = document.getElementById('printControls');
-  const select = document.getElementById('printScope');
-  const button = document.getElementById('printButton');
-  if(!container || !select || !button) return;
-  if(!record){
-    container.style.display = 'none';
-    button.disabled = true;
-    return;
-  }
-  container.style.display = 'flex';
-  const hasCenter = !!String(record.center || '').trim();
-  const hasStaff = !!String(record.staff || '').trim();
-  const centerOption = select.querySelector('option[value="center"]');
-  const staffOption = select.querySelector('option[value="staff"]');
-  if(centerOption) centerOption.disabled = !hasCenter;
-  if(staffOption) staffOption.disabled = !hasStaff;
-  if(select.value === 'center' && !hasCenter) select.value = 'record';
-  if(select.value === 'staff' && !hasStaff) select.value = 'record';
-  button.disabled = false;
-}
-
-function handlePrintClick(){
-  const recordId = getResolvedRecordId();
-  if(!externalToken || !recordId){
-    showAlert('error', '印刷対象の記録を特定できません。');
-    return;
-  }
-  const select = document.getElementById('printScope');
-  const mode = select ? select.value : 'record';
-  const params = new URLSearchParams({ shareId: externalToken, print: '1', recordId });
-  if(mode && mode !== 'record') params.set('mode', mode);
-  const url = `${EXEC_BASE_URL}?${params.toString()}`;
-  window.open(url, '_blank', 'noopener');
-}
-
 /** キーワード装飾は try/catch で必ず成功させる */
 function decorateText(value){
   let safe = escapeHtml(value || '');
@@ -733,6 +749,49 @@ function decorateText(value){
   return safe.replace(/\n/g, '<br>');
 }
 
+function isImageAttachment(att){
+  const mime = String(att && att.mimeType || '').toLowerCase();
+  if(mime.startsWith('image/')) return true;
+  const name = String(att && att.name || '').toLowerCase();
+  const url = String(att && att.url || '').toLowerCase();
+  return /(\.png|\.jpe?g|\.gif|\.bmp|\.webp|\.heic|\.heif)$/i.test(name) || /(\.png|\.jpe?g|\.gif|\.bmp|\.webp|\.heic|\.heif)$/i.test(url);
+}
+
+function isPdfAttachment(att){
+  const mime = String(att && att.mimeType || '').toLowerCase();
+  if(mime === 'application/pdf') return true;
+  const name = String(att && att.name || '').toLowerCase();
+  const url = String(att && att.url || '').toLowerCase();
+  return name.endsWith('.pdf') || url.endsWith('.pdf');
+}
+
+function buildAttachmentMarkup(att){
+  if(!att || typeof att !== 'object') return '';
+  const nameRaw = att.name || att.fileName || '添付ファイル';
+  const name = escapeHtml(String(nameRaw || '') || '添付ファイル');
+  const urlRaw = typeof att.url === 'string' && att.url ? att.url : '';
+  const safeUrl = escapeHtml(urlRaw || '#');
+  const hasUrl = Boolean(urlRaw);
+  if(isImageAttachment(att) && hasUrl){
+    return `<a class="record-attachment image" href="${safeUrl}" target="_blank" rel="noopener">`
+      + `<span class="record-attachment-thumb"><img src="${safeUrl}" alt="${name}" loading="lazy"></span>`
+      + `<span class="record-attachment-name">${name}</span>`
+      + `</a>`;
+  }
+  if(isImageAttachment(att)){
+    return `<div class="record-attachment image">`
+      + `<span class="record-attachment-thumb"><span class="record-attachment-icon">🖼️</span></span>`
+      + `<span class="record-attachment-name">${name}</span>`
+      + `</div>`;
+  }
+  const icon = isPdfAttachment(att) ? '📄' : '📎';
+  const content = `<span class="record-attachment-icon">${icon}</span><span class="record-attachment-name">${name}</span>`;
+  if(hasUrl){
+    return `<a class="record-attachment file" href="${safeUrl}" target="_blank" rel="noopener">${content}</a>`;
+  }
+  return `<div class="record-attachment file">${content}</div>`;
+}
+
 function buildRecordHtml(record, showKind){
   const meta = [];
   meta.push(escapeHtml(record.dateText || '---'));
@@ -742,13 +801,7 @@ function buildRecordHtml(record, showKind){
 
   const attachments = Array.isArray(record.attachments) ? record.attachments : [];
   const attachmentsHtml = attachments.length
-    ? `<div class="record-attachments">${
-        attachments.map(att => {
-          const name = escapeHtml(att && att.name ? att.name : '添付ファイル');
-          const url  = escapeHtml(att && att.url  ? att.url  : '#');
-          return `<a href="${url}" target="_blank" rel="noopener">📎 ${name}</a>`;
-        }).join('')
-      }</div>`
+    ? `<div class="record-attachments">${attachments.map(buildAttachmentMarkup).join('')}</div>`
     : '';
 
   const details = [];
@@ -1057,12 +1110,10 @@ function fetchShareMeta(){
       recordsCache = normalizedRecords;
       latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
       updateKindOptions();
-      updatePrintControls(primaryRecordData);
     }else{
       recordsCache = [];
       latestTimestamp = null;
       updateKindOptions();
-      updatePrintControls(null);
     }
 
     // ✅ recordsCache の代入が終わったあとに呼ぶ
@@ -1152,7 +1203,6 @@ function loadShareData(password){
 
     updateKindOptions();
     updateFilterVisibility();
-    updatePrintControls(primaryRecordData);
     applyQuickRange(getDefaultQuickRange(currentShare));
 
     const responseMessage = payload.message || (currentShare && currentShare.hasRecords === false ? '記録が存在しません' : '');
@@ -1197,9 +1247,6 @@ function initSharePage(){
   if(loadMore) loadMore.addEventListener('click', handleLoadMore);
   const authForm = document.getElementById('authForm');
   if(authForm) authForm.addEventListener('submit', onAuthSubmit);
-  const printButton = document.getElementById('printButton');
-  if(printButton) printButton.addEventListener('click', handlePrintClick);
-
   fetchShareMeta().then(result => {
     if(!result) return;
     const share = result.share || currentShare || {};
@@ -1217,7 +1264,6 @@ function initSharePage(){
       return;
     }
     updateFilterVisibility();
-    updatePrintControls(primaryRecordData);
     showAlert(share.expired ? 'warning' : '', share.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
     if(share.expired){
       setLoading('期限切れのため閲覧できません。');
