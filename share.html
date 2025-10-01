@@ -603,29 +603,56 @@ function updateHeader(share){
   const info = getAudienceInfo(shareData.audience);
   const audienceBadge = document.getElementById('shareAudienceBadge');
   if(audienceBadge) audienceBadge.textContent = info.label;
+
+  const primaryRecord = primaryRecordData && typeof primaryRecordData === 'object' ? primaryRecordData : null;
+  const recordFallback = Array.isArray(recordsCache) && recordsCache.length ? recordsCache[0] : null;
+
+  const resolvedMemberName = pickFirstString(
+    shareData.memberName,
+    profile && (profile.name || profile.memberName),
+    primaryRecord && (primaryRecord.memberName || (primaryRecord.fields && primaryRecord.fields.memberName)),
+    recordFallback && (recordFallback.memberName || (recordFallback.fields && recordFallback.fields.memberName))
+  );
+  const resolvedMemberId = pickFirstString(
+    shareData.memberId,
+    profile && profile.memberId,
+    primaryRecord && (primaryRecord.memberId || (primaryRecord.fields && primaryRecord.fields.memberId)),
+    recordFallback && (recordFallback.memberId || (recordFallback.fields && recordFallback.fields.memberId))
+  );
+  const resolvedCenter = pickFirstString(
+    shareData.memberCenter,
+    shareData.centerName,
+    profile && (profile.center || profile.centerName),
+    primaryRecord && (primaryRecord.center || (primaryRecord.fields && primaryRecord.fields.center)),
+    recordFallback && (recordFallback.center || (recordFallback.fields && recordFallback.fields.center))
+  );
+  const resolvedStaff = pickFirstString(
+    shareData.memberStaff,
+    shareData.staffName,
+    profile && (profile.staff || profile.staffName),
+    primaryRecord && (primaryRecord.staff || (primaryRecord.fields && primaryRecord.fields.staff)),
+    recordFallback && (recordFallback.staff || (recordFallback.fields && recordFallback.fields.staff))
+  );
+
   const memberNameEl = document.getElementById('shareMemberName');
   if(memberNameEl){
-    const sanitizedName = sanitizeShareValue(shareData.memberName) || sanitizeShareValue(profile && (profile.name || profile.memberName));
-    memberNameEl.textContent = sanitizedName;
-    memberNameEl.style.display = sanitizedName ? 'block' : 'none';
+    memberNameEl.textContent = resolvedMemberName;
+    memberNameEl.style.display = resolvedMemberName ? 'block' : 'none';
   }
   const memberEl = document.getElementById('shareMember');
   if(memberEl){
-    const displayName = sanitizeShareValue(shareData.memberName) || sanitizeShareValue(profile && (profile.name || profile.memberName));
-    memberEl.textContent = displayName ? `${displayName} 様のモニタリング` : '対象を確認しています…';
+    memberEl.textContent = resolvedMemberName ? `${resolvedMemberName} 様のモニタリング` : '対象を確認しています…';
   }
   const profileEl = document.getElementById('shareProfile');
   const memberIdEl = document.getElementById('shareMemberId');
   const memberCenterEl = document.getElementById('shareMemberCenter');
   const memberStaffEl = document.getElementById('shareMemberStaff');
-  const memberId = sanitizeShareValue(shareData.memberId) || sanitizeShareValue(profile && profile.memberId);
-  const memberCenter = sanitizeShareValue(shareData.memberCenter) || sanitizeShareValue(shareData.centerName) || sanitizeShareValue(profile && (profile.center || profile.centerName));
-  const memberStaff = sanitizeShareValue(shareData.memberStaff) || sanitizeShareValue(shareData.staffName) || sanitizeShareValue(profile && (profile.staff || profile.staffName));
-  if(memberIdEl) memberIdEl.textContent = memberId || '未登録';
-  if(memberCenterEl) memberCenterEl.textContent = memberCenter || '未設定';
-  if(memberStaffEl) memberStaffEl.textContent = memberStaff || '未設定';
+  if(memberIdEl) memberIdEl.textContent = resolvedMemberId || '未登録';
+  if(memberCenterEl) memberCenterEl.textContent = resolvedCenter || '未設定';
+  if(memberStaffEl) memberStaffEl.textContent = resolvedStaff || '未設定';
   if(profileEl){
-    profileEl.style.display = 'grid';
+    const hasProfileInfo = resolvedMemberId || resolvedCenter || resolvedStaff;
+    profileEl.style.display = hasProfileInfo ? 'grid' : 'none';
   }
   const rangeEl = document.getElementById('shareRange');
   if(rangeEl){
@@ -1221,17 +1248,6 @@ function fetchShareMeta(){
       share.profile = { ...baseProfile, ...payload.profile };
     }
     currentShare = share;
-    updateHeader(share);
-    setIntro(share);
-    setFooter(share);
-    updateQrSection(share);
-
-    currentReport = payload.report || null;
-    if(share.requirePassword && !currentReport){
-      updateReportCard(null, share, { requirePassword: true });
-    }else{
-      updateReportCard(currentReport, share);
-    }
 
     let normalizedRecords = [];
     primaryRecordData = payload.primaryRecord || null;
@@ -1250,11 +1266,22 @@ function fetchShareMeta(){
       console.log("📥 normalizedRecords", normalizedRecords);   // デバッグ用ログ
       recordsCache = normalizedRecords;
       latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
-      updateKindOptions();
     }else{
       recordsCache = [];
       latestTimestamp = null;
-      updateKindOptions();
+    }
+    updateKindOptions();
+
+    updateHeader(currentShare);
+    setIntro(currentShare);
+    setFooter(currentShare);
+    updateQrSection(currentShare);
+
+    currentReport = payload.report || null;
+    if(share.requirePassword && !currentReport){
+      updateReportCard(null, share, { requirePassword: true });
+    }else{
+      updateReportCard(currentReport, share);
     }
 
     // ✅ recordsCache の代入が終わったあとに呼ぶ
@@ -1320,6 +1347,17 @@ function loadShareData(password){
       const baseProfile = currentShare.profile && typeof currentShare.profile === 'object' ? currentShare.profile : {};
       currentShare.profile = { ...baseProfile, ...payload.profile };
     }
+
+    // primaryRecord の更新
+    primaryRecordData = payload.primaryRecord || (Array.isArray(payload.records) ? payload.records[0] : primaryRecordData);
+    if(!resolvedRecordId && primaryRecordData){
+      resolvedRecordId = sanitizeShareValue(primaryRecordData.recordId);
+    }
+
+    // ✅ ここで recordsCache を更新（ヘッダ表示用に先に計算）
+    recordsCache = normalizeRecords(Array.isArray(payload.records) ? payload.records : []);
+    latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
+
     updateHeader(currentShare);
     setIntro(currentShare);
     setFooter(currentShare);
@@ -1331,17 +1369,7 @@ function loadShareData(password){
     const auth = document.getElementById('shareAuth');
     if(auth) auth.style.display = 'none';
 
-    // primaryRecord の更新
-    primaryRecordData = payload.primaryRecord || (Array.isArray(payload.records) ? payload.records[0] : primaryRecordData);
-    if(!resolvedRecordId && primaryRecordData){
-      resolvedRecordId = sanitizeShareValue(primaryRecordData.recordId);
-    }
-
     showAlert(currentShare.expired ? 'warning' : '', currentShare.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
-
-    // ✅ ここで recordsCache を更新
-    recordsCache = normalizeRecords(Array.isArray(payload.records) ? payload.records : []);
-    latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
 
     // ✅ recordsCache 更新のあとに呼ぶ
     setSingleRecordMode(Boolean(RECORD_ID_PARAM));
