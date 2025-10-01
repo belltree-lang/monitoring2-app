@@ -42,6 +42,20 @@ function doGet(e) {
     Logger.log("params = " + JSON.stringify(params));
 
     // ============ JSON API（/exec?api=shareMeta ...） ============
+    if (params.api === 'share') {
+      const token = cleanParam_(params.shareId || params.share || params.token || '');
+      const recordId = cleanParam_(params.recordId || params.record || '');
+      const password = cleanParam_(params.password || params.pass || '');
+      if (!token) {
+        return ContentService.createTextOutput(
+          JSON.stringify({ status: 'error', message: 'shareId is missing' })
+        ).setMimeType(ContentService.MimeType.JSON);
+      }
+      const result = enterExternalShare(token, password, recordId);
+      return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (params.api === 'shareMeta') {
       Logger.log("🌐 API mode detected");
       // raw を優先して拾う（空白や改行だけは後段で除去）
@@ -107,30 +121,33 @@ function doGet(e) {
       let errorMessage = "";
       const requestedMode = String(params.mode || "").trim().toLowerCase();
 
-      if (meta && meta.status === "success" && meta.share) {
-        const share = meta.share;
+      const context = shareFindByToken_(tokenClean);
+      if (context && meta && meta.status === "success") {
+        const shareState = context.share;
         const initialRecords = Array.isArray(meta.records) ? meta.records.slice() : [];
         primaryRecord = meta.primaryRecord || (initialRecords.length ? initialRecords[0] : null);
         printRecords = initialRecords;
 
+        if (!printRecords.length) {
+          const fallback = shareBuildResponse_(shareState, recordIdClean, true);
+          printRecords = fallback.records.slice();
+          primaryRecord = fallback.primaryRecord || primaryRecord;
+        }
+
         if (requestedMode === "center" && primaryRecord && primaryRecord.center) {
           const centerRecords = getRecordsByCenter(primaryRecord.center);
-          const payload = buildExternalSharePayload_(share, { records: centerRecords, center: primaryRecord.center, recordId: recordIdClean });
+          const payload = shareBuildCustomRecordSet_(shareState, centerRecords, recordIdClean);
           printRecords = payload.records;
           primaryRecord = payload.primaryRecord || primaryRecord;
           centerLabel = primaryRecord.center || (primaryRecord.fields && primaryRecord.fields.center) || "";
           printMode = "center";
         } else if (requestedMode === "staff" && primaryRecord && primaryRecord.staff) {
           const staffRecords = getRecordsByStaff(primaryRecord.staff);
-          const payload = buildExternalSharePayload_(share, { records: staffRecords, staff: primaryRecord.staff, recordId: recordIdClean });
+          const payload = shareBuildCustomRecordSet_(shareState, staffRecords, recordIdClean);
           printRecords = payload.records;
           primaryRecord = payload.primaryRecord || primaryRecord;
           staffLabel = primaryRecord.staff || (primaryRecord.fields && primaryRecord.fields.staff) || "";
           printMode = "staff";
-        } else {
-          const payload = buildExternalSharePayload_(share, { recordId: recordIdClean });
-          printRecords = payload.records;
-          primaryRecord = payload.primaryRecord || primaryRecord;
         }
       } else {
         errorMessage = meta && meta.message ? String(meta.message) : "共有情報を取得できませんでした。";
@@ -1625,7 +1642,7 @@ function createExternalShare(memberId, options) {
     const resolvedId = normalizedId || rawId;
     if (!resolvedId) throw new Error("利用者IDが未指定です");
 
-    const shareSheet = ensureShareSheet_();
+    const shareSheet = shareGetSheet_();
 
     const config = options && typeof options === 'object' ? options : {};
     const audienceRaw = String(config.audience || '').trim().toLowerCase();
@@ -1648,14 +1665,25 @@ function createExternalShare(memberId, options) {
     }
 
     // 共有範囲
-    const rangeSpec = config.rangeSpec || 'all';
+    const rangeSpec = shareNormalizeRangeInput_(config.rangeSpec || config.range || '30');
 
     const nowIso = new Date().toISOString();
 
     // 🔹 ExternalShares に必ず記録
     shareSheet.appendRow([
-      token, resolvedId, passwordHash, expiresAt, maskMode,
-      JSON.stringify(config.allowedAttachments || []), nowIso, '', '', audience, 0, rangeSpec
+      token,
+      resolvedId,
+      passwordHash,
+      expiresAt,
+      maskMode,
+      JSON.stringify(config.allowedAttachments || []),
+      nowIso,
+      '',
+      '',
+      audience,
+      0,
+      rangeSpec,
+      ''
     ]);
 
     // 🔹 QR保存（Google Driveに保存）
@@ -1705,28 +1733,29 @@ function createExternalShare(memberId, options) {
 
 
 
-function getExternalShares(memberId){
-  Logger.log("🟢 getExternalShares called with memberId=" + memberId);
+
+function getExternalShares(memberId) {
+  Logger.log('🟢 getExternalShares called with memberId=' + memberId);
   try {
     const id = String(memberId || '').trim();
     if (!id) throw new Error('利用者IDが未指定です');
 
-    const sheet = ensureShareSheet_();
-    const values = sheet.getDataRange().getValues();
-    if (!values || values.length <= 1) return { status:'success', shares: [] };
+    const sheet = shareGetSheet_();
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return { status: 'success', shares: [] };
+    }
 
-    const now = Date.now();
+    const values = sheet.getRange(2, 1, lastRow - 1, SHARE_SHEET_HEADERS.length).getValues();
     const shares = [];
+    const now = Date.now();
     const memberQrDriveUrl = getMemberQrDriveUrl_(id);
 
-    for (let i = 1; i < values.length; i++) {
-      const share = parseShareRow_(values[i]);
-      if (!share.token || share.memberId !== id) continue;
-      if (share.revokedAt) continue;
+    values.forEach(row => {
+      const share = shareParseShareRow_(row);
+      if (!share.token || share.memberId !== id) return;
+      if (share.revokedAt) return;
 
-      const allowAll = share.allowedAttachmentIds.includes('__ALL__');
-      const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
-      const expired = !!(share.expiresAt && share.expiresAt.getTime() < now);
       const url = buildExternalShareUrl_(share.token);
       const qrDataUrl = buildExternalShareQrDataUrl_(url);
 
@@ -1738,616 +1767,348 @@ function getExternalShares(memberId){
         qrUrl: qrDataUrl,
         qrDataUrl,
         qrCode: qrDataUrl,
-        createdAtText: formatShareDate_(share.createdAt),
+        createdAtText: shareFormatDateTime_(share.createdAt),
         createdAtMs: share.createdAt ? share.createdAt.getTime() : 0,
-        expiresAtText: formatShareDate_(share.expiresAt),
-        expired,
+        expiresAtText: shareFormatDateTime_(share.expiresAt),
+        expired: share.expiresAt ? share.expiresAt.getTime() < now : false,
         audience: share.audience,
         passwordProtected: !!share.passwordHash,
-        maskMode: share.maskMode || 'simple',
-        allowAllAttachments: allowAll,
-        allowedCount,
-        lastAccessText: formatShareDate_(share.lastAccessAt),
-        remainingLabel: computeRemainingLabel_(share.expiresAt),
-        accessCount: share.accessCount || 0,
+        maskMode: share.maskMode,
+        allowAllAttachments: share.allowAllAttachments,
+        allowedCount: share.allowAllAttachments ? 0 : share.allowedAttachmentIds.length,
+        lastAccessText: shareFormatDateTime_(share.lastAccessAt),
+        remainingLabel: shareRemainingLabel_(share.expiresAt),
+        accessCount: share.accessCount,
         rangeLabel: share.rangeLabel
       });
-    }
+    });
 
     shares.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-    shares.forEach(s => { if ('createdAtMs' in s) delete s.createdAtMs; });
+    shares.forEach(s => { delete s.createdAtMs; });
 
-    return { status:'success', shares };
-  } catch (e) {
-    return { status:'error', message:String(e && e.message || e) };
+    return { status: 'success', shares };
+  } catch (err) {
+    return { status: 'error', message: String(err && err.message || err) };
   }
 }
 
-function revokeExternalShare(token){
+function revokeExternalShare(token) {
   try {
-    const info = findShareRowByToken_(token);
-    if (!info) throw new Error('対象の共有リンクが見つかりません');
-    const { sheet, rowIndex } = info;
-    sheet.getRange(rowIndex, 8).setValue(new Date()); // RevokedAt
-    return { status:'success' };
-  } catch (e) {
-    return { status:'error', message:String(e && e.message || e) };
+    const context = shareFindByToken_(token);
+    if (!context) throw new Error('対象の共有リンクが見つかりません');
+    const revokedCol = SHARE_SHEET_HEADERS.indexOf('RevokedAt') + 1;
+    context.sheet.getRange(context.rowIndex, revokedCol).setValue(new Date());
+    return { status: 'success' };
+  } catch (err) {
+    return { status: 'error', message: String(err && err.message || err) };
   }
 }
 
+const SHARE_SHEET_HEADERS = [
+  'Token',
+  'MemberID',
+  'PasswordHash',
+  'ExpiresAt',
+  'MaskMode',
+  'AllowedAttachments',
+  'CreatedAt',
+  'RevokedAt',
+  'LastAccessAt',
+  'Audience',
+  'AccessCount',
+  'RangeSpec',
+  'QrUrl'
+];
 
+const SHARE_ALLOWED_AUDIENCES = ['family', 'center', 'medical', 'service'];
 
-function findShareRowByToken_(token) {
-  // しぶとい正規化：ゼロ幅・引用符・空白・全角英数・記号を除去し16進だけ残す
-  const norm = (s) => String(s == null ? '' : s)
-    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')    // ゼロ幅類
-    .replace(/^"+|"+$/g, '')                        // 先頭/末尾の引用符
-    .replace(/\s+/g, '')                            // 全空白
-    .replace(/[０-９Ａ-Ｆａ-ｆ]/g, ch => {          // 全角英数 → 半角
-      const c = ch.charCodeAt(0);
-      return String.fromCharCode(c - 0xFEE0);
-    })
-    .toLowerCase()
-    .replace(/[^0-9a-f]/g, '');                     // 16進以外除去
-
-  const wantRaw = token || '';
-  const want = norm(wantRaw);
-  Logger.log('🔎 findShareRowByToken_ wantRaw=%s wantNorm=%s', wantRaw, want);
-  if (!want) return null;
-
-  // シート取得
+function shareGetSheet_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sh = ss.getSheetByName(SHARE_SHEET_NAME);
-  if (!sh) {
-    Logger.log('❌ Sheet "%s" not found. sheets=%s', SHARE_SHEET_NAME, JSON.stringify(ss.getSheets().map(s=>s.getName())));
-    return null;
-  }
-
-  const lastRow = sh.getLastRow();
-  const lastCol = sh.getLastColumn();
-  Logger.log('📄 ExternalShares size rows=%s cols=%s', lastRow, lastCol);
-  if (lastRow < 2) { Logger.log('⚠️ no data rows'); return null; }
-
-  const values = sh.getRange(1, 1, lastRow, lastCol).getValues();
-  const header = values[0].map(v => String(v || '').trim());
-  const data   = values.slice(1);
-
-  // 列インデックス取得（Token列が見つからないときはA列にフォールバック）
-  const idxOf = (name) => header.findIndex(h => String(h).trim().toLowerCase() === name.toLowerCase());
-  let iToken = idxOf('token'); if (iToken < 0) iToken = 0;
-
-  // 先頭5件プレビュー（デバッグ）
-  for (let i = 0; i < Math.min(5, data.length); i++) {
-    const raw = data[i][iToken];
-    Logger.log('  preview row=%s tokenRaw=%s tokenNorm=%s', i+2, raw, norm(raw));
-  }
-
-  // 走査
-  for (let r = 0; r < data.length; r++) {
-    const row = data[r];
-    const got = norm(row[iToken]);
-    if (got && got === want) {
-      const rowNumber = r + 2;
-      const obj = { row: rowNumber, sheet: sh, rowIndex: rowNumber };
-      header.forEach((h, c) => { obj[h] = row[c]; });  // 列名→値の辞書化
-      Logger.log('✅ token matched at row=%s', rowNumber);
-      return obj;
-    }
-  }
-
-  Logger.log('❌ token not found. (want=%s)', want);
-  return null;
-}
-
-
-
-function enterExternalShare(token, password, recordId){
-  try {
-    const info = findShareRowByToken_(token);
-    if (!info) throw new Error('無効な共有リンクです');
-    const { sheet, rowIndex, share } = info;
-    if (share.revokedAt) throw new Error('共有リンクは停止されています');
-
-    // 期限判定
-    const now = Date.now();
-    if (share.expiresAt && share.expiresAt.getTime() < now) {
-      return { status:'error', message:'この共有リンクは期限切れです。' };
-    }
-
-    // パスワード判定
-    if (share.passwordHash) {
-      const hash = hashSharePassword_(password);
-      if (!hash || hash !== share.passwordHash) {
-        return { status:'error', message:'パスワードが一致しません。' };
-      }
-    }
-
-    const recordIdSafe = String(recordId || '').trim();
-    let payload = { records: [], primaryRecord: null };
-    try {
-      payload = buildExternalSharePayload_(share, { recordId: recordIdSafe }) || { records: [], primaryRecord: null };
-    } catch (pErr) {
-      Logger.log('enterExternalShare payload error: ' + pErr);
-    }
-
-    // 🔎 デバッグ出力
-    Logger.log('📊 enter payload.records count = ' + (payload.records ? payload.records.length : 0));
-    if (payload.records && payload.records.length && !payload.primaryRecord) {
-      payload.primaryRecord = payload.records[0];
-    }
-
-    // recordId が指定されているのに 0 件ならエラー
-    if (recordIdSafe && recordIdSafe.length > 0 && (!payload.records || !payload.records.length)) {
-      return { status:'error', message:'対象の記録が見つかりません。' };
-    }
-
-    // アクセスログ
-    sheet.getRange(rowIndex, 9).setValue(new Date()); // LastAccessAt
-    const nextCount = (share.accessCount || 0) + 1;
-    sheet.getRange(rowIndex, 11).setValue(nextCount);
-    logExternalShareAccess_(share);
-
-    // サマリー（パス後の確定版）
-    const allowAll = share.allowedAttachmentIds.includes('__ALL__');
-    const allowedCount = allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length;
-    const url = buildExternalShareUrl_(share.token);
-    const qrDataUrl = buildExternalShareQrDataUrl_(url);
-    const audienceInfo = getShareAudienceInfo_(share.audience);
-    const profile = lookupMemberProfile_(share.memberId);
-    if (!profile.found) throw new Error('利用者情報が見つかりません');
-    const qrDriveUrl = profile.qrDriveUrl || getMemberQrDriveUrl_(share.memberId);
-
-    const summary = {
-      token: share.token,
-      memberId: profile.id || share.memberId,
-      memberName: profile.name || lookupMemberName_(share.memberId),
-      memberCenter: profile.center || '',
-      memberStaff: profile.staff || '',
-      expiresAtText: formatShareDate_(share.expiresAt),
-      expired: false,
-      audience: share.audience,
-      requirePassword: !!share.passwordHash,
-      maskMode: share.maskMode || 'simple',
-      allowAllAttachments: allowAll,
-      allowedCount,
-      remainingLabel: computeRemainingLabel_(share.expiresAt),
-      rangeLabel: share.rangeLabel,
-      url,
-      shareLink: url,
-      qrDriveUrl,
-      qrUrl: qrDataUrl,
-      qrDataUrl,
-      qrCode: qrDataUrl,
-      audienceInfo
-    };
-    summary.hasRecords = !!(payload.records && payload.records.length);
-
-    const response = {
-      status:'success',
-      share: summary,
-      records: payload.records,
-      primaryRecord: payload.primaryRecord
-    };
-    if (!summary.hasRecords) {
-      response.message = '記録が存在しません';
-    }
-    return response;
-
-  } catch (e) {
-    return { status:'error', message:String(e && e.message || e) };
-  }
-}
-
-
-/** 外部共有シートを必ずヘッダー揃えて用意する */
-function ensureShareSheet_() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  Logger.log("📄 ensureShareSheet_: spreadsheetId=%s", ss.getId());
-
   let sheet = ss.getSheetByName(SHARE_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHARE_SHEET_NAME);
-    Logger.log("📄 ensureShareSheet_: sheet created = %s", sheet.getName());
-  } else {
-    Logger.log("📄 ensureShareSheet_: sheet exists = %s", sheet.getName());
   }
 
-  const header = [
-    'Token',              // A1
-    'MemberID',           // B1
-    'PasswordHash',       // C1
-    'ExpiresAt',          // D1
-    'MaskMode',           // E1
-    'AllowedAttachments', // F1
-    'CreatedAt',          // G1
-    'RevokedAt',          // H1
-    'LastAccessAt',       // I1
-    'Audience',           // J1
-    'AccessCount',        // K1
-    'RangeSpec',          // L1
-    'QrUrl'               // M1 ← ★ 追加
-  ];
-
-  // 列数保証
-  if (sheet.getMaxColumns() < header.length) {
-    sheet.insertColumnsAfter(
-      sheet.getMaxColumns(),
-      header.length - sheet.getMaxColumns()
-    );
+  if (sheet.getMaxColumns() < SHARE_SHEET_HEADERS.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), SHARE_SHEET_HEADERS.length - sheet.getMaxColumns());
   }
 
-  // 1行目にヘッダーを常にセット
-  sheet.getRange(1, 1, 1, header.length).setValues([header]);
-
+  sheet.getRange(1, 1, 1, SHARE_SHEET_HEADERS.length).setValues([SHARE_SHEET_HEADERS]);
   return sheet;
 }
 
+function shareNormalizeRangeInput_(value) {
+  const raw = String(value == null ? '' : value).trim().toLowerCase();
+  if (!raw) return '30';
+  if (raw === 'all' || raw === 'full' || raw === '0' || raw === 'alltime') return 'all';
+  if (raw === '90' || raw === '90d' || raw === '90days') return '90';
+  if (raw === '30' || raw === '30d' || raw === '30days') return '30';
+  const num = Number(raw);
+  if (Number.isFinite(num)) {
+    if (num <= 0) return '30';
+    if (num >= 90) return '90';
+    if (num >= 30) return '30';
+  }
+  return '30';
+}
 
-/** ExternalSharesの1行を安全にパース */
-function parseShareRow_(row){
-  const safeJson = (value) => {
-    try { return JSON.parse(value); } catch(_e){ return []; }
-  };
-  const toDate = (value) => {
-    if (!value) return null;
-    const d = value instanceof Date ? value : new Date(value);
-    return (d && !isNaN(d.getTime())) ? d : null;
-  };
-  const toNumber = (value) => {
-    const num = Number(value);
-    return isNaN(num) ? 0 : num;
-  };
+function shareNormalizeToken_(value) {
+  return String(value == null ? '' : value)
+    .replace(/[​‌‍﻿]/g, '')
+    .replace(/^"+|"+$/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
 
-  const audienceRaw = String(row[9] || '').trim().toLowerCase();
-  const audience = ['family','center','medical','service'].includes(audienceRaw)
-    ? audienceRaw
-    : 'family';
+function shareParseDate_(value) {
+  if (!value) return null;
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
 
-  const rangeSpec = normalizeShareRangeSpec_(row[11]);
+function shareParseAllowedAttachmentInfo_(value) {
+  let raw = value;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch (_err) {
+      raw = [raw];
+    }
+  }
 
-  // ❌ 不要なログを削除
-  // Logger.log("📦 createExternalShare result: url=%s qrDriveUrl=%s", url, qrDriveUrl || '');
+  const list = Array.isArray(raw) ? raw : [];
+  const normalized = list.map(v => String(v || '').trim()).filter(Boolean);
+  const allowAll = normalized.includes('__ALL__');
+  const ids = normalized.filter(v => v && v !== '__ALL__');
+  return { allowAll, ids };
+}
 
+function shareNormalizeAudience_(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  return SHARE_ALLOWED_AUDIENCES.includes(raw) ? raw : 'family';
+}
+
+function shareParseRangeSpec_(spec) {
+  const normalized = shareNormalizeRangeInput_(spec);
+  if (normalized === 'all') {
+    return { type: 'all' };
+  }
+  const days = Number(normalized);
+  return { type: 'days', days: Number.isFinite(days) && days > 0 ? days : 30 };
+}
+
+function shareRangeLabel_(range) {
+  if (!range) return '直近30日';
+  if (range.type === 'all') return '全期間';
+  if (range.days >= 90) return '直近90日';
+  return '直近30日';
+}
+
+function shareFormatDateTime_(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+  const tz = Session.getScriptTimeZone ? (Session.getScriptTimeZone() || 'Asia/Tokyo') : 'Asia/Tokyo';
+  return Utilities.formatDate(date, tz, 'yyyy/MM/dd HH:mm');
+}
+
+function shareRemainingLabel_(expiresAt) {
+  if (!(expiresAt instanceof Date) || isNaN(expiresAt.getTime())) return '';
+  const diff = expiresAt.getTime() - Date.now();
+  if (diff <= 0) return '';
+  const minutes = Math.floor(diff / (60 * 1000));
+  if (minutes < 60) return `残り約${minutes}分`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `残り約${hours}時間`;
+  const days = Math.floor(hours / 24);
+  return `残り約${days}日`;
+}
+
+function shareNormalizeAttachment_(attachment) {
+  if (!attachment || typeof attachment !== 'object') return null;
+  const fileId = String(attachment.fileId || attachment.id || '').trim();
+  const url = String(attachment.url || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '')).trim();
+  const name = String(attachment.name || attachment.fileName || attachment.title || '添付ファイル');
+  if (!fileId && !url) return null;
   return {
-    token: String(row[0] || '').trim(),
-    memberId: (() => {
-      const normalized = normalizeMemberId_(row[1]);
-      return normalized || String(row[1] || '').trim();
-    })(),
-    passwordHash: String(row[2] || '').trim(),
-    expiresAt: toDate(row[3]),
-    maskMode: String(row[4] || 'simple').trim() || 'simple',
-    allowedAttachmentIds: Array.isArray(row[5]) ? row[5] : safeJson(String(row[5] || '[]')),
-    createdAt: toDate(row[6]),
-    revokedAt: toDate(row[7]),
-    lastAccessAt: toDate(row[8]),
-    audience,
-    accessCount: toNumber(row[10]),
-    rangeSpec,
-    rangeLabel: formatShareRangeLabel_(rangeSpec)
+    fileId,
+    url,
+    name,
+    mimeType: String(attachment.mimeType || '')
   };
 }
 
-
-function normalizeToken_(tok){
-  return String(tok || "")
-    .trim()
-    .replace(/\s+/g, "")       // 改行やスペースを全部削除
-    .toLowerCase();            // 念のため小文字化
+function shareFilterAttachmentsForShare_(attachments, share) {
+  const list = Array.isArray(attachments) ? attachments : [];
+  if (share.allowAllAttachments) {
+    return list.map(shareNormalizeAttachment_).filter(Boolean);
+  }
+  if (!share.allowedAttachmentIds.length) return [];
+  const allowedSet = new Set(share.allowedAttachmentIds);
+  return list
+    .map(shareNormalizeAttachment_)
+    .filter(att => att && att.fileId && allowedSet.has(att.fileId));
 }
 
-/***** AccessLog シートを用意 *****/
-function ensureShareAccessLogSheet_() {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const name = SHARE_LOG_SHEET_NAME || 'ExternalShareAccessLog';
-  let sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-    sh.appendRow(['AccessedAt', 'Token', 'MemberID', 'Audience', 'RecordId']);
-  }
-  return sh;
+function shareMaskText_(text, mode) {
+  if (mode === 'none') return String(text || '');
+  const value = String(text || '');
+  return value
+    .replace(/[0-9０-９]/g, '＊')
+    .replace(/([A-Za-z぀-ヿ一-鿿]{2,})/g, match => match.charAt(0) + '＊'.repeat(match.length - 1));
 }
 
-/***** ExternalShares から Token で1行取得（列名でマッピング） *****/
-function getExternalShareMeta(token, recordId) {
-  Logger.log('🟦 getExternalShareMeta called token="%s" recordId="%s"', token, recordId);
-  try {
-    const shareRow = findShareRowByToken_(token);
-    if (!shareRow) {
-      Logger.log('❌ getExternalShareMeta: token not found in ExternalShares.');
-      return { status: 'error', ok: false, message: '共有リンクが存在しません' };
-    }
-
-    // ---- ExternalShares シートの行をオブジェクト化 ----
-    const share = parseShareRow_([
-      shareRow['Token'],
-      shareRow['MemberID'],
-      shareRow['PasswordHash'],
-      shareRow['ExpiresAt'],
-      shareRow['MaskMode'],
-      shareRow['AllowedAttachments'],
-      shareRow['CreatedAt'],
-      shareRow['RevokedAt'],
-      shareRow['LastAccessAt'],
-      shareRow['Audience'],
-      shareRow['AccessCount'],
-      shareRow['RangeSpec'],
-      shareRow['QrUrl']
-    ]);
-
-    const memberId = String(share.memberId || '').trim();
-    const url = buildExternalShareUrl_(share.token);
-
-    // ほのぼのIDから利用者プロフィールを取得
-    const profile = lookupMemberProfile_(memberId);
-
-    // 期限チェック
-    const expired = !!(share.expiresAt && share.expiresAt.getTime() < Date.now());
-
-    // ---- 記録取得（getMemberRecords_ を利用） ----
-    let rawRecords = [];
-    try {
-      rawRecords = getMemberRecords_(memberId, 200) || []; // 最大200件
-      Logger.log("📥 getMemberRecords_ returned count=%s", rawRecords.length);
-      if (rawRecords.length) Logger.log("sample record=%s", JSON.stringify(rawRecords[0]));
-    } catch (e) {
-      Logger.log('⚠️ getMemberRecords_ failed: ' + e);
-    }
-
-    // recordId が指定されていたら絞る
-    const recordIdSafe = String(recordId || '').trim();
-    if (recordIdSafe) {
-      rawRecords = rawRecords.filter(r => String(r.recordId).trim() === recordIdSafe);
-    }
-
-    // ---- 添付・マスク処理 ----
-    const allowAll = share.allowedAttachmentIds.includes('__ALL__');
-    const allowedSet = new Set(
-      allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__')
-    );
-
-    const processed = rawRecords.map(rec => {
-      const attachments = filterAttachmentsForShare_(rec.attachments, { allowAll, allowedSet });
-      const maskedText  = maskTextForExternal_(rec.text || rec.text || '', share.maskMode);
-
-      return {
-        recordId: rec.recordId,
-        memberId: rec.memberId || memberId,
-        memberName: profile.name || '',
-        dateText: rec.dateText || '',
-        kind: rec.kind || '',
-        audience: share.audience,
-        text: maskedText,
-        attachments,
-        timestamp: rec.timestamp || null,
-        center: rec.center || '',
-        staff: rec.staff || '',
-        status: rec.status || '',
-        special: rec.special || '',
-        fields: rec.fields || {}
-      };
-    });
-
-    // primaryRecord
-    let primaryRecord = null;
-    if (processed.length) {
-      primaryRecord = recordIdSafe
-        ? processed.find(p => String(p.recordId).trim() === recordIdSafe) || processed[0]
-        : processed[0];
-    }
-
-    // ---- summary 情報 ----
-    const audienceInfo = getShareAudienceInfo_(share.audience);
-    const summary = {
-      token: share.token,
-      memberId,
-      memberName: profile.name || '',
-      memberCenter: profile.center || '',
-      memberStaff: profile.staff || '',
-      expiresAtText: formatShareDate_(share.expiresAt),
-      expired,
-      audience: share.audience,
-      requirePassword: !!share.passwordHash,
-      maskMode: share.maskMode || 'simple',
-      allowAllAttachments: allowAll,
-      allowedCount: allowAll ? 0 : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__').length,
-      remainingLabel: computeRemainingLabel_(share.expiresAt),
-      rangeLabel: formatShareRangeLabel_(share.rangeSpec),
-      url,
-      shareLink: url,
-      qrDriveUrl: profile.qrDriveUrl || getMemberQrDriveUrl_(memberId),
-      qrUrl: buildExternalShareQrDataUrl_(url),
-      qrDataUrl: buildExternalShareQrDataUrl_(url),
-      qrCode: buildExternalShareQrDataUrl_(url),
-      audienceInfo,
-      hasRecords: processed.length > 0
-    };
-
-    Logger.log("📤 getExternalShareMeta finished token=%s records=%s", token, processed.length);
-
-    return {
-      status: 'success',
-      ok: true,
-      share: summary,
-      records: processed,
-      primaryRecord,
-      message: processed.length ? '' : '記録が存在しません'
-    };
-
-  } catch (e) {
-    Logger.log('❌ getExternalShareMeta failed: ' + (e && e.stack ? e.stack : e));
-    return { status: 'error', ok: false, message: String(e && e.message || e) };
+function shareRangeWindow_(range) {
+  if (!range || range.type === 'all') {
+    return { since: null };
   }
+  const days = range.days || 30;
+  const now = new Date();
+  const since = now.getTime() - days * 24 * 60 * 60 * 1000;
+  return { since };
 }
 
+function shareLoadRecords_(share, recordId, range) {
+  const normalizedRecordId = String(recordId || '').trim();
+  const allRecords = getMemberRecords_(share.memberId, 200) || [];
+  const { since } = shareRangeWindow_(range);
+  const sanitized = [];
 
-/***** アクセス時に LastAccessAt 更新 & AccessCount +1 *****/
-function updateShareAccess_(token) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sh = ss.getSheetByName(SHARE_SHEET_NAME);
-  if (!sh) return;
+  allRecords.forEach(rec => {
+    const ts = Number(rec.timestamp || 0) || 0;
+    if (since && ts && ts < since) return;
+    if (normalizedRecordId && String(rec.recordId || '').trim() !== normalizedRecordId) return;
 
-  const info = findShareRowByToken_(token);
-  if (!info) return;
+    const attachments = shareFilterAttachmentsForShare_(rec.attachments, share);
+    const maskedText = shareMaskText_(rec.text || '', share.maskMode);
 
-  const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  const col = (name) => header.indexOf(name) + 1; // 1-based
-
-  const nowIso = new Date().toISOString();
-  sh.getRange(info.row, col('LastAccessAt')).setValue(nowIso);
-
-  const cntRange = sh.getRange(info.row, col('AccessCount'));
-  const current = Number(cntRange.getValue() || 0);
-  cntRange.setValue(current + 1);
-}
-
-/***** アクセスログを1行追加（Token / MemberID / Audience を厳密に） *****/
-function logShareAccess_(share, recordId) {
-  if (!share) return;
-  const token = String(share.token || '').trim();
-  if (!token) return;
-
-  const sh = ensureShareAccessLogSheet_();
-  sh.appendRow([
-    new Date(),
-    token,
-    String(share.memberId || ''),
-    String(share.audience || ''),
-    String(recordId || '')
-  ]);
-}
-
-
-
-function buildExternalSharePayload_(share, options){
-  const opts = options || {};
-  const rangeArg = shareRangeToFetchArg_(share && (share.rangeSpec || share.rangeLabel || share.range));
-  const allowAll = share.allowedAttachmentIds.includes('__ALL__');
-  const allowedSet = new Set(allowAll ? [] : share.allowedAttachmentIds.filter(v => v && v !== '__ALL__'));
-  const audience = share.audience || 'family';
-  
-
-  // レコード取得
-  const recordsSource = Array.isArray(opts.records) && opts.records.length
-    ? opts.records.slice()
-    : fetchRecordsWithIndex_(share.memberId, rangeArg);
-
-  // デバッグ用ログ
-  if (recordsSource && recordsSource.length) {
-    try {
-      Logger.log("🔎 recordsSource sample = " + JSON.stringify(recordsSource[0]));
-    } catch(_e){}
-  }
-
-  const recordIdFilter = String(opts.recordId || '').trim();
-  const centerFilter = String(opts.center || '').trim();
-  const staffFilter = String(opts.staff || '').trim();
-
-  let filtered = recordsSource;
-
-  // center 指定フィルタ
-  if (centerFilter) {
-    filtered = filtered.filter(rec => String(rec.center || '').trim().toLowerCase() === centerFilter.toLowerCase());
-  }
-  // staff 指定フィルタ
-  if (staffFilter) {
-    filtered = filtered.filter(rec => String(rec.staff || '').trim().toLowerCase() === staffFilter.toLowerCase());
-  }
-  // recordId 指定フィルタ（空や "0" "undefined" は無視）
-  if (recordIdFilter && recordIdFilter !== "0" && recordIdFilter.toLowerCase() !== "undefined") {
-    const matched = filtered.filter(rec => String(rec.recordId || rec.rowIndex || '').trim() === recordIdFilter);
-    filtered = matched.length ? matched : [];
-  }
-
-  const results = [];
-  let primaryRecord = null;
-
-  filtered.forEach(rec => {
-    const attachments = filterAttachmentsForShare_(rec.attachments, { allowAll, allowedSet });
-    const maskedText = maskTextForExternal_(rec.text || '', share.maskMode);
-    const timestamp = (typeof rec.timestamp === 'number') ? rec.timestamp : null;
-    const fields = rec.fields ? Object.assign({}, rec.fields) : {};
-
-    // マスク処理を fields に反映
-    if ('記録内容' in fields) {
-      fields['記録内容'] = maskedText;
-    }
-    if ('text' in fields && fields.text === rec.text) {
-      fields.text = maskedText;
-    }
-    if ('添付' in fields) {
-      fields['添付'] = attachments
-        .map(att => att && att.name ? att.name : (att && att.url ? att.url : ''))
-        .filter(Boolean)
-        .join('\n');
-    }
-    if (!('center' in fields) && rec.center) {
-      fields.center = rec.center;
-    }
-    if (!('staff' in fields) && rec.staff) {
-      fields.staff = rec.staff;
-    }
-
-    const item = {
-      recordId: rec.recordId || String(rec.rowIndex || ''),
-      rowIndex: rec.rowIndex,
-      memberId: rec.memberId || '',
-      memberName: rec.memberName || lookupMemberName_(rec.memberId),
+    sanitized.push({
+      recordId: rec.recordId,
+      memberId: share.memberId,
+      memberName: rec.memberName || '',
       dateText: rec.dateText || '',
       kind: rec.kind || '',
-      audience,
+      audience: share.audience,
       text: maskedText,
       attachments,
-      timestamp,
-      center: rec.center || '',
-      staff: rec.staff || '',
-      status: rec.status || fields.status || '',
-      special: rec.special || fields.special || '',
-      fields
-    };
-
-    results.push(item);
-
-    const isPrimary = recordIdFilter
-      ? String(item.recordId || '').trim() === recordIdFilter
-      : !primaryRecord;
-    if (isPrimary) {
-      primaryRecord = item;
-    }
+      timestamp: ts || null,
+      center: rec.center || (rec.fields && rec.fields.center) || '',
+      staff: rec.staff || (rec.fields && rec.fields.staff) || '',
+      status: rec.status || '',
+      special: rec.special || '',
+      fields: rec.fields || {}
+    });
   });
 
-  // text か 添付が無いレコードは削除。ただし recordId 指定がある場合は例外
-  const filteredResults = results.filter(rec => {
-    if (recordIdFilter && String(rec.recordId || '').trim() === recordIdFilter) {
-      return true;
-    }
-    return rec.text || (rec.attachments && rec.attachments.length);
-  });
-
-  if (!primaryRecord && filteredResults.length) {
-    primaryRecord = filteredResults[0];
+  sanitized.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  let primaryRecord = sanitized.length ? sanitized[0] : null;
+  if (normalizedRecordId) {
+    const found = sanitized.find(rec => String(rec.recordId || '').trim() === normalizedRecordId);
+    if (found) primaryRecord = found;
   }
 
-  return { records: filteredResults, primaryRecord };
+  return { records: sanitized, primaryRecord };
 }
 
-
-
-/** アクセスログ（追加シートに追記） */
-function logExternalShareAccess_(share){
+function shareResolveProfile_(memberId) {
   try {
-    const sheet = ensureShareLogSheet_();
-    sheet.appendRow([ new Date(), share.token, share.memberId, share.audience || 'family' ]);
-  } catch (e) {
-    Logger.log('logExternalShareAccess_ error: ' + e);
+    if (typeof honobonoFindById_ === 'function') {
+      const info = honobonoFindById_(memberId);
+      if (info) {
+        return {
+          name: String(info.name || ''),
+          center: String(info.center || ''),
+          staff: String(info.staff || ''),
+          qrUrl: String(info.qrUrl || '')
+        };
+      }
+    }
+  } catch (err) {
+    Logger.log('⚠️ shareResolveProfile_ error: ' + (err && err.message ? err.message : err));
   }
+  return { name: '', center: '', staff: '', qrUrl: '' };
 }
 
-function ensureShareLogSheet_(){
+function shareBuildSummary_(share, profile, hasRecords) {
+  const url = buildExternalShareUrl_(share.token);
+  const qrDataUrl = buildExternalShareQrDataUrl_(url);
+  const expired = share.expiresAt ? share.expiresAt.getTime() < Date.now() : false;
+  const qrDriveUrl = profile.qrUrl || getMemberQrDriveUrl_(share.memberId);
+
+  return {
+    token: share.token,
+    memberId: share.memberId,
+    memberName: profile.name || '',
+    memberCenter: profile.center || '',
+    memberStaff: profile.staff || '',
+    expiresAtText: shareFormatDateTime_(share.expiresAt),
+    expired,
+    audience: share.audience,
+    requirePassword: !!share.passwordHash,
+    maskMode: share.maskMode,
+    allowAllAttachments: share.allowAllAttachments,
+    allowedCount: share.allowAllAttachments ? 0 : share.allowedAttachmentIds.length,
+    remainingLabel: shareRemainingLabel_(share.expiresAt),
+    rangeLabel: share.rangeLabel,
+    url,
+    shareLink: url,
+    qrDriveUrl,
+    qrUrl: qrDataUrl,
+    qrDataUrl,
+    qrCode: qrDataUrl,
+    hasRecords: hasRecords
+  };
+}
+
+function shareParseShareRow_(row) {
+  const tokenRaw = String(row[0] || '').trim();
+  const attachmentInfo = shareParseAllowedAttachmentInfo_(row[5]);
+  const rangeSpec = shareNormalizeRangeInput_(row[11]);
+  const range = shareParseRangeSpec_(rangeSpec);
+  return {
+    token: tokenRaw,
+    normalizedToken: shareNormalizeToken_(tokenRaw),
+    memberId: String(row[1] || '').trim(),
+    passwordHash: String(row[2] || '').trim(),
+    expiresAt: shareParseDate_(row[3]),
+    maskMode: String(row[4] || 'simple').trim() === 'none' ? 'none' : 'simple',
+    allowedAttachmentIds: attachmentInfo.ids,
+    allowAllAttachments: attachmentInfo.allowAll,
+    createdAt: shareParseDate_(row[6]),
+    revokedAt: shareParseDate_(row[7]),
+    lastAccessAt: shareParseDate_(row[8]),
+    audience: shareNormalizeAudience_(row[9]),
+    accessCount: Number(row[10] || 0) || 0,
+    rangeSpec,
+    range,
+    rangeLabel: shareRangeLabel_(range),
+    qrUrl: String(row[12] || '').trim()
+  };
+}
+
+function shareFindByToken_(token) {
+  const normalized = shareNormalizeToken_(token);
+  if (!normalized) return null;
+  const sheet = shareGetSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const values = sheet.getRange(2, 1, lastRow - 1, SHARE_SHEET_HEADERS.length).getValues();
+  for (let i = 0; i < values.length; i++) {
+    const share = shareParseShareRow_(values[i]);
+    if (share.normalizedToken && share.normalizedToken === normalized) {
+      return { sheet, rowIndex: i + 2, share };
+    }
+  }
+  return null;
+}
+
+function shareGetLogSheet_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sheet = ss.getSheetByName(SHARE_LOG_SHEET_NAME);
-  if (!sheet) sheet = ss.insertSheet(SHARE_LOG_SHEET_NAME);
-  const header = ['AccessedAt','Token','MemberID','Audience'];
+  const name = SHARE_LOG_SHEET_NAME || 'ExternalShareAccessLog';
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+  const header = ['AccessedAt', 'Token', 'MemberID', 'Result'];
   if (sheet.getMaxColumns() < header.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
   }
@@ -2355,52 +2116,146 @@ function ensureShareLogSheet_(){
   return sheet;
 }
 
-function normalizeShareRangeSpec_(value){
-  const raw = String(value || '').trim().toLowerCase();
-  if (!raw) return '30';
-  if (raw === 'all' || raw === 'full' || raw === 'unlimited') return 'all';
-  if (raw === '90' || raw === '90d' || raw === '90days') return '90';
-  if (raw === '30' || raw === '30d' || raw === '30days') return '30';
-  const num = parseInt(raw, 10);
-  if (!isNaN(num)) {
-    if (num >= 90) return '90';
-    if (num >= 30) return '30';
-    if (num <= 0) return '30';
-    return String(num);
+function shareLogAccess_(token, memberId, result) {
+  try {
+    if (!token) return;
+    const sheet = shareGetLogSheet_();
+    sheet.appendRow([new Date(), token, String(memberId || ''), String(result || '')]);
+  } catch (err) {
+    Logger.log('⚠️ shareLogAccess_ failed: ' + (err && err.message ? err.message : err));
   }
-  return '30';
 }
 
-function formatShareRangeLabel_(spec){
-  const normalized = normalizeShareRangeSpec_(spec);
-  if (normalized === 'all') return '全期間';
-  if (normalized === '90') return '直近90日';
-  return '直近30日';
-}
-
-function shareRangeToFetchArg_(spec){
-  const normalized = normalizeShareRangeSpec_(spec);
-  if (normalized === 'all') return 'all';
-  const days = Number(normalized);
-  return (!isNaN(days) && days > 0) ? days : 'all';
-}
-
-function filterAttachmentsForShare_(attachments, option){
-  const arr = Array.isArray(attachments) ? attachments : [];
-  if (option.allowAll) {
-    return arr.map(normalizeAttachmentForShare_).filter(Boolean);
+function shareUpdateAccessStats_(sheet, rowIndex) {
+  try {
+    const lastAccessCol = SHARE_SHEET_HEADERS.indexOf('LastAccessAt') + 1;
+    const accessCountCol = SHARE_SHEET_HEADERS.indexOf('AccessCount') + 1;
+    sheet.getRange(rowIndex, lastAccessCol).setValue(new Date());
+    const range = sheet.getRange(rowIndex, accessCountCol);
+    const current = Number(range.getValue() || 0);
+    range.setValue(current + 1);
+  } catch (err) {
+    Logger.log('⚠️ shareUpdateAccessStats_ failed: ' + (err && err.message ? err.message : err));
   }
-  if (!option.allowedSet || !option.allowedSet.size) return [];
-  return arr.map(normalizeAttachmentForShare_).filter(att => att && att.fileId && option.allowedSet.has(att.fileId));
 }
 
-function normalizeAttachmentForShare_(att){
-  if (!att || typeof att !== 'object') return null;
-  const fileId = String(att.fileId || att.id || '').trim();
-  const url = String(att.url || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '')).trim();
-  const name = String(att.name || att.fileName || att.title || '添付ファイル');
-  if (!fileId && !url) return null;
-  return { fileId, url, name, mimeType: String(att.mimeType || '') };
+
+function shareBuildCustomRecordSet_(share, rawRecords, recordId) {
+  const normalizedRecordId = String(recordId || '').trim();
+  const base = Array.isArray(rawRecords) ? rawRecords : [];
+  const sanitized = base.map(rec => {
+    const attachments = shareFilterAttachmentsForShare_(rec.attachments, share);
+    const masked = shareMaskText_(rec.text || '', share.maskMode);
+    return {
+      recordId: rec.recordId,
+      memberId: rec.memberId || share.memberId,
+      memberName: rec.memberName || '',
+      dateText: rec.dateText || '',
+      kind: rec.kind || '',
+      audience: share.audience,
+      text: masked,
+      attachments,
+      timestamp: Number(rec.timestamp || 0) || null,
+      center: rec.center || (rec.fields && rec.fields.center) || '',
+      staff: rec.staff || (rec.fields && rec.fields.staff) || '',
+      status: rec.status || '',
+      special: rec.special || '',
+      fields: rec.fields || {}
+    };
+  });
+
+  sanitized.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  let primaryRecord = sanitized.length ? sanitized[0] : null;
+  if (normalizedRecordId) {
+    const found = sanitized.find(item => String(item.recordId || '').trim() === normalizedRecordId);
+    if (found) primaryRecord = found;
+  }
+
+  return { records: sanitized, primaryRecord };
+}
+function shareBuildResponse_(share, recordId, includeRecords) {
+  const recordResult = shareLoadRecords_(share, recordId, share.range);
+  const profile = shareResolveProfile_(share.memberId);
+  const summary = shareBuildSummary_(share, profile, recordResult.records.length > 0);
+  const message = recordResult.records.length ? '' : '記録が存在しません';
+  return {
+    summary,
+    records: includeRecords ? recordResult.records : [],
+    primaryRecord: includeRecords ? recordResult.primaryRecord : null,
+    message,
+    recordCount: recordResult.records.length
+  };
+}
+
+function getExternalShareMeta(token, recordId) {
+  Logger.log('🟦 getExternalShareMeta called token="%s" recordId="%s"', token, recordId);
+  try {
+    const context = shareFindByToken_(token);
+    if (!context) {
+      shareLogAccess_(shareNormalizeToken_(token), '', 'invalid');
+      return { status: 'error', message: '共有リンクが存在しません' };
+    }
+
+    const share = context.share;
+    if (share.revokedAt) {
+      shareLogAccess_(share.token, share.memberId, 'invalid');
+      return { status: 'error', message: 'この共有リンクは無効化されています。' };
+    }
+
+    const includeRecords = !share.passwordHash;
+    const response = shareBuildResponse_(share, recordId, includeRecords);
+
+    return {
+      status: 'success',
+      share: response.summary,
+      records: response.records,
+      primaryRecord: response.primaryRecord,
+      message: includeRecords ? response.message : ''
+    };
+  } catch (err) {
+    Logger.log('❌ getExternalShareMeta failed: ' + (err && err.stack ? err.stack : err));
+    return { status: 'error', message: String(err && err.message || err) };
+  }
+}
+
+function enterExternalShare(token, password, recordId) {
+  Logger.log('🟦 enterExternalShare called token="%s" recordId="%s"', token, recordId);
+  try {
+    const context = shareFindByToken_(token);
+    if (!context) {
+      shareLogAccess_(shareNormalizeToken_(token), '', 'invalid');
+      return { status: 'error', message: '共有リンクが存在しません' };
+    }
+
+    const share = context.share;
+    if (share.revokedAt) {
+      shareLogAccess_(share.token, share.memberId, 'invalid');
+      return { status: 'error', message: '共有リンクは無効化されています' };
+    }
+
+    if (share.passwordHash) {
+      const hash = hashSharePassword_(password);
+      if (!hash || hash !== share.passwordHash) {
+        shareLogAccess_(share.token, share.memberId, 'invalid');
+        return { status: 'error', message: 'パスワードが一致しません。' };
+      }
+    }
+
+    const response = shareBuildResponse_(share, recordId, true);
+    shareUpdateAccessStats_(context.sheet, context.rowIndex);
+    shareLogAccess_(share.token, share.memberId, 'success');
+
+    return {
+      status: 'success',
+      share: response.summary,
+      records: response.records,
+      primaryRecord: response.primaryRecord,
+      message: response.message
+    };
+  } catch (err) {
+    Logger.log('❌ enterExternalShare failed: ' + (err && err.stack ? err.stack : err));
+    return { status: 'error', message: String(err && err.message || err) };
+  }
 }
 
 function hashSharePassword_(password){
@@ -2410,118 +2265,6 @@ function hashSharePassword_(password){
   return digest.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
 }
 
-function maskTextForExternal_(text, mode){
-  if (mode === 'none') return String(text || '');
-  const value = String(text || '');
-  return value
-    .replace(/[0-9０-９]/g, '＊')
-    .replace(/([A-Za-z\u3040-\u30FF\u4E00-\u9FFF]{2,})/g, (m) => m.charAt(0) + '＊'.repeat(m.length - 1));
-}
-
-function formatShareDate_(date){
-  if (!(date instanceof Date) || isNaN(date.getTime())) return '';
-  const tz = Session.getScriptTimeZone() || 'Asia/Tokyo';
-  return Utilities.formatDate(date, tz, 'yyyy/MM/dd HH:mm');
-}
-
-function computeRemainingLabel_(expiresAt){
-  if (!(expiresAt instanceof Date) || isNaN(expiresAt.getTime())) return '';
-  const diff = expiresAt.getTime() - Date.now();
-  if (diff <= 0) return '';
-  const hours = Math.floor(diff / (3600 * 1000));
-  if (hours >= 48) {
-    const days = Math.floor(hours / 24);
-    return `残り約${days}日`;
-  }
-  if (hours >= 1) {
-    return `残り約${hours}時間`;
-  }
-  const minutes = Math.floor(diff / (60 * 1000));
-  return minutes > 0 ? `残り約${minutes}分` : '';
-}
-
-function lookupMemberProfile_(memberId){
-  const empty = { id: String(memberId || ''), name: '', center: '', staff: '', qrDriveUrl: '', found: false };
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const sh = ss.getSheetByName('ほのぼのID');
-    if (!sh) return empty;
-    const values = sh.getDataRange().getValues();
-    if (!values || values.length <= 1) return empty;
-    const layout = getMemberSheetColumnInfo_(values);
-    const targetId = normalizeMemberId_(memberId);
-    if (!targetId) return empty;
-    for (let i = 1; i < values.length; i++) {
-      const row = values[i];
-      const rawId = (layout.idCol >= 0 && layout.idCol < row.length) ? row[layout.idCol] : '';
-      const normalized = normalizeMemberId_(rawId);
-      if (!normalized || normalized !== targetId) continue;
-      const nameRaw = (layout.nameCol >= 0 && layout.nameCol < row.length) ? row[layout.nameCol] : '';
-      const centerRaw = (layout.centerCol >= 0 && layout.centerCol < row.length) ? row[layout.centerCol] : '';
-      const staffRaw = (layout.careCol >= 0 && layout.careCol < row.length) ? row[layout.careCol] : '';
-      const qrRaw = (layout.qrCol >= 0 && layout.qrCol < row.length) ? row[layout.qrCol] : '';
-      return {
-        id: targetId,
-        name: String(nameRaw || '').trim(),
-        center: String(centerRaw || '').trim(),
-        staff: String(staffRaw || '').trim(),
-        qrDriveUrl: String(qrRaw || '').trim(),
-        found: true
-      };
-    }
-  } catch (_e) {}
-  return empty;
-}
-
-function lookupMemberName_(memberId){
-  const profile = lookupMemberProfile_(memberId);
-  return profile && profile.name ? profile.name : '';
-}
-
-function getShareAudienceInfo_(audience){
-  const map = {
-    family: {
-      label: 'ご家族向け共有',
-      description: 'ご家族の皆さまが状況を把握しやすいよう、本文を簡潔にまとめています。',
-      intro: 'ご家族とのコミュニケーションにご活用ください。',
-      manualTips: [
-        'QRコードからアクセスし、スマートフォンやパソコンで最新の記録をご覧いただけます。',
-        '閲覧後のご感想や気づきがあれば、担当ケアマネジャーまでお知らせください。'
-      ]
-    },
-    center: {
-      label: '地域包括支援センター向け共有',
-      description: '日付や種別を含めて記録を確認しやすいレイアウトです。',
-      intro: '地域包括支援センターの職員さまとの情報共有にご利用ください。',
-      manualTips: [
-        'QRコードからアクセスし、閲覧専用のページで記録をご確認ください。',
-        '気づいた点があればケアマネジャーへフィードバックをお願いします。'
-      ]
-    },
-    medical: {
-      label: '医療連携向け共有',
-      description: '医師・看護師が経過を把握しやすいよう、必要事項を抜粋しています。',
-      intro: '診察や訪問時の参考情報としてご活用ください。',
-      manualTips: [
-        'QRコードを読み取り、モニタリング記録を時系列で確認できます。',
-        '必要に応じて担当ケアマネジャーへご連絡ください。'
-      ]
-    },
-    service: {
-      label: 'サービス事業者向け共有',
-      description: 'ケア実務者が把握しやすいよう、現場目線で構成しています。',
-      intro: 'サービス提供に関する情報共有にご利用ください。',
-      manualTips: [
-        'QRコードでアクセスし、必要な記録をいつでも確認できます。',
-        'サービス提供に関する気づきはケアマネジャーまでご連絡ください。'
-      ]
-    }
-  };
-  const key = String(audience || 'family').toLowerCase();
-  return map[key] || map.family;
-}
-
-/** 既存UI互換：本文だけ差し替える簡易更新 */
 function updateRecord(rowIndex, newText){
   try {
     const payload = { rowIndex: Number(rowIndex), record: String(newText || '') };
