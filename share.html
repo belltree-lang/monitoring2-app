@@ -37,7 +37,6 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:999px; font-size:0.78rem; background:#e3f2fd; color:#134b93; font-weight:600; }
 .badge.subtle { background:#edf2f9; color:#4a5a75; }
 .badge.audience { background:#dbeafe; color:#1d4ed8; }
-.share-member-name { font-size:1.3rem; font-weight:700; color:var(--fg); }
 .share-member { font-size:1.05rem; font-weight:600; }
 .share-profile { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
 .profile-item { background:#f3f7ff; border:1px solid rgba(43,108,176,0.18); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:4px; }
@@ -128,7 +127,6 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
     <div class="share-header-main">
       <div class="share-heading">
         <h1 class="share-title">モニタリング共有ビュー</h1>
-        <div class="share-member-name" id="shareMemberName" style="display:none;"></div>
         <div class="share-badges">
           <span class="badge">閲覧専用</span>
           <span class="badge subtle">個人情報は必要最小限のみ表示</span>
@@ -143,10 +141,6 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
     </div>
     <div class="share-member" id="shareMember">閲覧対象を確認しています…</div>
     <div class="share-profile" id="shareProfile" style="display:none;">
-      <div class="profile-item">
-        <span class="profile-label">ほのぼのID</span>
-        <span class="profile-value" id="shareMemberId">確認中…</span>
-      </div>
       <div class="profile-item">
         <span class="profile-label">地域包括支援センター</span>
         <span class="profile-value" id="shareMemberCenter">確認中…</span>
@@ -637,12 +631,6 @@ function updateHeader(share){
     primaryRecord && (primaryRecord.memberName || (primaryRecord.fields && primaryRecord.fields.memberName)),
     recordFallback && (recordFallback.memberName || (recordFallback.fields && recordFallback.fields.memberName))
   );
-  const resolvedMemberId = pickFirstString(
-    shareData.memberId,
-    profile && profile.memberId,
-    primaryRecord && (primaryRecord.memberId || (primaryRecord.fields && primaryRecord.fields.memberId)),
-    recordFallback && (recordFallback.memberId || (recordFallback.fields && recordFallback.fields.memberId))
-  );
   const resolvedCenter = pickFirstString(
     shareData.memberCenter,
     shareData.centerName,
@@ -662,24 +650,17 @@ function updateHeader(share){
     recordFallback && (recordFallback.memberStaff || recordFallback.staff || (recordFallback.fields && (recordFallback.fields.memberStaff || recordFallback.fields.staff)))
   );
 
-  const memberNameEl = document.getElementById('shareMemberName');
-  if(memberNameEl){
-    memberNameEl.textContent = resolvedMemberName;
-    memberNameEl.style.display = resolvedMemberName ? 'block' : 'none';
-  }
   const memberEl = document.getElementById('shareMember');
   if(memberEl){
     memberEl.textContent = resolvedMemberName ? `${resolvedMemberName} 様のモニタリング` : '対象を確認しています…';
   }
   const profileEl = document.getElementById('shareProfile');
-  const memberIdEl = document.getElementById('shareMemberId');
   const memberCenterEl = document.getElementById('shareMemberCenter');
   const memberStaffEl = document.getElementById('shareMemberStaff');
-  if(memberIdEl) memberIdEl.textContent = resolvedMemberId || '未登録';
   if(memberCenterEl) memberCenterEl.textContent = resolvedCenter || '未設定';
   if(memberStaffEl) memberStaffEl.textContent = resolvedStaff || '未設定';
   if(profileEl){
-    const hasProfileInfo = resolvedMemberId || resolvedCenter || resolvedStaff;
+    const hasProfileInfo = resolvedCenter || resolvedStaff;
     profileEl.style.display = hasProfileInfo ? 'grid' : 'none';
   }
   const rangeEl = document.getElementById('shareRange');
