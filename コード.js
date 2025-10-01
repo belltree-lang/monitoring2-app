@@ -2322,6 +2322,10 @@ function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
     recordCount: recordResult.records.length,
     report,
     qrUrl: summary.qrUrl,
+    qrEmbedUrl: summary.qrEmbedUrl,
+    qrDriveUrl: summary.qrDriveUrl,
+    qrDataUrl: summary.qrDataUrl,
+    qrCode: summary.qrCode,
     shareLink: summary.url
   };
 }
@@ -2352,7 +2356,13 @@ function getExternalShareMeta(token, recordId) {
       rawRecords: response.rawRecords || response.records,
       primaryRecord: response.primaryRecord,
       report: response.report,
-      message: includeRecords ? response.message : ''
+      message: includeRecords ? response.message : '',
+      qrUrl: response.qrUrl,
+      qrEmbedUrl: response.qrEmbedUrl,
+      qrDriveUrl: response.qrDriveUrl,
+      qrDataUrl: response.qrDataUrl,
+      qrCode: response.qrCode,
+      shareLink: response.shareLink
     };
   } catch (err) {
     Logger.log('❌ getExternalShareMeta failed: ' + (err && err.stack ? err.stack : err));
@@ -2394,7 +2404,13 @@ function enterExternalShare(token, password, recordId) {
       rawRecords: response.rawRecords || response.records,
       primaryRecord: response.primaryRecord,
       report: response.report,
-      message: response.message
+      message: response.message,
+      qrUrl: response.qrUrl,
+      qrEmbedUrl: response.qrEmbedUrl,
+      qrDriveUrl: response.qrDriveUrl,
+      qrDataUrl: response.qrDataUrl,
+      qrCode: response.qrCode,
+      shareLink: response.shareLink
     };
   } catch (err) {
     Logger.log('❌ enterExternalShare failed: ' + (err && err.stack ? err.stack : err));
