@@ -443,7 +443,20 @@ function resolveSharePayload(res){
   const status = typeof res.status === 'string' && res.status
     ? res.status
     : (meta && typeof meta.status === 'string' ? meta.status : '');
-  return { share, records, report, primaryRecord, message, status };
+  const profile = (() => {
+    const fromRes = res.profile && typeof res.profile === 'object' ? res.profile : null;
+    const fromMeta = meta && typeof meta.profile === 'object' ? meta.profile : null;
+    if(fromRes && fromMeta){
+      return { ...fromMeta, ...fromRes };
+    }
+    if(fromRes) return { ...fromRes };
+    if(fromMeta) return { ...fromMeta };
+    return null;
+  })();
+  if(mergeTargets && profile){
+    mergeTargets.profile = { ...profile };
+  }
+  return { share, records, report, primaryRecord, message, status, profile };
 }
 
 async function callShareApi(action, options = {}) {
@@ -532,27 +545,29 @@ function showAlert(type, message){
 }
 
 function updateHeader(share){
-  const info = getAudienceInfo(share && share.audience);
+  const shareData = share && typeof share === 'object' ? share : {};
+  const profile = shareData.profile && typeof shareData.profile === 'object' ? shareData.profile : {};
+  const info = getAudienceInfo(shareData.audience);
   const audienceBadge = document.getElementById('shareAudienceBadge');
   if(audienceBadge) audienceBadge.textContent = info.label;
   const memberNameEl = document.getElementById('shareMemberName');
   if(memberNameEl){
-    const sanitizedName = sanitizeShareValue(share && share.memberName);
+    const sanitizedName = sanitizeShareValue(shareData.memberName) || sanitizeShareValue(profile && (profile.name || profile.memberName));
     memberNameEl.textContent = sanitizedName;
     memberNameEl.style.display = sanitizedName ? 'block' : 'none';
   }
   const memberEl = document.getElementById('shareMember');
   if(memberEl){
-    const name = sanitizeShareValue(share && share.memberName);
-    memberEl.textContent = name ? `${name} 様のモニタリング` : '対象を確認しています…';
+    const displayName = sanitizeShareValue(shareData.memberName) || sanitizeShareValue(profile && (profile.name || profile.memberName));
+    memberEl.textContent = displayName ? `${displayName} 様のモニタリング` : '対象を確認しています…';
   }
   const profileEl = document.getElementById('shareProfile');
   const memberIdEl = document.getElementById('shareMemberId');
   const memberCenterEl = document.getElementById('shareMemberCenter');
   const memberStaffEl = document.getElementById('shareMemberStaff');
-  const memberId = share && share.memberId ? String(share.memberId).trim() : '';
-  const memberCenter = share && share.memberCenter ? String(share.memberCenter).trim() : '';
-  const memberStaff = share && share.memberStaff ? String(share.memberStaff).trim() : '';
+  const memberId = sanitizeShareValue(shareData.memberId) || sanitizeShareValue(profile && profile.memberId);
+  const memberCenter = sanitizeShareValue(shareData.memberCenter) || sanitizeShareValue(shareData.centerName) || sanitizeShareValue(profile && (profile.center || profile.centerName));
+  const memberStaff = sanitizeShareValue(shareData.memberStaff) || sanitizeShareValue(shareData.staffName) || sanitizeShareValue(profile && (profile.staff || profile.staffName));
   if(memberIdEl) memberIdEl.textContent = memberId || '未登録';
   if(memberCenterEl) memberCenterEl.textContent = memberCenter || '未設定';
   if(memberStaffEl) memberStaffEl.textContent = memberStaff || '未設定';
@@ -561,25 +576,25 @@ function updateHeader(share){
   }
   const rangeEl = document.getElementById('shareRange');
   if(rangeEl){
-    const label = share && share.rangeLabel ? share.rangeLabel : '最新記録';
+    const label = shareData && shareData.rangeLabel ? shareData.rangeLabel : '最新記録';
     rangeEl.textContent = `表示範囲：${label}`;
   }
   const expiryEl = document.getElementById('shareExpiry');
   if(expiryEl){
-    expiryEl.textContent = share && share.expiresAtText ? `閲覧期限：${share.expiresAtText}` : '閲覧期限：設定なし';
+    expiryEl.textContent = shareData && shareData.expiresAtText ? `閲覧期限：${shareData.expiresAtText}` : '閲覧期限：設定なし';
   }
   const remainingEl = document.getElementById('shareRemaining');
   if(remainingEl){
-    remainingEl.textContent = share && share.remainingLabel ? share.remainingLabel : '';
+    remainingEl.textContent = shareData && shareData.remainingLabel ? shareData.remainingLabel : '';
   }
   const maskEl = document.getElementById('shareMask');
   if(maskEl){
-    maskEl.textContent = share && share.maskMode === 'none' ? '本文：マスクなし' : '本文：個人情報を自動マスク';
+    maskEl.textContent = shareData && shareData.maskMode === 'none' ? '本文：マスクなし' : '本文：個人情報を自動マスク';
   }
   const attachmentEl = document.getElementById('shareAttachmentPolicy');
   if(attachmentEl){
-    const allowAll = share && share.allowAllAttachments;
-    const count = share && typeof share.allowedCount === 'number' ? share.allowedCount : 0;
+    const allowAll = shareData && shareData.allowAllAttachments;
+    const count = shareData && typeof shareData.allowedCount === 'number' ? shareData.allowedCount : 0;
     attachmentEl.textContent = allowAll ? '添付：すべて閲覧可能' : `添付：${count}件のみ共有`;
   }
 }
@@ -1148,6 +1163,10 @@ function fetchShareMeta(){
     }
 
     const share = payload.share || {};
+    if(payload.profile && share && typeof share === 'object'){
+      const baseProfile = share.profile && typeof share.profile === 'object' ? share.profile : {};
+      share.profile = { ...payload.profile, ...baseProfile };
+    }
     currentShare = share;
     updateHeader(share);
     setIntro(share);
@@ -1244,6 +1263,10 @@ function loadShareData(password){
     if(statusEl) statusEl.textContent = '';
 
     currentShare = payload.share || currentShare;
+    if(payload.profile && currentShare && typeof currentShare === 'object'){
+      const baseProfile = currentShare.profile && typeof currentShare.profile === 'object' ? currentShare.profile : {};
+      currentShare.profile = { ...payload.profile, ...baseProfile };
+    }
     updateHeader(currentShare);
     setIntro(currentShare);
     setFooter(currentShare);
