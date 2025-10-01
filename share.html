@@ -954,9 +954,9 @@ function normalizeRecords(records){
 function onAuthSubmit(event){
   event.preventDefault();
   const input = document.getElementById('authPassword');
-  const status = document.getElementById('authStatus');
+  const statusEl = document.getElementById('authStatus');
   const password = input ? input.value : '';
-  if(status) status.textContent = '照合中です…';
+  if(statusEl) statusEl.textContent = '照合中です…';
   loadShareData(password).finally(() => {
     if(input) input.value = '';
   });
@@ -972,8 +972,8 @@ function fetchShareMeta(){
   return callShareApi('meta', { token: externalToken, recordId: resolvedRecordId }).then(res => {
     console.log("📥 fetchShareMeta response", res);   // デバッグ用ログ
     const payload = resolveSharePayload(res || {});
-    const status = (res && typeof res.status === 'string' && res.status) || payload.status || 'success';
-    if(status !== 'success'){
+    const respStatus = (res && typeof res.status === 'string' && res.status) || payload.status || 'success';
+    if(respStatus !== 'success'){
       const msg = payload.message || (res && res.message) || '共有設定の取得に失敗しました。';
       showAlert('error', msg);
       setLoading('閲覧を開始できませんでした。');
@@ -1048,20 +1048,20 @@ function loadShareData(password){
   setLoading('記録を読み込んでいます…');
   return callShareApi('enter', { token: externalToken, password: password || '', recordId: resolvedRecordId }).then(res => {
     const payload = resolveSharePayload(res || {});
-    const status = (res && typeof res.status === 'string' && res.status) || payload.status || 'success';
-    if(status !== 'success'){
+    const respStatus = (res && typeof res.status === 'string' && res.status) || payload.status || 'success';
+    if(respStatus !== 'success'){
       const msg = payload.message || (res && res.message) || '閲覧に失敗しました。';
       showAlert('error', msg);
-      const status = document.getElementById('authStatus');
-      if(status) status.textContent = msg;
+      const statusEl = document.getElementById('authStatus');
+      if(statusEl) statusEl.textContent = msg;
       const auth = document.getElementById('shareAuth');
       if(auth) auth.style.display = 'block';
       setLoading('閲覧できませんでした。');
       return;
     }
 
-    const status = document.getElementById('authStatus');
-    if(status) status.textContent = '';
+    const statusEl = document.getElementById('authStatus');
+    if(statusEl) statusEl.textContent = '';
 
     currentShare = payload.share || currentShare;
     updateHeader(currentShare);
@@ -1108,8 +1108,8 @@ function loadShareData(password){
   }).catch(err => {
     const msg = err && err.message ? err.message : '閲覧に失敗しました。';
     showAlert('error', msg);
-    const status = document.getElementById('authStatus');
-    if(status) status.textContent = msg;
+    const statusEl = document.getElementById('authStatus');
+    if(statusEl) statusEl.textContent = msg;
     setLoading('閲覧できませんでした。');
   });
 }
