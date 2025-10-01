@@ -394,6 +394,14 @@ function pickFirstArray(...candidates){
   return [];
 }
 
+function pickFirstString(...values){
+  for(const value of values){
+    const normalized = sanitizeShareValue(value);
+    if(normalized) return normalized;
+  }
+  return '';
+}
+
 function resolveSharePayload(res){
   if(!res || typeof res !== 'object'){ return { share:null, records:[], report:null, primaryRecord:null, message:'', status:'' }; }
   const meta = res.meta && typeof res.meta === 'object' ? res.meta : null;
@@ -570,7 +578,7 @@ function updateQrSection(share){
   const placeholder = document.getElementById('qrPlaceholder');
   const linkEl = document.getElementById('qrLink');
   if(!qrImage || !placeholder) return;
-  const shareLink = sanitizeShareValue(share && (share.shareLink || share.url));
+  const shareLink = pickFirstString(share && share.shareLink, share && share.url);
   if(linkEl){
     if(shareLink){
       linkEl.href = shareLink;
@@ -587,14 +595,13 @@ function updateQrSection(share){
       linkEl.title = '';
     }
   }
-  const candidates = [
+  const src = pickFirstString(
     share && share.qrEmbedUrl,
     share && share.qrDataUrl,
     share && share.qrDriveUrl,
     share && share.qrUrl,
     share && share.qrCode
-  ];
-  const src = candidates.find(value => typeof value === 'string' && value.trim().length) || '';
+  );
   if(src){
     qrImage.src = src;
     qrImage.style.display = 'block';
