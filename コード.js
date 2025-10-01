@@ -550,6 +550,7 @@ function buildRecordFromRow_(row, header, indexes, tz, rowIndex){
   const centerValue = indexes.center >= 0 ? String(row[indexes.center] || '').trim() : '';
   const staffValue = indexes.staff >= 0 ? String(row[indexes.staff] || '').trim() : '';
   const statusValue = indexes.status >= 0 ? String(row[indexes.status] || '').trim() : '';
+  const normalizedStatusValue = normalizeMemberStatusValue_(statusValue);
   const specialValue = indexes.special >= 0 ? String(row[indexes.special] || '').trim() : '';
   let memberNameValue = indexes.memberName >= 0 ? String(row[indexes.memberName] || '').trim() : '';
   if (recordIdValue && !('recordId' in fields)) {
@@ -589,6 +590,7 @@ function buildRecordFromRow_(row, header, indexes, tz, rowIndex){
     center: centerValue,
     staff: staffValue,
     status: statusValue,
+    memberStatus: normalizedStatusValue || '',
     special: specialValue,
     fields
   };
@@ -905,6 +907,13 @@ function getDashboardSummary() {
       if (!id) continue;
       const entry = ensureEntry(id);
 
+      if (colStatus >= 0) {
+        const normalizedStatus = normalizeMemberStatusValue_(row[colStatus]);
+        if (normalizedStatus) {
+          entry.memberStatus = normalizedStatus;
+        }
+      }
+
       const rawDate = row[colDate];
       const d = (rawDate instanceof Date) ? rawDate : new Date(rawDate);
       if (!(d instanceof Date) || isNaN(d.getTime())) continue;
@@ -916,12 +925,6 @@ function getDashboardSummary() {
         entry.countThisMonth += 1;
       } else if (ts >= prevMonthStart.getTime() && ts <= prevMonthEnd.getTime()) {
         entry.countPreviousMonth += 1;
-      }
-      if (colStatus >= 0) {
-        const normalizedStatus = normalizeMemberStatusValue_(row[colStatus]);
-        if (normalizedStatus) {
-          entry.memberStatus = normalizedStatus;
-        }
       }
     }
 
