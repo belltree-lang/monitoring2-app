@@ -1501,50 +1501,29 @@ function getMemberList() {
   return out;
 }
 
-/** 新規利用者を登録 */
-function addMember(id, name, kana) {
+  /** 新規利用者を登録 */
+function addMember(id, name) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sh = ss.getSheetByName('ほのぼのID');
   if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
 
-  let numericId = String(id || '').replace(/[^0-9]/g, '');
-  if (!numericId) {
-    throw new Error('ID（4桁）を入力してください');
-  }
-  if (numericId.length > 4) {
-    throw new Error('IDは4桁以内で入力してください');
-  }
-  const formattedId = ('0000' + numericId).slice(-4);
+  // IDフォーマット修正
+  id = String(id || '').replace(/[^0-9]/g,'');
+  id = ('0000' + id).slice(-4);
 
-  const safeName = String(name || '').trim().replace(/\s+/g, ' ');
-  if (!safeName) {
-    throw new Error('氏名（漢字）を入力してください');
-  }
-
-  let safeKana = String(kana || '').trim();
-  if (typeof safeKana.normalize === 'function') {
-    safeKana = safeKana.normalize('NFKC');
-  }
-  safeKana = safeKana.replace(/[\s\u3000]+/g, ' ');
-  safeKana = safeKana.replace(/[ｰ－—–]/g, 'ー');
-  if (!safeKana) {
-    throw new Error('フリガナ（カナ）を入力してください');
-  }
-  const kanaPattern = /^[\u30A0-\u30FFー\sﾞﾟ･・]+$/;
-  if (!kanaPattern.test(safeKana)) {
-    throw new Error('フリガナはカタカナで入力してください');
-  }
-
+  // 氏名フォーマット修正
+  name = String(name || '').trim().replace(/\s+/g,' ');
+  
   // 重複チェック
   const vals = sh.getDataRange().getValues();
   for (let i=1; i<vals.length; i++){
-    if (String(vals[i][0]) === formattedId){
-      throw new Error('同じIDがすでに存在します: ' + formattedId);
+    if (String(vals[i][0]) === id){
+      throw new Error('同じIDがすでに存在します: ' + id);
     }
   }
 
-  sh.appendRow([formattedId, safeName, safeKana]);
-  return { status:'success', id: formattedId, name: safeName, kana: safeKana };
+  sh.appendRow([id, name]);
+  return { status:'success', id, name };
 }
 
 /** 既存利用者の氏名を更新 */
