@@ -1266,6 +1266,34 @@ function updateMonitoringRecord(data){
   }
 }
 
+const MONITORING_STATUS_COLUMN_INDEX = 6; // F列に合わせる（1-based）
+
+function ensureMonitoringStatusColumn_(sheet, header, indexes) {
+  if (indexes.status >= 0) {
+    return { header, indexes };
+  }
+
+  const currentWidth = header.length;
+  const desiredColumn = Math.max(1, MONITORING_STATUS_COLUMN_INDEX);
+
+  if (currentWidth < desiredColumn) {
+    const columnsToAdd = desiredColumn - currentWidth;
+    if (columnsToAdd > 0) {
+      sheet.insertColumnsAfter(currentWidth || 1, columnsToAdd);
+    }
+    sheet.getRange(1, desiredColumn).setValue('status');
+  } else {
+    sheet.insertColumnBefore(desiredColumn);
+    sheet.getRange(1, desiredColumn).setValue('status');
+  }
+
+  const newRange = sheet.getDataRange();
+  const values = newRange.getValues();
+  const refreshedHeader = values[0].map(v => String(v || '').trim());
+  const refreshedIndexes = resolveRecordColumnIndexes_(refreshedHeader);
+  return { header: refreshedHeader, indexes: refreshedIndexes, values };
+}
+
 function updateMemberStatus(memberId, status) {
   try {
     const member = normalizeMemberId_(memberId);
@@ -1287,17 +1315,10 @@ function updateMemberStatus(memberId, status) {
       throw new Error('ヘッダーに利用者ID列が見つかりません');
     }
     if (indexes.status < 0) {
-      if (header.length === 0) {
-        sheet.insertColumnBefore(1);
-        sheet.getRange(1, 1).setValue('status');
-      } else {
-        sheet.insertColumnAfter(header.length);
-        sheet.getRange(1, header.length + 1).setValue('status');
-      }
-      range = sheet.getDataRange();
-      values = range.getValues();
-      header = values[0].map(v => String(v || '').trim());
-      indexes = resolveRecordColumnIndexes_(header);
+      const ensured = ensureMonitoringStatusColumn_(sheet, header, indexes);
+      header = ensured.header;
+      indexes = ensured.indexes;
+      values = ensured.values || values;
     }
     if (indexes.status < 0) {
       throw new Error('status列を追加できませんでした');
