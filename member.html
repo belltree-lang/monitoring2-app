@@ -135,8 +135,6 @@ button:hover { opacity:0.9;}
 .share-item .share-actions .btn-compact { white-space:nowrap; }
 .share-qr { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
 .share-qr img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-.share-qr .share-qr-actions { display:flex; flex-wrap:wrap; gap:6px; }
-.share-qr .share-qr-url { font-size:0.75rem; color:#334; word-break:break-all; }
 .share-meta-notes { font-size:0.72rem; color:#60708f; margin-top:6px; }
 .share-form { border-top:1px dashed #c7d7ef; padding-top:10px; margin-top:10px; }
 .share-form .share-field { margin-bottom:10px; }
@@ -2356,8 +2354,7 @@ function renderShareItem(share){
   const qrSrc=share.qrDriveUrl||share.qrDataUrl||share.qrUrl||"";
   const fallbackQr=!qrSrc && shareUrlRaw?`https://chart.googleapis.com/chart?cht=qr&chs=220x220&choe=UTF-8&chl=${encodeURIComponent(shareUrlRaw)}`:"";
   const qrUrl=qrSrc||fallbackQr;
-  const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"><div class="share-qr-actions"><div class="share-qr-url">${safeUrl}</div>`
-    + `<div class="share-qr-buttons"><button class="secondary btn-compact" data-action="print-qr" data-token="${escapeHtml(share.token||'')}">QRコード・案内を印刷</button></div></div></div>`:"";
+  const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"></div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
   return `<div class="${itemClass}">`
     + `<div class="share-item-header"><span class="badge">${badgeLabel}</span>`
@@ -2390,17 +2387,6 @@ async function handleShareListClick(event){
     }
     return;
   }
-  if(action==='print-qr'){
-    const token=btn.dataset.token||"";
-    if(!token) return;
-    const share=externalShares.find(s=>s && s.token===token);
-    if(!share){
-      alert("共有情報が見つかりませんでした");
-      return;
-    }
-    openSharePrintView(share);
-    return;
-  }
   if(action==='revoke'){
     const token=btn.dataset.token||"";
     if(!token) return;
@@ -2420,19 +2406,6 @@ async function handleShareListClick(event){
   }
 }
 
-function openSharePrintView(share){
-  if(!share || !share.url){
-    alert("共有URLが見つかりませんでした");
-    return;
-  }
-  const shareUrlRaw=share.url||"";
-  const separator=shareUrlRaw.includes("?")?"&":"?";
-  const printUrl=`${shareUrlRaw}${separator}print=1`;
-  const win=window.open(printUrl,"_blank");
-  if(!win){
-    alert("ポップアップがブロックされました。ブラウザの設定をご確認ください。");
-  }
-}
 async function handleCreateShare(event){
   console.log("🔎 DEBUG before handleCreateShare: memberId=", memberId, "memberName=", memberName);
 
