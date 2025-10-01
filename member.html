@@ -29,6 +29,16 @@ button:hover { opacity:0.9;}
 .autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
 .autocomplete-item:hover { background:var(--accent);}
 .autocomplete-item.autocomplete-empty { color:var(--muted); cursor:default; pointer-events:none; }
+.member-top-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-bottom:18px; align-items:stretch; }
+.member-top-card { display:flex; flex-direction:column; gap:12px; }
+.member-select-toolbar { position:relative; }
+.member-new-form { display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); align-items:center; }
+.member-new-form input { width:100%; }
+.member-new-form button { justify-self:flex-start; }
+@media(min-width:720px){
+  .member-new-form { grid-template-columns:110px 1fr 1fr auto; }
+  .member-new-form button { justify-self:end; }
+}
 .layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
 @media(max-width:960px){.layout{grid-template-columns:1fr;}}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
@@ -127,9 +137,8 @@ button:hover { opacity:0.9;}
 .share-list { display:flex; flex-direction:column; gap:10px; }
 .share-item { border:1px solid #dbe6f6; border-radius:8px; padding:10px; background:#f8fbff; position:relative; }
 .share-item.expired { background:#fff3f3; border-color:#f5c2c2; }
-.share-item .share-item-header { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-.share-item .share-url { flex:1; display:flex; gap:6px; align-items:center; }
-.share-item .share-url input { flex:1; font-size:0.78rem; padding:4px 6px; border-radius:6px; border:1px solid #c7d7ef; background:#fff; }
+.share-item .share-item-header { display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:flex-start; }
+.share-item-title { font-weight:600; color:#1f2f4b; font-size:0.9rem; }
 .share-item .share-meta { display:flex; flex-wrap:wrap; gap:10px; font-size:0.75rem; color:#546079; margin-top:6px; }
 .share-item .share-actions { display:flex; gap:6px; margin-top:8px; }
 .share-item .share-actions .btn-compact { white-space:nowrap; }
@@ -141,22 +150,20 @@ button:hover { opacity:0.9;}
 .share-form label { font-size:0.82rem; color:#445; display:flex; flex-direction:column; gap:4px; }
 .share-form input[type="text"], .share-form input[type="datetime-local"] { font-size:0.85rem; padding:6px 8px; border:1px solid #c7d7ef; border-radius:6px; }
 .share-form select { font-size:0.85rem; padding:6px 8px; border:1px solid #c7d7ef; border-radius:6px; }
+.share-top-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .share-attachments { display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; padding:6px; background:#f2f7ff; border-radius:6px; border:1px solid #d2def5; }
 .share-attachments .share-attachment { display:flex; align-items:center; gap:6px; font-size:0.8rem; color:#334; }
 .share-attachments .share-attachment .muted { margin-left:auto; }
 .share-attachments .share-attachment-info { display:flex; flex-direction:column; }
 .share-attachments .share-attachment-info span { font-size:0.76rem; color:#667; }
-.share-empty { font-size:0.8rem; color:#666; padding:6px 4px; }
 .share-helper { font-size:0.75rem; color:#6a7a93; margin-top:4px; }
 .share-item .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:999px; background:#e3f2fd; color:#1957a3; font-size:0.7rem; }
 .share-item.expired .badge { background:#ffe6e6; color:#b71c1c; }
 .share-item .tag-group { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .share-form .toolbar { gap:8px; }
-.share-attachments-all { font-size:0.82rem; display:flex; align-items:center; gap:6px; margin-bottom:6px; }
 .share-form .share-qr-preview { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
 .share-form .share-qr-preview img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
 .share-form .share-qr-preview-info { display:flex; flex-direction:column; gap:4px; font-size:0.78rem; color:#445; }
-.share-form .share-qr-preview-url { font-weight:600; word-break:break-all; color:#1957a3; }
 </style>
 </head>
 <body>
@@ -165,43 +172,104 @@ button:hover { opacity:0.9;}
   <span class="pill" id="memberTag">未選択</span>
 </h1>
 
-<!-- 利用者選択 -->
-<div class="card">
-  <h2>利用者を選択</h2>
-  <div class="toolbar" style="position:relative;">
-    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
-    <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
-    <select id="centerSelect">
-      <option value="">（未入力）</option>
-      <option value="町田第１高齢者支援センター">町田第１高齢者支援センター</option>
-      <option value="町田第２高齢者支援センター">町田第２高齢者支援センター</option>
-      <option value="町田第３高齢者支援センター">町田第３高齢者支援センター</option>
-      <option value="忠生第１高齢者支援センター">忠生第１高齢者支援センター</option>
-      <option value="忠生第２高齢者支援センター">忠生第２高齢者支援センター</option>
-      <option value="鶴川第１高齢者支援センター">鶴川第１高齢者支援センター</option>
-      <option value="鶴川第２高齢者支援センター">鶴川第２高齢者支援センター</option>
-      <option value="光が丘地域包括高齢者支援センター">光が丘地域包括高齢者支援センター</option>
-    </select>
+<div class="member-top-grid">
+  <!-- 利用者選択 -->
+  <div class="card member-top-card">
+    <h2>利用者を選択</h2>
+    <div class="toolbar member-select-toolbar">
+      <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
+      <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
+      <select id="centerSelect">
+        <option value="">（未入力）</option>
+        <option value="町田第１高齢者支援センター">町田第１高齢者支援センター</option>
+        <option value="町田第２高齢者支援センター">町田第２高齢者支援センター</option>
+        <option value="町田第３高齢者支援センター">町田第３高齢者支援センター</option>
+        <option value="忠生第１高齢者支援センター">忠生第１高齢者支援センター</option>
+        <option value="忠生第２高齢者支援センター">忠生第２高齢者支援センター</option>
+        <option value="鶴川第１高齢者支援センター">鶴川第１高齢者支援センター</option>
+        <option value="鶴川第２高齢者支援センター">鶴川第２高齢者支援センター</option>
+        <option value="光が丘地域包括高齢者支援センター">光が丘地域包括高齢者支援センター</option>
+      </select>
 
-    <!-- 担当者入力 -->
-    <input type="text" id="staffInput" placeholder="担当者名を入力" list="staffHistory" style="min-width:180px;">
-    <datalist id="staffHistory"></datalist>
+      <!-- 担当者入力 -->
+      <input type="text" id="staffInput" placeholder="担当者名を入力" list="staffHistory" style="min-width:180px;">
+      <datalist id="staffHistory"></datalist>
 
-    <button id="btnSaveCenter" class="secondary">保存</button>
-    <button id="btnClearCenter" class="warn">削除</button>
+      <button id="btnSaveCenter" class="secondary">保存</button>
+      <button id="btnClearCenter" class="warn">削除</button>
+    </div>
+    <div id="idStatus" class="muted"></div>
   </div>
-  <div id="idStatus" class="muted"></div>
-</div>
 
-<!-- 新規利用者登録 -->
-<div class="card">
-  <h2>新規利用者登録</h2>
-  <div class="toolbar">
-    <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
-    <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
-    <button id="btnAddMember">登録</button>
+  <!-- 新規利用者登録 -->
+  <div class="card member-top-card">
+    <h2>新規利用者登録</h2>
+    <div class="member-new-form">
+      <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4">
+      <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）">
+      <input type="text" id="newMemberKana" placeholder="カナ（例: ヤマダ　タロウ）">
+      <button id="btnAddMember">登録</button>
+    </div>
+    <div id="addMemberStatus" class="muted"></div>
   </div>
-  <div id="addMemberStatus" class="muted"></div>
+
+  <!-- 外部共有 -->
+  <div class="card share-card member-top-card">
+    <h2>外部共有</h2>
+    <div id="shareList" class="share-list muted">利用者を選択すると共有リンクが表示されます</div>
+    <div class="share-top-actions">
+      <button id="btnOpenShareForm" class="secondary btn-compact">共有リンクを作成</button>
+    </div>
+    <div id="shareForm" class="share-form" style="display:none;">
+      <div class="share-field">
+        <label>共有先を選択
+          <select id="shareAudience">
+            <option value="family">家族：生活の様子を共有</option>
+            <option value="center" selected>地域包括支援センター：定期確認</option>
+            <option value="medical">医療機関：医師・看護師との連携</option>
+            <option value="service">サービス事業者：ケア実務者と共有</option>
+          </select>
+        </label>
+        <div class="share-helper">共有先に応じて表示内容や案内文が自動で切り替わります。</div>
+      </div>
+
+      <div class="share-field">
+        <label>閲覧期限
+          <select id="shareExpiryPreset">
+            <option value="10" selected>10日間（短期共有）</option>
+            <option value="30">30日間（標準）</option>
+            <option value="none">期限なし</option>
+            <option value="custom">日付を指定する</option>
+          </select>
+        </label>
+        <input type="datetime-local" id="shareExpires" style="display:none; margin-top:6px;">
+        <div class="share-helper">「日付を指定する」を選ぶと任意の期限を設定できます。</div>
+      </div>
+
+      <div class="share-field">
+        <label>共有する期間
+          <select id="shareRange">
+            <option value="30">直近30日</option>
+            <option value="90" selected>直近90日</option>
+            <option value="all">全期間</option>
+          </select>
+        </label>
+        <div class="share-helper">閲覧者側では期間を変更できません。必要最小限の期間に絞って共有できます。</div>
+      </div>
+
+      <div class="share-field">
+        <label>共有する添付ファイル</label>
+        <div id="shareAttachments" class="share-attachments muted"></div>
+        <div class="share-helper">添付ファイルを選択すると一緒に共有できます。</div>
+      </div>
+
+      <div class="toolbar">
+        <button id="btnCreateShare">共有リンクを発行</button>
+        <button type="button" id="btnCancelShare" class="secondary">キャンセル</button>
+      </div>
+      <div id="shareFormStatus" class="muted"></div>
+    </div>
+  </div>
 </div>
 
 <!-- メインUI -->
@@ -286,65 +354,6 @@ button:hover { opacity:0.9;}
         <div id="recordList" class="muted">利用者を選択してください</div>
       </div>
 
-      <!-- 👇 外部共有を過去の記録の直下に移動 -->
-      <div class="card share-card">
-        <h2>外部共有</h2>
-        <div id="shareList" class="share-list muted">利用者を選択すると共有リンクが表示されます</div>
-        <div class="toolbar">
-          <button id="btnOpenShareForm" class="secondary btn-compact">共有リンクを作成</button>
-        </div>
-        <div id="shareForm" class="share-form" style="display:none;">
-          <div class="share-field">
-            <label>共有先を選択
-              <select id="shareAudience">
-                <option value="family">家族：生活の様子を共有</option>
-                <option value="center" selected>地域包括支援センター：定期確認</option>
-                <option value="medical">医療機関：医師・看護師との連携</option>
-                <option value="service">サービス事業者：ケア実務者と共有</option>
-              </select>
-            </label>
-            <div class="share-helper">共有先に応じて表示内容や案内文が自動で切り替わります。</div>
-          </div>
-
-          <div class="share-field">
-            <label>閲覧期限
-              <select id="shareExpiryPreset">
-                <option value="10" selected>10日間（短期共有）</option>
-                <option value="30">30日間（標準）</option>
-                <option value="none">期限なし</option>
-                <option value="custom">日付を指定する</option>
-              </select>
-            </label>
-            <input type="datetime-local" id="shareExpires" style="display:none; margin-top:6px;">
-            <div class="share-helper">「日付を指定する」を選ぶと任意の期限を設定できます。</div>
-          </div>
-
-          <div class="share-field">
-            <label>共有する期間
-              <select id="shareRange">
-                <option value="30">直近30日</option>
-                <option value="90" selected>直近90日</option>
-                <option value="all">全期間</option>
-              </select>
-            </label>
-            <div class="share-helper">閲覧者側では期間を変更できません。必要最小限の期間に絞って共有できます。</div>
-          </div>
-
-          <div class="share-field">
-            <div class="share-attachments-all">
-              <label><input type="checkbox" id="shareAttachmentAll"> すべての添付ファイルを共有する</label>
-            </div>
-            <div id="shareAttachments" class="share-attachments muted">記録を読み込み中です…</div>
-          </div>
-
-          <div class="toolbar">
-            <button id="btnCreateShare">共有リンクを発行</button>
-            <button type="button" id="btnCancelShare" class="secondary">キャンセル</button>
-          </div>
-          <div id="shareFormStatus" class="muted"></div>
-        </div>
-      </div>
-      <!-- 👆 移動完了 -->
     </div>
 
     <aside class="right">
@@ -1764,26 +1773,32 @@ function setupMemberUi() {
     btnAddMember.onclick = () => {
       const idInput = document.getElementById("newMemberId");
       const nameInput = document.getElementById("newMemberName");
+      const kanaInput = document.getElementById("newMemberKana");
       const id = idInput.value.trim();
       const name = nameInput.value.trim();
+      const kana = kanaInput ? kanaInput.value.trim() : "";
       const status = document.getElementById("addMemberStatus");
-      if (!id || !name) { status.textContent = "IDと氏名を入力してください"; return; }
+      if (!id || !name || !kana) {
+        if (status) status.textContent = "ID・氏名・カナを入力してください";
+        return;
+      }
       google.script.run.withSuccessHandler(res => {
         if (res.status === "success") {
-          status.textContent = `登録しました: ${res.id} ${res.name}`;
+          if (status) status.textContent = `登録しました: ${res.id} ${res.name}`;
           idInput.value = "";
           nameInput.value = "";
+          if (kanaInput) kanaInput.value = "";
           if (res.id) {
             selectMember(res.id, res.name || "");
           }
           refreshMemberList();
           loadDashboard();
-        } else {
+        } else if (status) {
           status.textContent = "失敗: " + res.message;
         }
       }).withFailureHandler(err => {
-        status.textContent = "エラー: " + (err && err.message ? err.message : err);
-      }).addMember(id, name);
+        if (status) status.textContent = "エラー: " + (err && err.message ? err.message : err);
+      }).addMember(id, name, kana);
     };
   }
 
@@ -2207,11 +2222,9 @@ function updateShareAttachmentOptions(records){
   const container=document.getElementById("shareAttachments");
   if(!container) return;
   const data=collectAttachmentOptions(typeof records!=='undefined'?records:recordsCache);
-  const shareAll=document.getElementById("shareAttachmentAll");
   if(!data.length){
     container.classList.add("muted");
-    container.innerHTML='<div class="share-empty">共有できる添付ファイルはまだありません</div>';
-    if(shareAll) shareAll.checked=false;
+    container.innerHTML="";
     return;
   }
   container.classList.remove("muted");
@@ -2222,21 +2235,8 @@ function updateShareAttachmentOptions(records){
     if(uploadedLabel) detailParts.push(`アップロード: ${escapeHtml(uploadedLabel)}`);
     if(att.mimeType) detailParts.push(escapeHtml(att.mimeType));
     const detail=detailParts.length?`<span>${detailParts.join(' ｜ ')}</span>`:"";
-    return `<label class="share-attachment"><input type="checkbox" data-file-id="${escapeHtml(att.fileId)}"><div class="share-attachment-info"><strong>${escapeHtml(att.name||'添付ファイル')}</strong>${detail}</div></label>`;
+    return `<label class=\"share-attachment\"><input type=\"checkbox\" data-file-id=\"${escapeHtml(att.fileId)}\"><div class=\"share-attachment-info\"><strong>${escapeHtml(att.name||'添付ファイル')}</strong>${detail}</div></label>`;
   }).join("\n");
-  applyShareAllState();
-}
-
-function applyShareAllState(){
-  const shareAll=document.getElementById("shareAttachmentAll");
-  const container=document.getElementById("shareAttachments");
-  if(!container) return;
-  const checkboxes=container.querySelectorAll('input[type="checkbox"][data-file-id]');
-  const disable=!!(shareAll && shareAll.checked);
-  checkboxes.forEach(cb=>{
-    cb.disabled=disable;
-    if(disable) cb.checked=false;
-  });
 }
 
 function applyShareExpiryPreset(){
@@ -2271,10 +2271,6 @@ function setupShareUi(){
   if(createBtn){
     createBtn.addEventListener("click",handleCreateShare);
   }
-  const shareAll=document.getElementById("shareAttachmentAll");
-  if(shareAll){
-    shareAll.addEventListener("change",applyShareAllState);
-  }
   const expiryPreset=document.getElementById("shareExpiryPreset");
   if(expiryPreset){
     expiryPreset.addEventListener("change",applyShareExpiryPreset);
@@ -2303,18 +2299,20 @@ function toggleShareForm(open){
     const expires=document.getElementById("shareExpires");
     const password=document.getElementById("sharePassword");
     const mask=document.getElementById("shareMaskCheckbox");
-    const shareAll=document.getElementById("shareAttachmentAll");
     const audience=document.getElementById("shareAudience");
     const preset=document.getElementById("shareExpiryPreset");
     const rangeSelect=document.getElementById("shareRange");
+    const attachmentsContainer=document.getElementById("shareAttachments");
     if(expires) expires.value="";
     if(password) password.value="";
     if(mask) mask.checked=true;
-    if(shareAll) shareAll.checked=false;
     if(audience) audience.value=shareAudienceDefault;
     if(preset) preset.value=shareExpiryPresetDefault;
     if(rangeSelect) rangeSelect.value=shareRangeDefault;
-    applyShareAllState();
+    if(attachmentsContainer){
+      attachmentsContainer.querySelectorAll('input[type=\"checkbox\"][data-file-id]').forEach(cb=>{ cb.checked=false; });
+      attachmentsContainer.classList.add("muted");
+    }
     applyShareExpiryPreset();
   }
 }
@@ -2392,17 +2390,14 @@ function renderShareItem(share){
   const qrUrl=qrSrc||fallbackQr;
   const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"></div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
+  const copyButton=safeUrl?`<button class="secondary btn-compact" data-action="copy-url" data-url="${safeUrl}">URLコピー</button>`:"";
+  const actionButtons=[copyButton,`<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`].filter(Boolean).join("");
   return `<div class="${itemClass}">`
-    + `<div class="share-item-header"><span class="badge">${badgeLabel}</span>`
-    + `<div class="share-url"><input type="text" readonly value="${safeUrl}" onclick="this.select();">`
-    + `<button class="secondary btn-compact" data-action="copy-url" data-url="${safeUrl}">URLコピー</button>`
-    + `</div></div>`
+    + `<div class="share-item-header"><span class="badge">${badgeLabel}</span><span class="share-item-title">${escapeHtml(info.label)}</span></div>`
     + `<div class="tag-group">${metaHtml}</div>`
     + descriptionHtml
     + qrHtml
-    + `<div class="share-actions">`
-    + `<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`
-    + `</div>`
+    + `<div class="share-actions">${actionButtons}</div>`
     + `</div>`;
 }
 
@@ -2470,24 +2465,20 @@ async function handleCreateShare(event){
     }
 
   if(status){
-  const qrUrl   = res.qrDriveUrl || res.qrDataUrl || res.qrUrl || "";
-  const shareUrl = res.url || res.shareLink || "";
-  
-  // ← escapeHtmlを使わずにそのままURLを埋め込む
-  const qrHtml = qrUrl
-    ? `<div class="share-qr-preview">
-         <img src="${qrUrl}" alt="共有QRコード" style="width:120px;height:120px;display:block;border:1px solid red;background:white;">
-         <div class="share-qr-preview-info">
-           <div>スマートフォンで読み取ると共有ページを開けます。</div>
-           ${shareUrl ? `<div class="share-qr-preview-url">${shareUrl}</div>` : ""}
-         </div>
-       </div>`
-    : "<div class='warn'>⚠️ QRコードURLが返ってきませんでした</div>";
+    const qrUrl = res.qrDriveUrl || res.qrDataUrl || res.qrUrl || "";
+    const qrHtml = qrUrl
+      ? `<div class="share-qr-preview">
+           <img src="${qrUrl}" alt="共有QRコード" style="width:120px;height:120px;display:block;border:1px solid red;background:white;">
+           <div class="share-qr-preview-info">
+             <div>スマートフォンで読み取ると共有ページを開けます。</div>
+           </div>
+         </div>`
+      : "<div class='warn'>⚠️ QRコードURLが返ってきませんでした</div>";
 
-  status.classList.remove("muted");
-  status.innerHTML = `<div>共有リンクを発行しました。リストからURLコピーやQR印刷ができます。</div>${qrHtml}`;
-  console.log("🖼️ final status.innerHTML =", status.innerHTML);
-}
+    status.classList.remove("muted");
+    status.innerHTML = `<div>共有リンクを発行しました。リストからURLコピーやQR印刷ができます。</div>${qrHtml}`;
+    console.log("🖼️ final status.innerHTML =", status.innerHTML);
+  }
 
     fetchExternalShareList();
 
@@ -2503,13 +2494,10 @@ function collectShareFormConfig(){
   const expires=document.getElementById("shareExpires");
   const password=document.getElementById("sharePassword");
   const mask=document.getElementById("shareMaskCheckbox");
-  const shareAll=document.getElementById("shareAttachmentAll");
   const attachmentsContainer=document.getElementById("shareAttachments");
   const rangeSelect=document.getElementById("shareRange");
   const allowed=[];
-  if(shareAll && shareAll.checked){
-    allowed.push("__ALL__");
-  }else if(attachmentsContainer){
+  if(attachmentsContainer){
     attachmentsContainer.querySelectorAll('input[type="checkbox"][data-file-id]').forEach(cb=>{
       if(cb.checked) allowed.push(cb.dataset.fileId);
     });
