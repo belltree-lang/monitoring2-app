@@ -623,10 +623,15 @@ function getRecordsByStaff(staffName){
 /***** ── ダッシュボード要約 ─────────────────*****/
 function normalizeMemberId_(value) {
   if (value == null) return '';
-  const normalized = String(value).normalize('NFKC').replace(/[^0-9]/g, '');
-  if (!normalized) return '';
-  if (normalized.length >= 4) return normalized;
-  return ('0000' + normalized).slice(-4);
+  let str = String(value).normalize('NFKC').trim();
+  if (!str) return '';
+  str = str.replace(/\u3000/g, '').replace(/\s+/g, '');
+  str = str.replace(/[‐‑‒–—―−]/g, '-');
+  str = str.toUpperCase();
+  if (/^\d+$/.test(str)) {
+    return str.length >= 4 ? str : str.padStart(4, '0');
+  }
+  return str;
 }
 
 function normalizeMemberHeaderLabel_(label) {
@@ -2369,15 +2374,34 @@ function shareBuildCustomRecordSet_(share, rawRecords, recordId) {
   return { records: sanitized, primaryRecord };
 }
 function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
-  const recordResult = shareLoadRecords_(share, recordId, share.range);
-  const profile = shareResolveProfile_(share.memberId);
-  const summary = shareBuildSummary_(share, profile, recordResult.records.length > 0);
+  const workingShare = share && typeof share === 'object' ? { ...share } : {};
+  if (typeof honobonoEnrichShare_ === 'function') {
+    try {
+      honobonoEnrichShare_(workingShare, workingShare.memberId);
+    } catch (err) {
+      Logger.log('⚠️ shareBuildResponse_ enrich failed: ' + (err && err.message ? err.message : err));
+    }
+  }
+
+  const recordResult = shareLoadRecords_(workingShare, recordId, workingShare.range);
+  const profile = shareResolveProfile_(workingShare.memberId);
+  const summary = shareBuildSummary_(workingShare, profile, recordResult.records.length > 0);
   const message = recordResult.records.length ? '' : '記録が存在しません';
-  const report = includeReport ? shareLoadMonitoringReport_(share) : null;
+  const report = includeReport ? shareLoadMonitoringReport_(workingShare) : null;
   const records = includeRecords ? recordResult.records : [];
   const primaryRecord = includeRecords ? recordResult.primaryRecord : null;
+  const profilePayload = {
+    name: profile.name || '',
+    center: profile.center || '',
+    staff: profile.staff || '',
+    qrUrl: profile.qrUrl || ''
+  };
+  if (summary && typeof summary === 'object') {
+    summary.profile = profilePayload;
+  }
   return {
     summary,
+    profile: profilePayload,
     records,
     rawRecords: records.slice(),
     primaryRecord,
@@ -2416,6 +2440,7 @@ function getExternalShareMeta(token, recordId) {
     return {
       status: 'success',
       share: response.summary,
+      profile: response.profile,
       records: response.records,
       rawRecords: response.rawRecords || response.records,
       primaryRecord: response.primaryRecord,
@@ -2465,6 +2490,7 @@ function enterExternalShare(token, password, recordId) {
     return {
       status: 'success',
       share: response.summary,
+      profile: response.profile,
       records: response.records,
       rawRecords: response.rawRecords || response.records,
       primaryRecord: response.primaryRecord,
@@ -2834,6 +2860,13 @@ function honobonoGetMasterMap_() {
     const keyCandidates = [];
     if (idRaw) keyCandidates.push(idRaw);
     if (normalizedId && normalizedId !== idRaw) keyCandidates.push(normalizedId);
+    if (typeof toHalfWidthDigits === 'function') {
+      const digitsOnly = toHalfWidthDigits(idRaw);
+      if (digitsOnly) {
+        const paddedDigits = digitsOnly.length >= 4 ? digitsOnly : digitsOnly.padStart(4, '0');
+        if (!keyCandidates.includes(paddedDigits)) keyCandidates.push(paddedDigits);
+      }
+    }
 
     keyCandidates.forEach(key => {
       if (!key) return;
@@ -2842,6 +2875,11 @@ function honobonoGetMasterMap_() {
   }
   __honobonoCacheMap = map;
   return __honobonoCacheMap;
+}
+
+function resetHonobonoCache_() {
+  __honobonoCacheMap = null;
+  return true;
 }
 
 /** IDで1件取得（無ければ null） */
