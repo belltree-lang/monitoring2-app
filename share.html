@@ -466,11 +466,14 @@ function resolveSharePayload(res){
     }
 
     const profileSource = profile || {};
+    const fallbackRecord = Array.isArray(records) && records.length ? records[0] : null;
 
     const resolvedMemberName = pickFirstString(
       mergeTargets.memberName,
       profileSource.memberName,
-      profileSource.name
+      profileSource.name,
+      primaryRecord && (primaryRecord.memberName || (primaryRecord.fields && primaryRecord.fields.memberName)),
+      fallbackRecord && (fallbackRecord.memberName || (fallbackRecord.fields && fallbackRecord.fields.memberName))
     );
     if(resolvedMemberName){
       mergeTargets.memberName = resolvedMemberName;
@@ -479,7 +482,9 @@ function resolveSharePayload(res){
     const resolvedMemberId = pickFirstString(
       mergeTargets.memberId,
       profileSource.memberId,
-      profileSource.id
+      profileSource.id,
+      primaryRecord && (primaryRecord.memberId || (primaryRecord.fields && primaryRecord.fields.memberId)),
+      fallbackRecord && (fallbackRecord.memberId || (fallbackRecord.fields && fallbackRecord.fields.memberId))
     );
     if(resolvedMemberId){
       mergeTargets.memberId = resolvedMemberId;
@@ -490,7 +495,9 @@ function resolveSharePayload(res){
       mergeTargets.centerName,
       profileSource.memberCenter,
       profileSource.centerName,
-      profileSource.center
+      profileSource.center,
+      primaryRecord && (primaryRecord.memberCenter || primaryRecord.center || (primaryRecord.fields && (primaryRecord.fields.memberCenter || primaryRecord.fields.center))),
+      fallbackRecord && (fallbackRecord.memberCenter || fallbackRecord.center || (fallbackRecord.fields && (fallbackRecord.fields.memberCenter || fallbackRecord.fields.center)))
     );
     if(resolvedCenter){
       mergeTargets.memberCenter = resolvedCenter;
@@ -502,11 +509,27 @@ function resolveSharePayload(res){
       mergeTargets.staffName,
       profileSource.memberStaff,
       profileSource.staffName,
-      profileSource.staff
+      profileSource.staff,
+      primaryRecord && (primaryRecord.memberStaff || primaryRecord.staff || (primaryRecord.fields && (primaryRecord.fields.memberStaff || primaryRecord.fields.staff))),
+      fallbackRecord && (fallbackRecord.memberStaff || fallbackRecord.staff || (fallbackRecord.fields && (fallbackRecord.fields.memberStaff || fallbackRecord.fields.staff)))
     );
     if(resolvedStaff){
       mergeTargets.memberStaff = resolvedStaff;
       mergeTargets.staffName = resolvedStaff;
+    }
+
+    if(mergeTargets.profile && typeof mergeTargets.profile === 'object'){
+      const profileTarget = mergeTargets.profile;
+      if(resolvedMemberName && !sanitizeShareValue(profileTarget.name)) profileTarget.name = resolvedMemberName;
+      if(resolvedMemberName && !sanitizeShareValue(profileTarget.memberName)) profileTarget.memberName = resolvedMemberName;
+      if(resolvedMemberId && !sanitizeShareValue(profileTarget.memberId)) profileTarget.memberId = resolvedMemberId;
+      if(resolvedCenter && !sanitizeShareValue(profileTarget.center)) profileTarget.center = resolvedCenter;
+      if(resolvedCenter && !sanitizeShareValue(profileTarget.centerName)) profileTarget.centerName = resolvedCenter;
+      if(resolvedCenter && !sanitizeShareValue(profileTarget.memberCenter)) profileTarget.memberCenter = resolvedCenter;
+      if(resolvedStaff && !sanitizeShareValue(profileTarget.staff)) profileTarget.staff = resolvedStaff;
+      if(resolvedStaff && !sanitizeShareValue(profileTarget.staffName)) profileTarget.staffName = resolvedStaff;
+      if(resolvedStaff && !sanitizeShareValue(profileTarget.memberStaff)) profileTarget.memberStaff = resolvedStaff;
+      profile = profileTarget;
     }
   }
   return { share, records, report, primaryRecord, message, status, profile };
@@ -609,7 +632,8 @@ function updateHeader(share){
 
   const resolvedMemberName = pickFirstString(
     shareData.memberName,
-    profile && (profile.name || profile.memberName),
+    profile && profile.memberName,
+    profile && profile.name,
     primaryRecord && (primaryRecord.memberName || (primaryRecord.fields && primaryRecord.fields.memberName)),
     recordFallback && (recordFallback.memberName || (recordFallback.fields && recordFallback.fields.memberName))
   );
@@ -622,16 +646,20 @@ function updateHeader(share){
   const resolvedCenter = pickFirstString(
     shareData.memberCenter,
     shareData.centerName,
-    profile && (profile.center || profile.centerName),
-    primaryRecord && (primaryRecord.center || (primaryRecord.fields && primaryRecord.fields.center)),
-    recordFallback && (recordFallback.center || (recordFallback.fields && recordFallback.fields.center))
+    profile && profile.memberCenter,
+    profile && profile.center,
+    profile && profile.centerName,
+    primaryRecord && (primaryRecord.memberCenter || primaryRecord.center || (primaryRecord.fields && (primaryRecord.fields.memberCenter || primaryRecord.fields.center))),
+    recordFallback && (recordFallback.memberCenter || recordFallback.center || (recordFallback.fields && (recordFallback.fields.memberCenter || recordFallback.fields.center)))
   );
   const resolvedStaff = pickFirstString(
     shareData.memberStaff,
     shareData.staffName,
-    profile && (profile.staff || profile.staffName),
-    primaryRecord && (primaryRecord.staff || (primaryRecord.fields && primaryRecord.fields.staff)),
-    recordFallback && (recordFallback.staff || (recordFallback.fields && recordFallback.fields.staff))
+    profile && profile.memberStaff,
+    profile && profile.staff,
+    profile && profile.staffName,
+    primaryRecord && (primaryRecord.memberStaff || primaryRecord.staff || (primaryRecord.fields && (primaryRecord.fields.memberStaff || primaryRecord.fields.staff))),
+    recordFallback && (recordFallback.memberStaff || recordFallback.staff || (recordFallback.fields && (recordFallback.fields.memberStaff || recordFallback.fields.staff)))
   );
 
   const memberNameEl = document.getElementById('shareMemberName');

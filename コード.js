@@ -2146,25 +2146,69 @@ function shareResolveProfile_(memberId) {
     if (typeof honobonoFindById_ === 'function') {
       const info = honobonoFindById_(memberId);
       if (info) {
+        const name = shareNormalizeString_(info.name);
+        const center = shareNormalizeString_(info.center);
+        const staff = shareNormalizeString_(info.staff);
+        const memberId = shareNormalizeString_(info.memberId || info.memberIdRaw);
         return {
-          name: String(info.name || ''),
-          center: String(info.center || ''),
-          staff: String(info.staff || ''),
-          qrUrl: String(info.qrUrl || '')
+          name,
+          memberName: name,
+          memberId,
+          center,
+          centerName: center,
+          memberCenter: center,
+          staff,
+          staffName: staff,
+          memberStaff: staff,
+          qrUrl: sharePickFirstString_(info.qrUrl)
         };
       }
     }
   } catch (err) {
     Logger.log('⚠️ shareResolveProfile_ error: ' + (err && err.message ? err.message : err));
   }
-  return { name: '', center: '', staff: '', qrUrl: '' };
+  return {
+    name: '',
+    memberName: '',
+    memberId: '',
+    center: '',
+    centerName: '',
+    memberCenter: '',
+    staff: '',
+    staffName: '',
+    memberStaff: '',
+    qrUrl: ''
+  };
+}
+
+function shareNormalizeString_(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value).trim();
+  if (!str) return '';
+  const lowered = str.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined') return '';
+  return str;
 }
 
 function sharePickFirstString_(...values) {
   for (const value of values) {
-    if (typeof value !== 'string') continue;
-    const trimmed = value.trim();
-    if (trimmed) return trimmed;
+    const normalized = shareNormalizeString_(value);
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function sharePickRecordField_(record, ...keys) {
+  if (!record || typeof record !== 'object') return '';
+  const fields = record.fields && typeof record.fields === 'object' ? record.fields : null;
+  for (const key of keys) {
+    if (!key) continue;
+    const direct = shareNormalizeString_(record[key]);
+    if (direct) return direct;
+    if (fields && key in fields) {
+      const nested = shareNormalizeString_(fields[key]);
+      if (nested) return nested;
+    }
   }
   return '';
 }
@@ -2227,13 +2271,26 @@ function shareBuildSummary_(share, profile, hasRecords) {
   const shareLink = sharePickFirstString_(qrPayload.shareLink, url);
   const expired = share.expiresAt ? share.expiresAt.getTime() < Date.now() : false;
 
-  const memberName = profile.name || share.memberName || '';
-  const memberCenter = profile.center || profile.centerName || share.memberCenter || share.centerName || '';
-  const memberStaff = profile.staff || profile.staffName || share.memberStaff || share.staffName || '';
+  const memberId = sharePickFirstString_(share.memberId, profile.memberId);
+  const memberName = sharePickFirstString_(share.memberName, profile.memberName, profile.name);
+  const memberCenter = sharePickFirstString_(
+    share.memberCenter,
+    share.centerName,
+    profile.memberCenter,
+    profile.center,
+    profile.centerName
+  );
+  const memberStaff = sharePickFirstString_(
+    share.memberStaff,
+    share.staffName,
+    profile.memberStaff,
+    profile.staff,
+    profile.staffName
+  );
 
   return {
     token: share.token,
-    memberId: share.memberId,
+    memberId,
     memberName,
     memberCenter,
     memberStaff,
@@ -2390,14 +2447,70 @@ function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
   const report = includeReport ? shareLoadMonitoringReport_(workingShare) : null;
   const records = includeRecords ? recordResult.records : [];
   const primaryRecord = includeRecords ? recordResult.primaryRecord : null;
+  const primaryRecordSource = recordResult.primaryRecord || null;
+  const fallbackRecordSource = recordResult.records && recordResult.records.length ? recordResult.records[0] : null;
+
+  const resolvedMemberId = sharePickFirstString_(
+    workingShare.memberId,
+    profile.memberId,
+    sharePickRecordField_(primaryRecordSource, 'memberId'),
+    sharePickRecordField_(fallbackRecordSource, 'memberId')
+  );
+  const resolvedMemberName = sharePickFirstString_(
+    workingShare.memberName,
+    profile.memberName,
+    profile.name,
+    sharePickRecordField_(primaryRecordSource, 'memberName', 'name'),
+    sharePickRecordField_(fallbackRecordSource, 'memberName', 'name')
+  );
+  const resolvedCenter = sharePickFirstString_(
+    workingShare.memberCenter,
+    workingShare.centerName,
+    profile.memberCenter,
+    profile.center,
+    profile.centerName,
+    sharePickRecordField_(primaryRecordSource, 'memberCenter', 'center'),
+    sharePickRecordField_(fallbackRecordSource, 'memberCenter', 'center')
+  );
+  const resolvedStaff = sharePickFirstString_(
+    workingShare.memberStaff,
+    workingShare.staffName,
+    profile.memberStaff,
+    profile.staff,
+    profile.staffName,
+    sharePickRecordField_(primaryRecordSource, 'memberStaff', 'staff'),
+    sharePickRecordField_(fallbackRecordSource, 'memberStaff', 'staff')
+  );
+
+  if (resolvedMemberId) workingShare.memberId = resolvedMemberId;
+  if (resolvedMemberName) workingShare.memberName = resolvedMemberName;
+  if (resolvedCenter) {
+    workingShare.memberCenter = resolvedCenter;
+    workingShare.centerName = workingShare.centerName || resolvedCenter;
+  }
+  if (resolvedStaff) {
+    workingShare.memberStaff = resolvedStaff;
+    workingShare.staffName = workingShare.staffName || resolvedStaff;
+  }
+
   const profilePayload = {
-    name: profile.name || '',
-    center: profile.center || '',
-    staff: profile.staff || '',
-    qrUrl: profile.qrUrl || ''
+    name: sharePickFirstString_(profile.name, resolvedMemberName),
+    memberId: resolvedMemberId,
+    memberName: sharePickFirstString_(profile.memberName, profile.name, resolvedMemberName),
+    center: sharePickFirstString_(profile.center, profile.centerName, resolvedCenter),
+    centerName: sharePickFirstString_(profile.centerName, profile.center, resolvedCenter),
+    memberCenter: sharePickFirstString_(profile.memberCenter, profile.center, profile.centerName, resolvedCenter),
+    staff: sharePickFirstString_(profile.staff, profile.staffName, resolvedStaff),
+    staffName: sharePickFirstString_(profile.staffName, profile.staff, resolvedStaff),
+    memberStaff: sharePickFirstString_(profile.memberStaff, profile.staff, profile.staffName, resolvedStaff),
+    qrUrl: sharePickFirstString_(profile.qrUrl, workingShare.qrUrl)
   };
   if (summary && typeof summary === 'object') {
     summary.profile = profilePayload;
+    if (resolvedMemberId) summary.memberId = resolvedMemberId;
+    if (resolvedMemberName) summary.memberName = resolvedMemberName;
+    if (resolvedCenter) summary.memberCenter = resolvedCenter;
+    if (resolvedStaff) summary.memberStaff = resolvedStaff;
   }
   return {
     summary,
