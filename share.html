@@ -160,7 +160,7 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       <button type="button" class="print-button" id="printButton" disabled>印刷</button>
     </div>
   </header>
-  <section class="report-card" id="reportCard">
+  <section class="report-card" id="reportCard" style="display:none;">
     <div class="report-card-header">
       <div class="report-card-info">
         <h2 class="report-title">月次モニタリング報告書</h2>
@@ -268,6 +268,15 @@ const shareAudienceInfo = {
     manualTips: [
       '検索や期間フィルターで必要な記録を絞り込めます。',
       '支援が必要な事項は担当ケアマネジャーまでお知らせください。'
+    ]
+  },
+  caremanager: {
+    label: 'ケアマネジャー向け共有',
+    description: '月次報告と記録をまとめています。',
+    intro: 'ケアマネジャーさま専用の共有ページです。月次モニタリング報告書と最新記録をご確認ください。',
+    manualTips: [
+      '月次モニタリング報告書で全体の状況を確認できます。',
+      '必要に応じて印刷し、関係者との情報共有にご活用ください。'
     ]
   },
   medical: {
@@ -482,10 +491,22 @@ function updateQrSection(share){
   }
 }
 
+function shouldShowReportSection(report, share){
+  if(!report) return false;
+  const audience = String(share && share.audience || '').toLowerCase();
+  if(audience !== 'caremanager') return false;
+  const rangeType = String(share && (share.rangeType || share.rangeSpec || '') || '').toLowerCase();
+  if(rangeType === 'month') return true;
+  const rangeSpec = String(share && share.rangeSpec || '').toLowerCase();
+  if(rangeSpec === 'month') return true;
+  const rangeLabel = share && share.rangeLabel ? String(share.rangeLabel) : '';
+  return rangeLabel.includes('月次');
+}
+
 function buildReportHtml(text){
   const value = String(text || '');
   if(!value.trim()){
-    return '<p class="report-placeholder">月次モニタリング報告書はまだ登録されていません。</p>';
+    return '<p class="report-placeholder">レポート内容がありません。</p>';
   }
   const lines = value.replace(/\r/g,'').split('\n');
   return lines.map(line => {
@@ -495,12 +516,32 @@ function buildReportHtml(text){
 }
 
 function updateReportCard(report, share, options = {}){
+  const card = document.getElementById('reportCard');
   const subtitle = document.getElementById('reportSubtitle');
   const generatedAtEl = document.getElementById('reportGeneratedAt');
   const statusEl = document.getElementById('reportStatus');
   const bodyEl = document.getElementById('reportContent');
   currentReport = report || null;
 
+  if(!card || !subtitle || !generatedAtEl || !statusEl || !bodyEl){
+    return;
+  }
+
+  if(options.showLoading){
+    card.style.display = 'flex';
+    subtitle.textContent = '対象月を確認しています…';
+    generatedAtEl.textContent = '';
+    statusEl.style.display = 'none';
+    bodyEl.innerHTML = `<p class="report-placeholder">${escapeHtml(options.showLoading)}</p>`;
+    return;
+  }
+
+  if(!shouldShowReportSection(report, share)){
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'flex';
   const monthLabel = report && report.monthLabel ? report.monthLabel : '';
   const rangeLabel = share && share.rangeLabel ? share.rangeLabel : '';
   if(subtitle){
@@ -523,27 +564,10 @@ function updateReportCard(report, share, options = {}){
     statusEl.style.display = statusText ? 'inline-block' : 'none';
   }
 
-  if(!bodyEl) return;
-
-  if(options.requirePassword && !report){
-    bodyEl.innerHTML = '<p class="report-placeholder">パスワード入力後に表示されます。</p>';
-    return;
-  }
-
-  if(options.showLoading){
-    bodyEl.innerHTML = `<p class="report-placeholder">${escapeHtml(options.showLoading)}</p>`;
-    return;
-  }
-
-  if(report && report.reportText){
+  if(report && Object.prototype.hasOwnProperty.call(report, 'reportText')){
     bodyEl.innerHTML = buildReportHtml(report.reportText);
-    return;
-  }
-
-  if(share && share.rangeLabel && share.rangeLabel.includes('月次')){
-    bodyEl.innerHTML = '<p class="report-placeholder">月次モニタリング報告書はまだ登録されていません。</p>';
   }else{
-    bodyEl.innerHTML = '<p class="report-placeholder">共有設定に月次モニタリング報告書は含まれていません。</p>';
+    bodyEl.innerHTML = '<p class="report-placeholder">レポート内容がありません。</p>';
   }
 }
 

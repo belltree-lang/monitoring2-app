@@ -1647,7 +1647,8 @@ function createExternalShare(memberId, options) {
 
     const config = options && typeof options === 'object' ? options : {};
     const audienceRaw = String(config.audience || '').trim().toLowerCase();
-    const audience = ['family','center','medical','service'].includes(audienceRaw) ? audienceRaw : 'family';
+    const audienceList = ['family','center','medical','service','caremanager'];
+    const audience = audienceList.includes(audienceRaw) ? audienceRaw : 'family';
 
     const maskMode = (config.maskMode === 'none') ? 'none' : 'simple';
     const passwordHash = hashSharePassword_(config.password);
@@ -1822,7 +1823,7 @@ const SHARE_SHEET_HEADERS = [
   'QrUrl'
 ];
 
-const SHARE_ALLOWED_AUDIENCES = ['family', 'center', 'medical', 'service'];
+const SHARE_ALLOWED_AUDIENCES = ['family', 'center', 'medical', 'service', 'caremanager'];
 
 function shareGetSheet_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -2008,6 +2009,8 @@ function monitoringReportsFindLatest_(memberId) {
 
 function shareLoadMonitoringReport_(share) {
   if (!share || !share.memberId) return null;
+  const audience = String(share.audience || '').toLowerCase();
+  if (audience !== 'caremanager') return null;
   if (!share.range || share.range.type !== 'month') return null;
   const report = monitoringReportsFindLatest_(share.memberId);
   if (!report) return null;
@@ -2159,6 +2162,8 @@ function shareBuildSummary_(share, profile, hasRecords) {
     expiresAtText: shareFormatDateTime_(share.expiresAt),
     expired,
     audience: share.audience,
+    rangeSpec: share.rangeSpec,
+    rangeType: share.range ? share.range.type : '',
     requirePassword: !!share.passwordHash,
     maskMode: share.maskMode,
     allowAllAttachments: share.allowAllAttachments,
