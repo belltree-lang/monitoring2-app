@@ -808,7 +808,13 @@ function getDashboardSummary() {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     monthStart.setHours(0, 0, 0, 0);
+    const prevMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+    prevMonthStart.setHours(0, 0, 0, 0);
+    const prevMonthEnd = new Date(monthStart.getTime() - 1);
     const monthLabel = Utilities.formatDate(monthStart, tz, 'yyyy/MM');
+    const monthBadgeLabel = Utilities.formatDate(monthStart, tz, 'M月');
+    const previousMonthLabel = Utilities.formatDate(prevMonthStart, tz, 'yyyy/MM');
+    const previousMonthBadgeLabel = Utilities.formatDate(prevMonthStart, tz, 'M月');
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
@@ -842,13 +848,23 @@ function getDashboardSummary() {
           name: info.name || '',
           careManager: info.careManager || '',
           countThisMonth: 0,
+          countPreviousMonth: 0,
           latestTimestamp: null,
           latestDateText: '',
           monitoringStatus: 'pending',
+          monitoringStatusPrevious: 'pending',
           memberStatus: MEMBER_STATUS_DEFAULT_
         };
       });
-      return { status: 'success', data: emptyData, monthLabel, debug: dbg };
+      return {
+        status: 'success',
+        data: emptyData,
+        monthLabel,
+        monthBadgeLabel,
+        previousMonthLabel,
+        previousMonthBadgeLabel,
+        debug: dbg
+      };
     }
 
     const header = vals[0].map(v => String(v || '').trim());
@@ -870,6 +886,7 @@ function getDashboardSummary() {
           yomi: info.yomi || '',
           careManager: info.careManager || '',
           countThisMonth: 0,
+          countPreviousMonth: 0,
           latestTimestamp: null,
           memberStatus: MEMBER_STATUS_DEFAULT_
         });
@@ -897,6 +914,8 @@ function getDashboardSummary() {
       }
       if (ts >= monthStart.getTime()) {
         entry.countThisMonth += 1;
+      } else if (ts >= prevMonthStart.getTime() && ts <= prevMonthEnd.getTime()) {
+        entry.countPreviousMonth += 1;
       }
       if (colStatus >= 0) {
         const normalizedStatus = normalizeMemberStatusValue_(row[colStatus]);
@@ -914,17 +933,24 @@ function getDashboardSummary() {
       const yomi = entry.yomi || info.yomi || '';
       const careManager = entry.careManager || info.careManager || '';
       const latestTimestamp = entry.latestTimestamp || null;
+      const countThisMonth = entry.countThisMonth || 0;
+      const countPreviousMonth = entry.countPreviousMonth || 0;
+      const monitoringStatusCurrent = countThisMonth > 0 ? 'completed' : 'pending';
+      const monitoringStatusPrevious = countPreviousMonth > 0 ? 'completed' : 'pending';
       return {
         id: entry.id,
         name,
         yomi,
         careManager,
-        countThisMonth: entry.countThisMonth,
+        countThisMonth,
+        countPreviousMonth,
         latestTimestamp,
         latestDateText: latestTimestamp
           ? Utilities.formatDate(new Date(latestTimestamp), tz, 'yyyy/MM/dd HH:mm')
           : '',
-        monitoringStatus: entry.countThisMonth > 0 ? 'completed' : 'pending',
+        monitoringStatus: monitoringStatusCurrent,
+        monitoringStatusCurrent,
+        monitoringStatusPrevious,
         memberStatus: entry.memberStatus || MEMBER_STATUS_DEFAULT_
       };
     });
@@ -944,7 +970,15 @@ function getDashboardSummary() {
       return String(a.id || '').localeCompare(String(b.id || ''), 'ja');
     });
 
-    return { status: 'success', data, monthLabel, debug: dbg };
+    return {
+      status: 'success',
+      data,
+      monthLabel,
+      monthBadgeLabel,
+      previousMonthLabel,
+      previousMonthBadgeLabel,
+      debug: dbg
+    };
   } catch (e) {
     return { status: 'error', message: String(e && e.message || e), debug: dbg };
   }
