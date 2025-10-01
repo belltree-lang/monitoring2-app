@@ -1526,28 +1526,45 @@ function getMemberList() {
 }
 
   /** 新規利用者を登録 */
-function addMember(id, name) {
+function addMember(id, name, kana) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sh = ss.getSheetByName('ほのぼのID');
   if (!sh) throw new Error('シート「ほのぼのID」が見つかりません');
 
-  // IDフォーマット修正
+  const values = sh.getDataRange().getValues();
+  const layout = getMemberSheetColumnInfo_(values);
+
   id = String(id || '').replace(/[^0-9]/g,'');
   id = ('0000' + id).slice(-4);
 
-  // 氏名フォーマット修正
   name = String(name || '').trim().replace(/\s+/g,' ');
-  
-  // 重複チェック
-  const vals = sh.getDataRange().getValues();
-  for (let i=1; i<vals.length; i++){
-    if (String(vals[i][0]) === id){
+  kana = String(kana || '').trim().replace(/\s+/g,' ');
+
+  if (!id || !name || !kana) {
+    throw new Error('ID・氏名・カナを入力してください');
+  }
+
+  const idCol = layout.idCol >= 0 ? layout.idCol : 0;
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i] || [];
+    const existing = (idCol < row.length) ? row[idCol] : '';
+    const normalized = normalizeMemberId_(existing);
+    if (normalized && normalized === id) {
       throw new Error('同じIDがすでに存在します: ' + id);
     }
   }
 
-  sh.appendRow([id, name]);
-  return { status:'success', id, name };
+  const nameCol = layout.nameCol >= 0 ? layout.nameCol : (idCol === 0 ? 1 : idCol + 1);
+  const kanaCol = layout.yomiCol >= 0 ? layout.yomiCol : Math.max(nameCol + 1, idCol + 1);
+  const width = Math.max(layout.width || 0, sh.getLastColumn() || 0, idCol + 1, nameCol + 1, kanaCol + 1, 3);
+  const newRow = new Array(width).fill('');
+
+  newRow[idCol] = id;
+  newRow[nameCol] = name;
+  newRow[kanaCol] = kana;
+
+  sh.appendRow(newRow);
+  return { status:'success', id, name, kana };
 }
 
 /** 既存利用者の氏名を更新 */
