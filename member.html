@@ -87,19 +87,25 @@ button:hover { opacity:0.9;}
 .dashboard-entry-name { font-weight:600; font-size:0.95rem; color:#1f2f4b; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .dashboard-entry-id { font-size:0.8rem; color:#5a6a85; background:#eef3ff; border-radius:6px; padding:2px 6px; }
 .dashboard-entry-meta { margin-top:6px; display:flex; flex-wrap:wrap; gap:8px 14px; font-size:0.8rem; color:#5a6a85; }
-.dashboard-entry-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-end; min-width:140px; }
+.dashboard-entry-status-row { margin-top:10px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; justify-content:space-between; }
+.dashboard-monitoring { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.dashboard-monitoring-label { font-size:0.74rem; color:#5a6a85; font-weight:600; }
+.dashboard-monitoring-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font-size:0.74rem; font-weight:600; }
+.dashboard-monitoring-badge.completed { background:#e4f3e8; color:#2e7d32; }
+.dashboard-monitoring-badge.pending { background:#fff1d6; color:#c77800; }
+.dashboard-status-indicator { display:flex; align-items:center; }
+.dashboard-entry-actions { display:flex; flex-direction:column; gap:8px; align-items:flex-end; min-width:160px; }
 .dashboard-status-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:0.78rem; font-weight:600; }
 .dashboard-status-badge.active { background:#e4f3e8; color:#2e7d32; }
 .dashboard-status-badge.pause { background:#ffecc7; color:#c77800; }
 .dashboard-status-badge.stop { background:#ffd6d9; color:#c62828; }
 .dashboard-status-badge.fit { background:#e8e4ff; color:#5b3cc4; }
-.dashboard-status-buttons { display:flex; flex-wrap:wrap; gap:6px; }
-.dashboard-status-btn { border:1px solid #b8c7e6; background:#fff; color:#2b3d6d; border-radius:999px; padding:6px 12px; font-size:0.78rem; cursor:pointer; transition:.2s; }
+.dashboard-status-buttons { display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; }
+.dashboard-status-btn { border:1px solid #b8c7e6; background:#fff; color:#2b3d6d; border-radius:999px; padding:3px 8px; font-size:0.7rem; cursor:pointer; transition:.2s; line-height:1.2; min-width:0; }
 .dashboard-status-btn.active { background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 2px 8px rgba(25,118,210,0.25); }
 .dashboard-status-btn[disabled] { opacity:0.6; cursor:wait; }
 .dashboard-status-controls { display:flex; flex-direction:column; gap:6px; align-items:flex-end; width:100%; }
 .dashboard-status-controls .dashboard-status-buttons { justify-content:flex-end; }
-.dashboard-entry-actions .link-button { text-decoration:none; }
 .dashboard-index-note { font-size:0.75rem; color:#5a6a85; }
 @media(max-width:960px){
   .dashboard-wrapper{flex-direction:column;}
@@ -432,6 +438,13 @@ const MEMBER_STATUS_META = {
   fit: { label: "べるフィット", icon: "💪" }
 };
 
+const DASHBOARD_SPECIAL_STATUS_SECTIONS = [
+  { key: "pause", label: "休止中の利用者" },
+  { key: "stop", label: "中止した利用者" },
+  { key: "fit", label: "べるフィット会員" }
+];
+const DASHBOARD_SPECIAL_STATUS_KEY_SET = new Set(DASHBOARD_SPECIAL_STATUS_SECTIONS.map(info => info.key));
+
 function normalizeMemberStatusValue(status) {
   const normalized = String(status == null ? "" : status)
     .normalize("NFKC")
@@ -573,6 +586,9 @@ function getInitialDashboardFiltersFromQuery() {
 let dashboardState = {
   data: [],
   monthLabel: "",
+  monthBadgeLabel: "",
+  previousMonthLabel: "",
+  previousMonthBadgeLabel: "",
   activeInitial: null,
   filters: getInitialDashboardFiltersFromQuery(),
   collapsedSections: loadDashboardCollapsedSections(),
@@ -761,11 +777,24 @@ function compareEntriesByFurigana(a, b) {
 
 function getDashboardIndexGroups(sortedData) {
   const exists = new Set();
+  const specialExists = new Set();
   (Array.isArray(sortedData) ? sortedData : []).forEach(entry => {
+    if (!entry) return;
+    const statusKey = getMemberStatusValue(entry.memberStatus);
+    if (DASHBOARD_SPECIAL_STATUS_KEY_SET.has(statusKey)) {
+      specialExists.add(statusKey);
+      return;
+    }
     const label = getDashboardGroupLabel(entry);
     exists.add(label);
   });
-  return DASHBOARD_GROUP_ORDER.filter(label => exists.has(label));
+  const ordered = DASHBOARD_GROUP_ORDER.filter(label => exists.has(label));
+  DASHBOARD_SPECIAL_STATUS_SECTIONS.forEach(info => {
+    if (specialExists.has(info.key)) {
+      ordered.push(info.label);
+    }
+  });
+  return ordered;
 }
 
 function parseCareManagerList(value) {
@@ -808,18 +837,72 @@ function applyDashboardFilters(data) {
 function buildDashboardSections(data) {
   const sections = [];
   const groups = new Map();
+  const specialBuckets = new Map();
+  const normalEntries = [];
+  DASHBOARD_SPECIAL_STATUS_SECTIONS.forEach(info => {
+    specialBuckets.set(info.key, []);
+  });
   (Array.isArray(data) ? data : []).forEach(entry => {
+    const statusKey = getMemberStatusValue(entry && entry.memberStatus);
+    if (specialBuckets.has(statusKey)) {
+      specialBuckets.get(statusKey).push(entry);
+      return;
+    }
+    normalEntries.push(entry);
     const label = getDashboardGroupLabel(entry);
     if (!groups.has(label)) {
       groups.set(label, []);
     }
     groups.get(label).push(entry);
   });
-  const order = getDashboardIndexGroups(data);
+  const order = getDashboardIndexGroups(normalEntries);
   order.forEach(label => {
     sections.push({ label, entries: groups.get(label) || [] });
   });
+  DASHBOARD_SPECIAL_STATUS_SECTIONS.forEach(info => {
+    const list = specialBuckets.get(info.key) || [];
+    if (list.length) {
+      sections.push({ label: info.label, entries: list });
+    }
+  });
   return sections;
+}
+
+function deriveMonthBadgeLabel(rawLabel) {
+  const raw = String(rawLabel || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/\d{4}\/(\d{1,2})/);
+  if (match) {
+    return `${Number(match[1])}月`;
+  }
+  return raw;
+}
+
+function getMonitoringStatusKey(value) {
+  return value === "completed" ? "completed" : "pending";
+}
+
+function buildMonitoringBadge(monthLabel, status) {
+  const safeLabel = String(monthLabel || "").trim();
+  if (!safeLabel) return "";
+  const statusKey = getMonitoringStatusKey(status);
+  const icon = statusKey === "completed" ? "✅" : "⚠️";
+  const statusText = statusKey === "completed" ? "モニタリング済み" : "モニタリング未実施";
+  const label = `${safeLabel}分 ${statusText}`;
+  return `<span class="dashboard-monitoring-badge ${statusKey}">${icon} ${escapeHtml(label)}</span>`;
+}
+
+function buildMonitoringSectionHtml(entry) {
+  if (!entry) return "";
+  const badges = [];
+  const currentLabel = dashboardState.monthBadgeLabel || deriveMonthBadgeLabel(dashboardState.monthLabel);
+  const previousLabel = dashboardState.previousMonthBadgeLabel || deriveMonthBadgeLabel(dashboardState.previousMonthLabel);
+  const currentBadge = buildMonitoringBadge(currentLabel, entry.monitoringStatusCurrent || entry.monitoringStatus);
+  if (currentBadge) badges.push(currentBadge);
+  const previousBadge = buildMonitoringBadge(previousLabel, entry.monitoringStatusPrevious);
+  if (previousBadge) badges.push(previousBadge);
+  if (!badges.length) return "";
+  return `<div class="dashboard-monitoring"><span class="dashboard-monitoring-label">モニタリング状況</span>${badges.join("")}</div>`;
 }
 
 function getDashboardSectionDomId(label) {
@@ -923,15 +1006,6 @@ let initialMemberId = (() => {
   if (!raw) return "";
   return normalizeMemberIdForLookup(raw.trim());
 })();
-
-function buildMemberDetailUrl(id) {
-  const safeId = String(id || "").trim();
-  const loc = window.location || {};
-  const origin = loc.origin || ((loc.protocol || "") + "//" + (loc.host || ""));
-  const base = origin + (loc.pathname || "");
-  if (!safeId) return base;
-  return `${base}?id=${encodeURIComponent(safeId)}`;
-}
 
 function escapeHtml(value) {
   const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
@@ -1089,12 +1163,18 @@ function loadDashboard() {
       if (statusEl) statusEl.textContent = "エラー: " + (res && res.message ? res.message : "取得に失敗しました");
       dashboardState.data = [];
       dashboardState.monthLabel = "";
+      dashboardState.monthBadgeLabel = "";
+      dashboardState.previousMonthLabel = "";
+      dashboardState.previousMonthBadgeLabel = "";
       dashboardState.activeInitial = null;
       if (container) container.innerHTML = "";
       return;
     }
     dashboardState.data = Array.isArray(res.data) ? res.data : [];
     dashboardState.monthLabel = res.monthLabel || "";
+    dashboardState.monthBadgeLabel = res.monthBadgeLabel || "";
+    dashboardState.previousMonthLabel = res.previousMonthLabel || "";
+    dashboardState.previousMonthBadgeLabel = res.previousMonthBadgeLabel || "";
     dashboardState.activeInitial = null;
     renderDashboard();
   }).catch(err => {
@@ -1102,6 +1182,9 @@ function loadDashboard() {
     if (statusEl) statusEl.textContent = "エラー: " + (err && err.message ? err.message : err);
     dashboardState.data = [];
     dashboardState.monthLabel = "";
+    dashboardState.monthBadgeLabel = "";
+    dashboardState.previousMonthLabel = "";
+    dashboardState.previousMonthBadgeLabel = "";
     dashboardState.activeInitial = null;
   });
 }
@@ -1171,7 +1254,14 @@ function renderDashboard() {
   }
 
   if (statusEl) {
-    const monthLabel = dashboardState.monthLabel ? `対象月：${dashboardState.monthLabel}` : "";
+    const monthParts = [];
+    if (dashboardState.monthLabel) {
+      monthParts.push(`対象月：${dashboardState.monthLabel}`);
+    }
+    if (dashboardState.previousMonthLabel) {
+      monthParts.push(`前月：${dashboardState.previousMonthLabel}`);
+    }
+    const monthLabel = monthParts.join(" ／ ");
     const countLabel = `${filteredData.length}名 / 全${sortedData.length}名`;
     statusEl.textContent = monthLabel ? `${monthLabel}（${countLabel}）` : countLabel;
   }
@@ -1249,8 +1339,15 @@ function renderDashboard() {
           ? careParts.map(part => escapeHtml(part)).join('／')
           : '<span class="muted">担当未設定</span>';
         const count = Number(entry.countThisMonth || 0);
-        const link = buildMemberDetailUrl(entry.id || "");
         const selected = memberId && entry.id === memberId ? " selected" : "";
+        const monitoringSection = buildMonitoringSectionHtml(entry);
+        const statusBadgeHtml = `<span class="dashboard-status-badge ${statusKey}">${escapeHtml(statusLabel)}</span>`;
+        const statusRowParts = [];
+        if (monitoringSection) {
+          statusRowParts.push(monitoringSection);
+        }
+        statusRowParts.push(`<div class="dashboard-status-indicator">${statusBadgeHtml}</div>`);
+        const statusRowHtml = `<div class="dashboard-entry-status-row">${statusRowParts.join("")}</div>`;
         return `
           <div class="dashboard-entry status-${statusKey}${selected}">
             <div class="dashboard-entry-main">
@@ -1263,14 +1360,13 @@ function renderDashboard() {
                 <span>最新記録：${latest}</span>
                 <span>今月：${count}件</span>
               </div>
+              ${statusRowHtml}
             </div>
             <div class="dashboard-entry-actions">
               <div class="dashboard-status-controls" data-member="${safeId}">
-                <span class="dashboard-status-badge ${statusKey}">${escapeHtml(statusLabel)}</span>
                 <div class="dashboard-status-buttons">${statusButtons}</div>
               </div>
               <button class="secondary btn-compact dashboard-select" data-id="${safeId}" data-name="${safeNameAttr}">表示</button>
-              <a class="link-button" href="${link}">詳細</a>
             </div>
           </div>
         `;
