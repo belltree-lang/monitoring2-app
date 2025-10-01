@@ -246,7 +246,13 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 const TEMPLATE_TOKEN = <?= typeof shareToken === 'string' ? JSON.stringify(shareToken) : '""' ?>;
 const TEMPLATE_RECORD_ID = <?= typeof shareRecordId === 'string' ? JSON.stringify(shareRecordId) : '""' ?>;
 const queryParams = new URLSearchParams(window.location.search);
-const externalToken = TEMPLATE_TOKEN || queryParams.get('shareId') || queryParams.get('share') || queryParams.get('token') || '';
+
+function getTokenFromUrl(){
+  const sp = new URLSearchParams(window.location.search);
+  return (sp.get('shareId') || sp.get('share') || sp.get('token') || '').trim();
+}
+
+const externalToken = (TEMPLATE_TOKEN || getTokenFromUrl() || '').trim();
 const RECORD_ID_PARAM = TEMPLATE_RECORD_ID || queryParams.get('recordId') || queryParams.get('record') || '';
 console.log("🐛 TEMPLATE_TOKEN =", TEMPLATE_TOKEN);
 console.log("🐛 URL query shareId =", queryParams.get('shareId'));
@@ -340,6 +346,29 @@ function callGoogle(functionName, ...args){
 }
 
 const EXEC_BASE_URL = window.location.href.split('#')[0].split('?')[0];
+
+function pickFirstArray(...candidates){
+  for(const candidate of candidates){
+    if(Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
+function resolveSharePayload(res){
+  if(!res || typeof res !== 'object'){ return { share:null, records:[], report:null, primaryRecord:null, message:'', status:'' }; }
+  const meta = res.meta && typeof res.meta === 'object' ? res.meta : null;
+  const share = res.share || (meta && meta.share) || null;
+  const report = res.report || (meta && meta.report) || null;
+  const records = pickFirstArray(res.records, res.rawRecords, meta && meta.records, meta && meta.rawRecords);
+  const primaryRecord = res.primaryRecord || (meta && meta.primaryRecord) || (records.length ? records[0] : null);
+  const message = typeof res.message === 'string' && res.message
+    ? res.message
+    : (meta && typeof meta.message === 'string' ? meta.message : '');
+  const status = typeof res.status === 'string' && res.status
+    ? res.status
+    : (meta && typeof meta.status === 'string' ? meta.status : '');
+  return { share, records, report, primaryRecord, message, status };
+}
 
 async function callShareApi(action, options = {}) {
   const token = options.token || externalToken;
@@ -474,9 +503,10 @@ function updateQrSection(share){
   if(!qrImage || !placeholder) return;
   const candidates = [
     share && share.qrEmbedUrl,
+    share && share.qrDataUrl,
     share && share.qrDriveUrl,
     share && share.qrUrl,
-    share && share.qrDataUrl
+    share && share.qrCode
   ];
   const src = candidates.find(value => typeof value === 'string' && value.trim().length) || '';
   if(src){
@@ -941,28 +971,34 @@ function fetchShareMeta(){
   setLoading('共有設定を確認しています…');
   return callShareApi('meta', { token: externalToken, recordId: resolvedRecordId }).then(res => {
     console.log("📥 fetchShareMeta response", res);   // デバッグ用ログ
-    if(!res || res.status !== 'success'){
-      const msg = res && res.message ? res.message : '共有設定の取得に失敗しました。';
+    const payload = resolveSharePayload(res || {});
+    const status = (res && typeof res.status === 'string' && res.status) || payload.status || 'success';
+    if(status !== 'success'){
+      const msg = payload.message || (res && res.message) || '共有設定の取得に失敗しました。';
       showAlert('error', msg);
       setLoading('閲覧を開始できませんでした。');
       return null;
     }
 
-    const share = res.share || {};
+    const share = payload.share || {};
     currentShare = share;
     updateHeader(share);
     setIntro(share);
     setFooter(share);
     updateQrSection(share);
 
-    if(share.requirePassword && !res.report){
+    currentReport = payload.report || null;
+    if(share.requirePassword && !currentReport){
       updateReportCard(null, share, { requirePassword: true });
     }else{
-      updateReportCard(res.report || null, share);
+      updateReportCard(currentReport, share);
     }
 
     let normalizedRecords = [];
-    primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : null);
+    primaryRecordData = payload.primaryRecord || null;
+    if(!primaryRecordData && Array.isArray(payload.records) && payload.records.length){
+      primaryRecordData = payload.records[0];
+    }
     console.log("📥 primaryRecordData", primaryRecordData);   // デバッグ用ログ
 
     // recordId が指定されていない場合は primaryRecord から拾う
@@ -971,7 +1007,7 @@ function fetchShareMeta(){
     }
 
     if(!share.requirePassword){
-      normalizedRecords = normalizeRecords(Array.isArray(res.records) ? res.records : []);
+      normalizedRecords = normalizeRecords(Array.isArray(payload.records) ? payload.records : []);
       console.log("📥 normalizedRecords", normalizedRecords);   // デバッグ用ログ
       recordsCache = normalizedRecords;
       latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
@@ -997,7 +1033,7 @@ function fetchShareMeta(){
     }
 
     showAlert('', '');
-    const responseMessage = res && res.message ? res.message : (share && share.hasRecords === false ? '記録が存在しません' : '');
+    const responseMessage = payload.message || (share && share.hasRecords === false ? '記録が存在しません' : '');
     return { share, records: normalizedRecords, message: responseMessage };
   }).catch(err => {
     const msg = err && err.message ? err.message : '共有設定の取得に失敗しました。';
@@ -1011,8 +1047,10 @@ function fetchShareMeta(){
 function loadShareData(password){
   setLoading('記録を読み込んでいます…');
   return callShareApi('enter', { token: externalToken, password: password || '', recordId: resolvedRecordId }).then(res => {
-    if(!res || res.status !== 'success'){
-      const msg = res && res.message ? res.message : '閲覧に失敗しました。';
+    const payload = resolveSharePayload(res || {});
+    const status = (res && typeof res.status === 'string' && res.status) || payload.status || 'success';
+    if(status !== 'success'){
+      const msg = payload.message || (res && res.message) || '閲覧に失敗しました。';
       showAlert('error', msg);
       const status = document.getElementById('authStatus');
       if(status) status.textContent = msg;
@@ -1025,20 +1063,20 @@ function loadShareData(password){
     const status = document.getElementById('authStatus');
     if(status) status.textContent = '';
 
-    currentShare = res.share || currentShare;
+    currentShare = payload.share || currentShare;
     updateHeader(currentShare);
     setIntro(currentShare);
     setFooter(currentShare);
     updateQrSection(currentShare);
 
-    currentReport = res.report || currentReport;
+    currentReport = payload.report || currentReport;
     updateReportCard(currentReport, currentShare);
 
     const auth = document.getElementById('shareAuth');
     if(auth) auth.style.display = 'none';
 
     // primaryRecord の更新
-    primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : primaryRecordData);
+    primaryRecordData = payload.primaryRecord || (Array.isArray(payload.records) ? payload.records[0] : primaryRecordData);
     if(!resolvedRecordId && primaryRecordData && primaryRecordData.recordId){
       resolvedRecordId = String(primaryRecordData.recordId);
     }
@@ -1046,7 +1084,7 @@ function loadShareData(password){
     showAlert(currentShare.expired ? 'warning' : '', currentShare.expired ? 'リンクの期限が切れています。再発行を依頼してください。' : '');
 
     // ✅ ここで recordsCache を更新
-    recordsCache = normalizeRecords(Array.isArray(res.records) ? res.records : []);
+    recordsCache = normalizeRecords(Array.isArray(payload.records) ? payload.records : []);
     latestTimestamp = recordsCache.reduce((max, rec) => Math.max(max, Number(rec.timestamp||0)||0), 0) || null;
 
     // ✅ recordsCache 更新のあとに呼ぶ
@@ -1057,7 +1095,7 @@ function loadShareData(password){
     updatePrintControls(primaryRecordData);
     applyQuickRange(getDefaultQuickRange(currentShare));
 
-    const responseMessage = res && res.message ? res.message : (currentShare && currentShare.hasRecords === false ? '記録が存在しません' : '');
+    const responseMessage = payload.message || (currentShare && currentShare.hasRecords === false ? '記録が存在しません' : '');
 
     if(!recordsCache.length){
       const message = responseMessage || '共有可能な記録はまだありません。';
