@@ -17,6 +17,18 @@ const HONOBONO_CENTER_HEADER      = '地域包括支援センター';
 const HONOBONO_STAFF_HEADER       = '担当者名';
 const HONOBONO_QR_HEADER          = '共有QRコードURL'; // 参照は見出し優先。定数 HONOBONO_QR_URL_COL があればフォールバック
 
+const __scriptProperties = PropertiesService.getScriptProperties();
+const HONOBONO_SPREADSHEET_ID_OVERRIDE = ((__scriptProperties && __scriptProperties.getProperty('HONOBONO_SPREADSHEET_ID')) || '').trim();
+const HONOBONO_SHEET_NAME_OVERRIDE = ((__scriptProperties && __scriptProperties.getProperty('HONOBONO_SHEET_NAME')) || '').trim();
+const HONOBONO_HEADER_ALIASES = {
+  [HONOBONO_MEMBER_ID_HEADER]: ['利用者ID', '利用者番号', '利用者コード', 'ID', 'No', '番号', 'ほのぼのid', 'ほのぼのＩＤ'],
+  [HONOBONO_NAME_HEADER]: ['利用者名', '氏名（漢字）', '氏名漢字', '名前', 'お名前'],
+  [HONOBONO_KANA_HEADER]: ['フリガナ', '氏名（フリガナ）', 'カナ', 'かな', 'ﾌﾘｶﾞﾅ'],
+  [HONOBONO_CENTER_HEADER]: ['地域包括支援センター名', '包括支援センター', '地域包括支援ｾﾝﾀｰ', 'センター', 'ｾﾝﾀｰ'],
+  [HONOBONO_STAFF_HEADER]: ['担当者', '担当職員', '担当者名'],
+  [HONOBONO_QR_HEADER]: ['共有QR', 'QRコード', 'QR', '共有リンク', '共有URL']
+};
+
 // 画像/動画/PDF の既定保存先（利用者IDごとにサブフォルダを自動作成）
 const DEFAULT_FOLDER_ID         = '1glDniVONBBD8hIvRGMPPT1iLXdtHJpEC';
 const MEDIA_ROOT_FOLDER_ID      = DEFAULT_FOLDER_ID;
@@ -2907,24 +2919,136 @@ if (typeof __honobonoCacheMap === 'undefined') {
 }
 
 function honobonoOpenSheet_() {
-  // 既存の SPREADSHEET_ID / HONOBONO_SHEET_NAME をそのまま使用
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  return ss.getSheetByName(HONOBONO_SHEET_NAME);
+  const spreadsheetId = HONOBONO_SPREADSHEET_ID_OVERRIDE || SPREADSHEET_ID;
+  let ss;
+  try {
+    ss = SpreadsheetApp.openById(spreadsheetId);
+  } catch (err) {
+    console.warn('⚠ honobonoOpenSheet_: スプレッドシートを開けませんでした:', spreadsheetId, err);
+    return null;
+  }
+
+  const triedNames = new Set();
+  const candidates = [];
+  if (HONOBONO_SHEET_NAME_OVERRIDE) candidates.push(HONOBONO_SHEET_NAME_OVERRIDE);
+  if (HONOBONO_SHEET_NAME) candidates.push(HONOBONO_SHEET_NAME);
+  candidates.push('患者情報', '患者マスタ', '利用者マスタ');
+
+  for (const name of candidates) {
+    if (!name || triedNames.has(name)) continue;
+    triedNames.add(name);
+    const sheet = ss.getSheetByName(name);
+    if (sheet) {
+      return sheet;
+    }
+  }
+
+  const sheets = ss.getSheets();
+  const memberHeaderCandidates = [HONOBONO_MEMBER_ID_HEADER, ...(HONOBONO_HEADER_ALIASES[HONOBONO_MEMBER_ID_HEADER] || [])]
+    .map(label => String(label || '').trim())
+    .filter(label => !!label);
+  const normalizedMemberCandidates = memberHeaderCandidates
+    .map(normalizeMemberHeaderLabel_)
+    .filter(label => !!label);
+  for (const sheet of sheets) {
+    try {
+      const lastColumn = sheet.getLastColumn();
+      if (!lastColumn) continue;
+      const width = Math.min(lastColumn, 40);
+      const headerValues = sheet.getRange(1, 1, 1, width).getValues();
+      if (!headerValues || !headerValues.length) continue;
+      const header = headerValues[0].map(value => String(value || '').trim());
+      const normalizedHeader = header.map(normalizeMemberHeaderLabel_);
+      const hasMemberColumn = header.some(h => memberHeaderCandidates.includes(h)) ||
+        normalizedHeader.some(label => label && normalizedMemberCandidates.some(candidate => label.includes(candidate)));
+      if (hasMemberColumn) {
+        console.info('ℹ honobonoOpenSheet_: 推測でシートを選択:', sheet.getName());
+        return sheet;
+      }
+    } catch (err) {
+      console.warn('⚠ honobonoOpenSheet_: シート検査に失敗しました:', sheet.getName(), err);
+    }
+  }
+
+  console.warn('⚠ ほのぼのIDシートが見つかりません:', Array.from(triedNames).join(', '));
+  return null;
 }
 
 function honobonoBuildHeaderIndex_(headerRow) {
   const map = {};
+  const normalizedMap = {};
   headerRow.forEach((h, i) => {
     const key = String(h || '').trim();
-    if (key) map[key] = i;
+    if (!key) return;
+    map[key] = i;
+    const normalized = normalizeMemberHeaderLabel_(key);
+    if (normalized) {
+      normalizedMap[normalized] = i;
+      if (map[normalized] == null) {
+        map[normalized] = i;
+      }
+    }
   });
+
+  const register = (label, idx) => {
+    if (label == null) return;
+    const trimmed = String(label).trim();
+    if (!trimmed) return;
+    if (map[trimmed] == null) {
+      map[trimmed] = idx;
+    }
+    const normalized = normalizeMemberHeaderLabel_(trimmed);
+    if (normalized && map[normalized] == null) {
+      map[normalized] = idx;
+    }
+  };
+
+  Object.keys(HONOBONO_HEADER_ALIASES || {}).forEach(canonical => {
+    const aliases = HONOBONO_HEADER_ALIASES[canonical] || [];
+    const possible = [canonical, ...aliases];
+    let index = null;
+    for (const candidate of possible) {
+      const trimmed = String(candidate || '').trim();
+      if (!trimmed) continue;
+      if (map[trimmed] != null) {
+        index = map[trimmed];
+        break;
+      }
+      const normalized = normalizeMemberHeaderLabel_(trimmed);
+      if (normalized && normalizedMap[normalized] != null) {
+        index = normalizedMap[normalized];
+        break;
+      }
+    }
+    if (index != null) {
+      possible.forEach(label => register(label, index));
+    }
+  });
+
   return map;
 }
 
 function honobonoAt_(row, headerIndexMap, headerName) {
-  if (headerIndexMap[headerName] != null) {
-    return String(row[headerIndexMap[headerName]] || '').trim();
+  if (!row || !headerIndexMap) return '';
+  const candidates = [];
+  const appendCandidate = value => {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (!trimmed) return;
+    if (!candidates.includes(trimmed)) candidates.push(trimmed);
+    const normalized = normalizeMemberHeaderLabel_(trimmed);
+    if (normalized && !candidates.includes(normalized)) candidates.push(normalized);
+  };
+
+  appendCandidate(headerName);
+  const aliasList = HONOBONO_HEADER_ALIASES[headerName] || [];
+  aliasList.forEach(appendCandidate);
+
+  for (const candidate of candidates) {
+    if (headerIndexMap[candidate] != null) {
+      return String(row[headerIndexMap[candidate]] || '').trim();
+    }
   }
+
   // 見出しが無い場合のみ、指定列番号でフォールバック（例：QRは F列 = 6）
   if (headerName === HONOBONO_QR_HEADER && typeof HONOBONO_QR_URL_COL === 'number') {
     const idx = HONOBONO_QR_URL_COL - 1; // 1-based -> 0-based
