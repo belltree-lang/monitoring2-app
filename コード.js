@@ -2575,52 +2575,103 @@ function getDateRangeForShare_(rangeSpec) {
  * - Attachments : JSON配列文字列 [{"name":"xxx","url":"https://..."}]
  */
 function getMemberRecords_(memberId, limit) {
-  const SHEET_NAME = 'Monitoring'; 
+  const SHEET_NAME = 'Monitoring';
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     Logger.log('❌ Records sheet "%s" not found', SHEET_NAME);
     return [];
   }
-  const lr = sh.getLastRow(), lc = sh.getLastColumn();
+
+  const lr = sh.getLastRow();
+  const lc = sh.getLastColumn();
   if (lr < 2) return [];
 
   const values = sh.getRange(1, 1, lr, lc).getValues();
   const header = values[0].map(v => String(v || '').trim());
-  const data   = values.slice(1);
+  const data = values.slice(1);
 
-  const iDate   = header.indexOf('日付');
+  const iDate = header.indexOf('日付');
   const iMember = header.indexOf('利用者ID');
-  const iKind   = header.indexOf('種別');
-  const iText   = header.indexOf('記録内容');
-  const iAtt    = header.indexOf('添付');
+  const iKind = header.indexOf('種別');
+  const iText = header.indexOf('記録内容');
+  const iAtt = header.indexOf('添付');
 
   Logger.log("🔎 header=%s", JSON.stringify(header));
   Logger.log("🔎 index: 日付=%s 利用者ID=%s", iDate, iMember);
   Logger.log("📥 getMemberRecords_ scanning rows=%s memberId=%s", data.length, memberId);
 
-  const wantA = String(memberId).trim();
-  Logger.log("🔎 search memberId=%s", wantA);
+  if (iDate < 0 || iMember < 0) {
+    Logger.log('❌ 必須列が見つかりません');
+    return [];
+  }
+
+  const wantId = String(memberId).trim();
+  Logger.log("🔎 search memberId=%s", wantId);
 
   const out = [];
   for (let r = data.length - 1; r >= 0; r--) {
     const row = data[r];
     const got = String(row[iMember]).trim();
     if (got) {
-      Logger.log("… row %s 利用者ID=%s", r+2, got);
+      Logger.log("… row %s 利用者ID=%s", r + 2, got);
     }
-    if (got && got === wantA) {
-      Logger.log("✅ HIT row %s", r+2);
-      // （ここ以下は省略）
+    if (String(row[iMember]).trim() === wantId) {
+      Logger.log("✅ HIT row %s", r + 2);
+
+      const rawDate = row[iDate];
+      let timestamp = 0;
+      if (rawDate instanceof Date) {
+        timestamp = rawDate.getTime();
+      } else {
+        const parsed = new Date(rawDate);
+        if (!isNaN(parsed.getTime())) {
+          timestamp = parsed.getTime();
+        }
+      }
+
+      let attachments = [];
+      try {
+        const rawAttachments = row[iAtt];
+        if (rawAttachments && typeof rawAttachments === 'string') {
+          const parsedAttachments = JSON.parse(rawAttachments);
+          if (Array.isArray(parsedAttachments)) {
+            attachments = parsedAttachments;
+          }
+        }
+      } catch (e) {
+        const message = e && e.message ? e.message : e;
+        Logger.log('⚠️ attachments parse error row %s: %s', r + 2, message);
+      }
+
+      out.push({
+        recordId: String(r + 2),
+        timestamp,
+        dateText: timestamp
+          ? Utilities.formatDate(new Date(timestamp), Session.getScriptTimeZone() || 'Asia/Tokyo', 'yyyy/MM/dd')
+          : '',
+        kind: iKind >= 0 ? row[iKind] || '' : '',
+        text: iText >= 0 ? row[iText] || '' : '',
+        attachments
+      });
+
+      if (limit && out.length >= limit) {
+        break;
+      }
     }
   }
 
+  out.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
   Logger.log("✅ getMemberRecords_: memberId=%s hit=%s", memberId, out.length);
   if (out.length) Logger.log("sample record=%s", JSON.stringify(out[0]));
   return out;
 }
 
 
+
+if (typeof __honobonoCacheMap === 'undefined') {
+  var __honobonoCacheMap = null;
+}
 
 function honobonoOpenSheet_() {
   // 既存の SPREADSHEET_ID / HONOBONO_SHEET_NAME をそのまま使用
