@@ -32,12 +32,17 @@ button:hover { opacity:0.9;}
 .member-top-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-bottom:18px; align-items:stretch; }
 .member-top-card { display:flex; flex-direction:column; gap:12px; }
 .member-select-toolbar { position:relative; }
-.member-new-form { display:grid; gap:8px; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); align-items:center; }
-.member-new-form input { width:100%; }
-.member-new-form button { justify-self:flex-start; }
-@media(min-width:720px){
-  .member-new-form { grid-template-columns:110px 1fr 1fr auto; }
-  .member-new-form button { justify-self:end; }
+.member-new-form { display:flex; flex-direction:column; gap:10px; }
+.member-new-row { display:grid; gap:10px 12px; grid-template-columns:repeat(2, minmax(160px, 1fr)); align-items:end; }
+.member-new-row.member-new-row--compact { grid-template-columns:minmax(90px, 140px) minmax(160px, 1fr); }
+.member-new-row.member-new-row--actions { grid-template-columns:minmax(200px, 1fr) auto; align-items:center; }
+.member-new-form input,
+.member-new-form select { width:100%; }
+.member-new-submit { justify-self:flex-start; padding:8px 16px; }
+@media(max-width:640px){
+  .member-new-row { grid-template-columns:1fr; }
+  .member-new-row.member-new-row--actions { grid-template-columns:1fr; }
+  .member-new-submit { width:100%; justify-self:stretch; }
 }
 .layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
 @media(max-width:960px){.layout{grid-template-columns:1fr;}}
@@ -205,10 +210,20 @@ button:hover { opacity:0.9;}
   <div class="card member-top-card">
     <h2>新規利用者登録</h2>
     <div class="member-new-form">
-      <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4">
-      <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）">
-      <input type="text" id="newMemberKana" placeholder="カナ（例: ヤマダ　タロウ）">
-      <button id="btnAddMember">登録</button>
+      <div class="member-new-row member-new-row--compact">
+        <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4">
+        <input type="text" id="newMemberStaff" placeholder="担当者名（任意）">
+      </div>
+      <div class="member-new-row">
+        <input type="text" id="newMemberName" placeholder="氏名（漢字）">
+        <input type="text" id="newMemberKana" placeholder="氏名（カナ）">
+      </div>
+      <div class="member-new-row member-new-row--actions">
+        <select id="newMemberCenter">
+          <option value="" disabled selected>センターを選択</option>
+        </select>
+        <button id="btnAddMember" class="member-new-submit">登録</button>
+      </div>
     </div>
     <div id="addMemberStatus" class="muted"></div>
   </div>
@@ -1049,6 +1064,40 @@ function updateCenterFormValues(centerValue, staffValue) {
   if (staffEl) staffEl.value = staffValue ?? "";
 }
 
+function syncNewMemberCenterOptions() {
+  const newCenterSelect = document.getElementById("newMemberCenter");
+  if (!newCenterSelect) return;
+  const baseSelect = document.getElementById("centerSelect");
+  const currentValue = newCenterSelect.value;
+  newCenterSelect.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "センターを選択";
+  placeholder.disabled = true;
+  newCenterSelect.appendChild(placeholder);
+
+  let matched = false;
+  if (baseSelect) {
+    Array.from(baseSelect.options).forEach(opt => {
+      const value = (opt.value || "").trim();
+      if (!value) return;
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = opt.textContent || value;
+      if (value === currentValue) {
+        option.selected = true;
+        matched = true;
+      }
+      newCenterSelect.appendChild(option);
+    });
+  }
+
+  if (!matched) {
+    placeholder.selected = true;
+  }
+}
+
 let initialMemberId = (() => {
   const raw = queryParams.get("id") || "";
   if (!raw) return "";
@@ -1768,35 +1817,84 @@ function loadMemberData(userId, options = {}) {
 }
 
 function setupMemberUi() {
+  syncNewMemberCenterOptions();
   const btnAddMember = document.getElementById("btnAddMember");
   if (btnAddMember) {
+    const defaultLabel = btnAddMember.textContent || "登録";
+    const setAddButtonBusy = busy => {
+      btnAddMember.disabled = !!busy;
+      btnAddMember.textContent = busy ? "登録中…" : defaultLabel;
+    };
+
     btnAddMember.onclick = () => {
       const idInput = document.getElementById("newMemberId");
       const nameInput = document.getElementById("newMemberName");
       const kanaInput = document.getElementById("newMemberKana");
+      const centerSelect = document.getElementById("newMemberCenter");
+      const staffInput = document.getElementById("newMemberStaff");
       const id = idInput.value.trim();
       const name = nameInput.value.trim();
       const kana = kanaInput ? kanaInput.value.trim() : "";
+      const center = centerSelect ? centerSelect.value.trim() : "";
+      const staff = staffInput ? staffInput.value.trim() : "";
       const status = document.getElementById("addMemberStatus");
+      if (status) status.textContent = "";
+
       if (!id || !name || !kana) {
         if (status) status.textContent = "ID・氏名・カナを入力してください";
+        (!id ? idInput : !name ? nameInput : kanaInput)?.focus();
         return;
       }
+
+      if (!center) {
+        if (status) status.textContent = "センターを選択してください";
+        if (centerSelect) centerSelect.focus();
+        return;
+      }
+
+      setAddButtonBusy(true);
+      if (status) status.textContent = "登録中…";
+
       google.script.run.withSuccessHandler(res => {
         if (res.status === "success") {
-          if (status) status.textContent = `登録しました: ${res.id} ${res.name}`;
-          idInput.value = "";
-          nameInput.value = "";
-          if (kanaInput) kanaInput.value = "";
-          if (res.id) {
-            selectMember(res.id, res.name || "");
-          }
-          refreshMemberList();
-          loadDashboard();
-        } else if (status) {
-          status.textContent = "失敗: " + res.message;
+          let message = `登録しました: ${res.id} ${res.name}`;
+          const finalize = () => {
+            setAddButtonBusy(false);
+            if (status) status.textContent = message;
+            idInput.value = "";
+            nameInput.value = "";
+            if (kanaInput) kanaInput.value = "";
+            if (staffInput) staffInput.value = staff;
+            if (centerSelect) centerSelect.value = center;
+            if (res.id) {
+              selectMember(res.id, res.name || "");
+            }
+            refreshMemberList();
+            loadDashboard();
+          };
+
+          google.script.run.withSuccessHandler(saveRes => {
+            if (!saveRes || !saveRes.ok) {
+              const extra = saveRes && saveRes.message ? saveRes.message : "";
+              message = extra
+                ? `登録しましたがセンター情報の保存に失敗しました: ${extra}`
+                : "登録しましたがセンター情報の保存に失敗しました。";
+            } else {
+              const displayCenter = saveRes.center || center;
+              message = `登録しました: ${res.id} ${res.name}${displayCenter ? `（${displayCenter}）` : ""}`;
+            }
+            finalize();
+          }).withFailureHandler(err => {
+            const errMsg = err && err.message ? err.message : String(err);
+            message = `登録しましたがセンター情報の保存に失敗しました: ${errMsg}`;
+            finalize();
+          }).saveMemberCenterInfo(res.id, center, staff);
+        } else {
+          setAddButtonBusy(false);
+          if (status) status.textContent = "失敗: " + (res.message || "不明なエラーが発生しました");
         }
       }).withFailureHandler(err => {
+        setAddButtonBusy(false);
         if (status) status.textContent = "エラー: " + (err && err.message ? err.message : err);
       }).addMember(id, name, kana);
     };
