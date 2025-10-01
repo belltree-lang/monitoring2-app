@@ -2301,10 +2301,13 @@ function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
   const summary = shareBuildSummary_(share, profile, recordResult.records.length > 0);
   const message = recordResult.records.length ? '' : '記録が存在しません';
   const report = includeReport ? shareLoadMonitoringReport_(share) : null;
+  const records = includeRecords ? recordResult.records : [];
+  const primaryRecord = includeRecords ? recordResult.primaryRecord : null;
   return {
     summary,
-    records: includeRecords ? recordResult.records : [],
-    primaryRecord: includeRecords ? recordResult.primaryRecord : null,
+    records,
+    rawRecords: records.slice(),
+    primaryRecord,
     message,
     recordCount: recordResult.records.length,
     report
@@ -2334,6 +2337,7 @@ function getExternalShareMeta(token, recordId) {
       status: 'success',
       share: response.summary,
       records: response.records,
+      rawRecords: response.rawRecords || response.records,
       primaryRecord: response.primaryRecord,
       report: response.report,
       message: includeRecords ? response.message : ''
@@ -2375,6 +2379,7 @@ function enterExternalShare(token, password, recordId) {
       status: 'success',
       share: response.summary,
       records: response.records,
+      rawRecords: response.rawRecords || response.records,
       primaryRecord: response.primaryRecord,
       report: response.report,
       message: response.message
@@ -2592,8 +2597,7 @@ function getMemberRecords_(memberId, limit) {
 
   Logger.log("🔎 header=%s", JSON.stringify(header));
   Logger.log("🔎 index: 日付=%s 利用者ID=%s", iDate, iMember);
-  Logger.log("📥 getMemberRecords_ returned count=%s memberId=%s", rawRecords.length, memberId);
-if (rawRecords.length) Logger.log("sample record=%s", JSON.stringify(rawRecords[0]));
+  Logger.log("📥 getMemberRecords_ scanning rows=%s memberId=%s", data.length, memberId);
 
   const wantA = String(memberId).trim();
   Logger.log("🔎 search memberId=%s", wantA);
@@ -2612,6 +2616,7 @@ if (rawRecords.length) Logger.log("sample record=%s", JSON.stringify(rawRecords[
   }
 
   Logger.log("✅ getMemberRecords_: memberId=%s hit=%s", memberId, out.length);
+  if (out.length) Logger.log("sample record=%s", JSON.stringify(out[0]));
   return out;
 }
 
