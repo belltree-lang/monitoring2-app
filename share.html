@@ -443,7 +443,7 @@ function resolveSharePayload(res){
   const status = typeof res.status === 'string' && res.status
     ? res.status
     : (meta && typeof meta.status === 'string' ? meta.status : '');
-  const profile = (() => {
+  let profile = (() => {
     const fromRes = res.profile && typeof res.profile === 'object' ? res.profile : null;
     const fromMeta = meta && typeof meta.profile === 'object' ? meta.profile : null;
     if(fromRes && fromMeta){
@@ -453,12 +453,24 @@ function resolveSharePayload(res){
     if(fromMeta) return { ...fromMeta };
     return null;
   })();
-  if(mergeTargets && profile){
-    mergeTargets.profile = { ...profile };
+  if(mergeTargets){
+    const existingProfile = mergeTargets.profile && typeof mergeTargets.profile === 'object' ? mergeTargets.profile : null;
+    const mergedProfile = { ...(profile || {}), ...(existingProfile || {}) };
+    const hasMergedProfile = Object.keys(mergedProfile).length > 0;
+    if(hasMergedProfile){
+      mergeTargets.profile = mergedProfile;
+      profile = mergedProfile;
+    }else if(existingProfile){
+      mergeTargets.profile = { ...existingProfile };
+      profile = { ...existingProfile };
+    }
+
+    const profileSource = profile || {};
 
     const resolvedMemberName = pickFirstString(
       mergeTargets.memberName,
-      profile && (profile.name || profile.memberName)
+      profileSource.memberName,
+      profileSource.name
     );
     if(resolvedMemberName){
       mergeTargets.memberName = resolvedMemberName;
@@ -466,7 +478,8 @@ function resolveSharePayload(res){
 
     const resolvedMemberId = pickFirstString(
       mergeTargets.memberId,
-      profile && (profile.memberId || profile.id)
+      profileSource.memberId,
+      profileSource.id
     );
     if(resolvedMemberId){
       mergeTargets.memberId = resolvedMemberId;
@@ -475,25 +488,25 @@ function resolveSharePayload(res){
     const resolvedCenter = pickFirstString(
       mergeTargets.memberCenter,
       mergeTargets.centerName,
-      profile && (profile.center || profile.centerName || profile.memberCenter)
+      profileSource.memberCenter,
+      profileSource.centerName,
+      profileSource.center
     );
     if(resolvedCenter){
       mergeTargets.memberCenter = resolvedCenter;
-      if(!sanitizeShareValue(mergeTargets.centerName)){
-        mergeTargets.centerName = resolvedCenter;
-      }
+      mergeTargets.centerName = resolvedCenter;
     }
 
     const resolvedStaff = pickFirstString(
       mergeTargets.memberStaff,
       mergeTargets.staffName,
-      profile && (profile.staff || profile.staffName || profile.memberStaff)
+      profileSource.memberStaff,
+      profileSource.staffName,
+      profileSource.staff
     );
     if(resolvedStaff){
       mergeTargets.memberStaff = resolvedStaff;
-      if(!sanitizeShareValue(mergeTargets.staffName)){
-        mergeTargets.staffName = resolvedStaff;
-      }
+      mergeTargets.staffName = resolvedStaff;
     }
   }
   return { share, records, report, primaryRecord, message, status, profile };
