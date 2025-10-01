@@ -2817,15 +2817,27 @@ function honobonoGetMasterMap_() {
   const map = new Map();
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
-    const id = honobonoAt_(row, idx, HONOBONO_MEMBER_ID_HEADER);
-    if (!id) continue;
-    map.set(id, {
-      memberId: id,
+    const idRaw = honobonoAt_(row, idx, HONOBONO_MEMBER_ID_HEADER);
+    if (!idRaw) continue;
+
+    const normalizedId = normalizeMemberId_(idRaw);
+    const info = {
+      memberId: normalizedId || idRaw,
+      memberIdRaw: idRaw,
       name:  honobonoAt_(row, idx, HONOBONO_NAME_HEADER),
       kana:  honobonoAt_(row, idx, HONOBONO_KANA_HEADER),
       center:honobonoAt_(row, idx, HONOBONO_CENTER_HEADER),
       staff: honobonoAt_(row, idx, HONOBONO_STAFF_HEADER),
       qrUrl: honobonoAt_(row, idx, HONOBONO_QR_HEADER),
+    };
+
+    const keyCandidates = [];
+    if (idRaw) keyCandidates.push(idRaw);
+    if (normalizedId && normalizedId !== idRaw) keyCandidates.push(normalizedId);
+
+    keyCandidates.forEach(key => {
+      if (!key) return;
+      map.set(String(key), info);
     });
   }
   __honobonoCacheMap = map;
@@ -2835,7 +2847,17 @@ function honobonoGetMasterMap_() {
 /** IDで1件取得（無ければ null） */
 function honobonoFindById_(memberId) {
   const map = honobonoGetMasterMap_();
-  return map.get(String(memberId)) || null;
+  const directKey = String(memberId || '').trim();
+  if (directKey) {
+    const direct = map.get(directKey);
+    if (direct) return direct;
+  }
+  const normalized = normalizeMemberId_(memberId);
+  if (normalized) {
+    const normalizedHit = map.get(normalized);
+    if (normalizedHit) return normalizedHit;
+  }
+  return null;
 }
 
 /**
