@@ -14,6 +14,11 @@ h1 { margin:0 0 20px; font-size:1.6rem; color:var(--brand);}
 h2 { margin:14px 0 8px; font-size:1.15rem; color:#333;}
 .card { background:var(--card); border-radius:10px; padding:16px; margin-bottom:18px;
   box-shadow:0 2px 6px rgba(0,0,0,.08);}
+.card-row { display:grid; gap:16px; margin-bottom:18px; }
+.card-row>.card { margin-bottom:0; display:flex; flex-direction:column; }
+.card-row--member { grid-template-columns:minmax(320px,1.6fr) minmax(260px,1fr); align-items:stretch; }
+.card-row--insights { grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); align-items:stretch; }
+.card-row--records { grid-template-columns:minmax(360px,1.8fr) minmax(280px,1.2fr); align-items:stretch; }
 .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;}
 input[type=text], select, textarea { font-family:inherit; border:1px solid #ccc; border-radius:6px; padding:8px 10px;}
 textarea { width:100%; min-height:120px;}
@@ -31,6 +36,9 @@ button:hover { opacity:0.9;}
 .autocomplete-item.autocomplete-empty { color:var(--muted); cursor:default; pointer-events:none; }
 .layout { display:grid; grid-template-columns:1fr 320px; gap:16px;}
 @media(max-width:960px){.layout{grid-template-columns:1fr;}}
+@media(max-width:960px){
+  .card-row { grid-template-columns:1fr; }
+}
 .record { margin-bottom:12px; padding:10px; border:1px solid #ddd; border-radius:6px; background:#fff;}
 .record .muted { font-size:0.85rem; color:#666;}
 .record .toolbar { margin-top:6px;}
@@ -165,43 +173,46 @@ button:hover { opacity:0.9;}
   <span class="pill" id="memberTag">未選択</span>
 </h1>
 
-<!-- 利用者選択 -->
-<div class="card">
-  <h2>利用者を選択</h2>
-  <div class="toolbar" style="position:relative;">
-    <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
-    <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
-    <select id="centerSelect">
-      <option value="">（未入力）</option>
-      <option value="町田第１高齢者支援センター">町田第１高齢者支援センター</option>
-      <option value="町田第２高齢者支援センター">町田第２高齢者支援センター</option>
-      <option value="町田第３高齢者支援センター">町田第３高齢者支援センター</option>
-      <option value="忠生第１高齢者支援センター">忠生第１高齢者支援センター</option>
-      <option value="忠生第２高齢者支援センター">忠生第２高齢者支援センター</option>
-      <option value="鶴川第１高齢者支援センター">鶴川第１高齢者支援センター</option>
-      <option value="鶴川第２高齢者支援センター">鶴川第２高齢者支援センター</option>
-      <option value="光が丘地域包括高齢者支援センター">光が丘地域包括高齢者支援センター</option>
-    </select>
+<!-- 利用者選択 & 新規利用者登録 -->
+<div class="card-row card-row--member">
+  <div class="card">
+    <h2>利用者を選択</h2>
+    <div class="toolbar" style="position:relative;">
+      <input type="text" id="memberIdInput" placeholder="IDまたは氏名で検索" autocomplete="off" style="min-width:260px;">
+      <div id="autocompleteList" class="autocomplete-list" style="display:none;"></div>
+      <select id="centerSelect">
+        <option value="">（未入力）</option>
+        <option value="町田第１高齢者支援センター">町田第１高齢者支援センター</option>
+        <option value="町田第２高齢者支援センター">町田第２高齢者支援センター</option>
+        <option value="町田第３高齢者支援センター">町田第３高齢者支援センター</option>
+        <option value="忠生第１高齢者支援センター">忠生第１高齢者支援センター</option>
+        <option value="忠生第２高齢者支援センター">忠生第２高齢者支援センター</option>
+        <option value="鶴川第１高齢者支援センター">鶴川第１高齢者支援センター</option>
+        <option value="鶴川第２高齢者支援センター">鶴川第２高齢者支援センター</option>
+        <option value="光が丘地域包括高齢者支援センター">光が丘地域包括高齢者支援センター</option>
+      </select>
 
-    <!-- 担当者入力 -->
-    <input type="text" id="staffInput" placeholder="担当者名を入力" list="staffHistory" style="min-width:180px;">
-    <datalist id="staffHistory"></datalist>
+      <!-- 担当者入力 -->
+      <input type="text" id="staffInput" placeholder="担当者名を入力" list="staffHistory" style="min-width:180px;">
+      <datalist id="staffHistory"></datalist>
 
-    <button id="btnSaveCenter" class="secondary">保存</button>
-    <button id="btnClearCenter" class="warn">削除</button>
+      <button id="btnSaveCenter" class="secondary">保存</button>
+      <button id="btnClearCenter" class="warn">削除</button>
+    </div>
+    <div id="idStatus" class="muted"></div>
   </div>
-  <div id="idStatus" class="muted"></div>
-</div>
 
-<!-- 新規利用者登録 -->
-<div class="card">
-  <h2>新規利用者登録</h2>
-  <div class="toolbar">
-    <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" style="width:100px;">
-    <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1;">
-    <button id="btnAddMember">登録</button>
+  <div class="card">
+    <h2>新規利用者登録</h2>
+    <div class="toolbar">
+      <input type="text" id="newMemberId" placeholder="ID (4桁)" maxlength="4" inputmode="numeric" style="width:96px;">
+      <input type="text" id="newMemberName" placeholder="氏名（例: 山田　太郎）" style="flex:1; min-width:160px;">
+      <input type="text" id="newMemberKana" placeholder="フリガナ（例: ヤマダ　タロウ）" style="flex:1; min-width:160px;">
+      <button id="btnAddMember">登録</button>
+    </div>
+    <div class="muted" style="margin-top:6px;">ID（4桁）・氏名・フリガナはすべて必須です。</div>
+    <div id="addMemberStatus" class="muted" style="margin-top:4px;"></div>
   </div>
-  <div id="addMemberStatus" class="muted"></div>
 </div>
 
 <!-- メインUI -->
@@ -228,123 +239,124 @@ button:hover { opacity:0.9;}
         </div>
       </div>
 
-      <!-- AI要約 -->
-      <div class="card">
-        <h2>AI要約</h2>
-        <div class="toolbar">
-          <select id="summaryFormat">
-            <option value="normal">標準</option>
-            <option value="icf">ICF形式</option>
-            <option value="soap">SOAP形式</option>
-            <option value="doctor">医療連携</option>
-            <option value="family">家族向け</option>
-          </select>
-          <button id="btnSummary">要約生成</button>
-        </div>
-        <div id="summaryOutput" class="muted">ここに要約が表示されます</div>
-      </div>
-
-      <!-- 提案 -->
-      <div class="card">
-        <h2>ケアマネからの提案</h2>
-        <div class="toolbar">
-          <select id="adviceHorizonSelect">
-            <option value="now">すぐに対応</option>
-            <option value="2w">2週間</option>
-            <option value="1m">1か月</option>
-            <option value="3m" selected>3か月</option>
-          </select>
-          <button id="btnAdvice">提案生成</button>
-        </div>
-        <div id="adviceOutput" class="muted">ここに提案が表示されます</div>
-      </div>
-
-      <!-- 過去の記録 -->
-      <div class="card">
-        <h2>過去の記録</h2>
-        <div class="search-toolbar">
-          <label>種別
-            <select id="filterKind">
-              <option value="all">すべて</option>
-              <option value="訪問">訪問</option>
-              <option value="電話">電話</option>
-              <option value="施設面談">施設面談</option>
-              <option value="通所先">通所先</option>
-              <option value="サービス担当者会議">サービス担当者会議</option>
-              <option value="その他">その他</option>
-            </select>
-          </label>
-          <label>開始
-            <input type="date" id="filterDateFrom">
-          </label>
-          <label>終了
-            <input type="date" id="filterDateTo">
-          </label>
-          <input type="text" id="filterText" placeholder="本文検索（キーワード）" style="flex:1; min-width:160px;">
-          <button id="btnClearFilters" class="secondary btn-compact">クリア</button>
-        </div>
-        <div id="recordList" class="muted">利用者を選択してください</div>
-      </div>
-
-      <!-- 👇 外部共有を過去の記録の直下に移動 -->
-      <div class="card share-card">
-        <h2>外部共有</h2>
-        <div id="shareList" class="share-list muted">利用者を選択すると共有リンクが表示されます</div>
-        <div class="toolbar">
-          <button id="btnOpenShareForm" class="secondary btn-compact">共有リンクを作成</button>
-        </div>
-        <div id="shareForm" class="share-form" style="display:none;">
-          <div class="share-field">
-            <label>共有先を選択
-              <select id="shareAudience">
-                <option value="family">家族：生活の様子を共有</option>
-                <option value="center" selected>地域包括支援センター：定期確認</option>
-                <option value="medical">医療機関：医師・看護師との連携</option>
-                <option value="service">サービス事業者：ケア実務者と共有</option>
-              </select>
-            </label>
-            <div class="share-helper">共有先に応じて表示内容や案内文が自動で切り替わります。</div>
-          </div>
-
-          <div class="share-field">
-            <label>閲覧期限
-              <select id="shareExpiryPreset">
-                <option value="10" selected>10日間（短期共有）</option>
-                <option value="30">30日間（標準）</option>
-                <option value="none">期限なし</option>
-                <option value="custom">日付を指定する</option>
-              </select>
-            </label>
-            <input type="datetime-local" id="shareExpires" style="display:none; margin-top:6px;">
-            <div class="share-helper">「日付を指定する」を選ぶと任意の期限を設定できます。</div>
-          </div>
-
-          <div class="share-field">
-            <label>共有する期間
-              <select id="shareRange">
-                <option value="30">直近30日</option>
-                <option value="90" selected>直近90日</option>
-                <option value="all">全期間</option>
-              </select>
-            </label>
-            <div class="share-helper">閲覧者側では期間を変更できません。必要最小限の期間に絞って共有できます。</div>
-          </div>
-
-          <div class="share-field">
-            <div class="share-attachments-all">
-              <label><input type="checkbox" id="shareAttachmentAll"> すべての添付ファイルを共有する</label>
-            </div>
-            <div id="shareAttachments" class="share-attachments muted">記録を読み込み中です…</div>
-          </div>
-
+      <!-- AI要約 & ケアマネ提案 -->
+      <div class="card-row card-row--insights">
+        <div class="card">
+          <h2>AI要約</h2>
           <div class="toolbar">
-            <button id="btnCreateShare">共有リンクを発行</button>
-            <button type="button" id="btnCancelShare" class="secondary">キャンセル</button>
+            <select id="summaryFormat">
+              <option value="normal">標準</option>
+              <option value="icf">ICF形式</option>
+              <option value="soap">SOAP形式</option>
+              <option value="doctor">医療連携</option>
+              <option value="family">家族向け</option>
+            </select>
+            <button id="btnSummary">要約生成</button>
           </div>
-          <div id="shareFormStatus" class="muted"></div>
+          <div id="summaryOutput" class="muted">ここに要約が表示されます</div>
+        </div>
+
+        <div class="card">
+          <h2>ケアマネからの提案</h2>
+          <div class="toolbar">
+            <select id="adviceHorizonSelect">
+              <option value="now">すぐに対応</option>
+              <option value="2w">2週間</option>
+              <option value="1m">1か月</option>
+              <option value="3m" selected>3か月</option>
+            </select>
+            <button id="btnAdvice">提案生成</button>
+          </div>
+          <div id="adviceOutput" class="muted">ここに提案が表示されます</div>
         </div>
       </div>
-      <!-- 👆 移動完了 -->
+
+      <!-- 過去の記録 & 外部共有 -->
+      <div class="card-row card-row--records">
+        <div class="card">
+          <h2>過去の記録</h2>
+          <div class="search-toolbar">
+            <label>種別
+              <select id="filterKind">
+                <option value="all">すべて</option>
+                <option value="訪問">訪問</option>
+                <option value="電話">電話</option>
+                <option value="施設面談">施設面談</option>
+                <option value="通所先">通所先</option>
+                <option value="サービス担当者会議">サービス担当者会議</option>
+                <option value="その他">その他</option>
+              </select>
+            </label>
+            <label>開始
+              <input type="date" id="filterDateFrom">
+            </label>
+            <label>終了
+              <input type="date" id="filterDateTo">
+            </label>
+            <input type="text" id="filterText" placeholder="本文検索（キーワード）" style="flex:1; min-width:160px;">
+            <button id="btnClearFilters" class="secondary btn-compact">クリア</button>
+          </div>
+          <div id="recordList" class="muted">利用者を選択してください</div>
+        </div>
+
+        <div class="card share-card">
+          <h2>外部共有</h2>
+          <div id="shareList" class="share-list muted">利用者を選択すると共有リンクが表示されます</div>
+          <div class="toolbar">
+            <button id="btnOpenShareForm" class="secondary btn-compact">共有リンクを作成</button>
+          </div>
+          <div id="shareForm" class="share-form" style="display:none;">
+            <div class="share-field">
+              <label>共有先を選択
+                <select id="shareAudience">
+                  <option value="family">家族：生活の様子を共有</option>
+                  <option value="center" selected>地域包括支援センター：定期確認</option>
+                  <option value="medical">医療機関：医師・看護師との連携</option>
+                  <option value="service">サービス事業者：ケア実務者と共有</option>
+                </select>
+              </label>
+              <div class="share-helper">共有先に応じて表示内容や案内文が自動で切り替わります。</div>
+            </div>
+
+            <div class="share-field">
+              <label>閲覧期限
+                <select id="shareExpiryPreset">
+                  <option value="10" selected>10日間（短期共有）</option>
+                  <option value="30">30日間（標準）</option>
+                  <option value="none">期限なし</option>
+                  <option value="custom">日付を指定する</option>
+                </select>
+              </label>
+              <input type="datetime-local" id="shareExpires" style="display:none; margin-top:6px;">
+              <div class="share-helper">「日付を指定する」を選ぶと任意の期限を設定できます。</div>
+            </div>
+
+            <div class="share-field">
+              <label>共有する期間
+                <select id="shareRange">
+                  <option value="30">直近30日</option>
+                  <option value="90" selected>直近90日</option>
+                  <option value="all">全期間</option>
+                </select>
+              </label>
+              <div class="share-helper">閲覧者側では期間を変更できません。必要最小限の期間に絞って共有できます。</div>
+            </div>
+
+            <div class="share-field">
+              <div class="share-attachments-all">
+                <label><input type="checkbox" id="shareAttachmentAll"> すべての添付ファイルを共有する</label>
+              </div>
+              <div id="shareAttachments" class="share-attachments muted">記録を読み込み中です…</div>
+            </div>
+
+            <div class="toolbar">
+              <button id="btnCreateShare">共有リンクを発行</button>
+              <button type="button" id="btnCancelShare" class="secondary">キャンセル</button>
+            </div>
+            <div id="shareFormStatus" class="muted"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <aside class="right">
@@ -1728,26 +1740,69 @@ function setupMemberUi() {
     btnAddMember.onclick = () => {
       const idInput = document.getElementById("newMemberId");
       const nameInput = document.getElementById("newMemberName");
-      const id = idInput.value.trim();
-      const name = nameInput.value.trim();
+      const kanaInput = document.getElementById("newMemberKana");
       const status = document.getElementById("addMemberStatus");
-      if (!id || !name) { status.textContent = "IDと氏名を入力してください"; return; }
+      if (status) { status.textContent = ""; }
+
+      const rawId = (idInput.value || "").replace(/[^0-9]/g, "");
+      const name = (nameInput.value || "").trim();
+      const rawKana = (kanaInput && kanaInput.value ? kanaInput.value : "").trim();
+
+      if (!rawId) {
+        if (status) status.textContent = "ID（4桁）を入力してください";
+        idInput.focus();
+        return;
+      }
+
+      if (rawId.length > 4) {
+        if (status) status.textContent = "IDは4桁以内で入力してください";
+        idInput.focus();
+        return;
+      }
+
+      const id = rawId.padStart(4, "0");
+      if (!name) {
+        if (status) status.textContent = "氏名（漢字）を入力してください";
+        nameInput.focus();
+        return;
+      }
+
+      const kanaSource = (typeof rawKana.normalize === 'function') ? rawKana.normalize('NFKC') : rawKana;
+      const kanaNormalized = kanaSource
+        .replace(/[\s\u3000]+/g, " ")
+        .replace(/[ｰ－—–]/g, "ー")
+        .trim();
+
+      if (!kanaNormalized) {
+        if (status) status.textContent = "フリガナ（カナ）を入力してください";
+        if (kanaInput) kanaInput.focus();
+        return;
+      }
+
+      if (!/^[\u30A0-\u30FFー\sﾞﾟ･・]+$/.test(kanaNormalized)) {
+        if (status) status.textContent = "フリガナはカタカナで入力してください";
+        if (kanaInput) kanaInput.focus();
+        return;
+      }
+
+      if (status) status.textContent = "登録中…";
       google.script.run.withSuccessHandler(res => {
         if (res.status === "success") {
-          status.textContent = `登録しました: ${res.id} ${res.name}`;
+          if (status) status.textContent = `登録しました: ${res.id} ${res.name}${res.kana ? `（${res.kana}）` : ""}`;
           idInput.value = "";
           nameInput.value = "";
+          if (kanaInput) kanaInput.value = "";
           if (res.id) {
             selectMember(res.id, res.name || "");
           }
           refreshMemberList();
           loadDashboard();
         } else {
-          status.textContent = "失敗: " + res.message;
+          if (status) status.textContent = "失敗: " + res.message;
         }
       }).withFailureHandler(err => {
-        status.textContent = "エラー: " + (err && err.message ? err.message : err);
-      }).addMember(id, name);
+        if (status) status.textContent = "エラー: " + (err && err.message ? err.message : err);
+      }).addMember(id, name, kanaNormalized);
     };
   }
 
