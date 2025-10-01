@@ -4,6 +4,7 @@ const SHEET_NAME      = 'Monitoring'; // ケアマネ用モニタリング
 const OPENAI_MODEL    = 'gpt-4o-mini';
 const SHARE_SHEET_NAME = 'ExternalShares';
 const SHARE_LOG_SHEET_NAME = 'ExternalShareAccessLog';
+const MONITORING_REPORTS_SHEET_NAME = 'MonitoringReports';
 const SHARE_QR_SIZE = '220x220';
 const SHARE_QR_FOLDER_ID = '1QZTrJ0_c07ILdqLg1jelYhOQ7hSGAdmt';
 const QR_FOLDER_ID = '1QZTrJ0_c07ILdqLg1jelYhOQ7hSGAdmt';
@@ -129,7 +130,7 @@ function doGet(e) {
         printRecords = initialRecords;
 
         if (!printRecords.length) {
-          const fallback = shareBuildResponse_(shareState, recordIdClean, true);
+          const fallback = shareBuildResponse_(shareState, recordIdClean, true, true);
           printRecords = fallback.records.slice();
           primaryRecord = fallback.primaryRecord || primaryRecord;
         }
@@ -1670,6 +1671,7 @@ function createExternalShare(memberId, options) {
     const nowIso = new Date().toISOString();
 
     // 🔹 ExternalShares に必ず記録
+    const appendRowIndex = shareSheet.getLastRow() + 1;
     shareSheet.appendRow([
       token,
       resolvedId,
@@ -1694,24 +1696,24 @@ function createExternalShare(memberId, options) {
       Logger.log("⚠️ saveQrCodeToDrive_ failed: %s", err.stack || err);
     }
 
+    const qrRawUrl = qrInfo && (qrInfo.embedUrl || qrInfo.viewUrl)
+      ? (qrInfo.embedUrl || qrInfo.viewUrl)
+      : '';
+    const qrEmbedUrl = shareNormalizeQrEmbedUrl_(qrRawUrl || url) || '';
+    const qrColumnIndex = SHARE_SHEET_HEADERS.indexOf('QrUrl') + 1;
+    if (qrColumnIndex > 0) {
+      try {
+        shareSheet.getRange(appendRowIndex, qrColumnIndex).setValue(qrEmbedUrl);
+      } catch (err) {
+        Logger.log("⚠️ failed to update share QR url: %s", err && err.message ? err.message : err);
+      }
+    }
+
     // 🔹 ほのぼのIDシートにも QRコードURL を反映
     try {
-      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-      const honobono = ss.getSheetByName("ほのぼのID");
-      if (honobono) {
-        const data = honobono.getDataRange().getValues();
-        const header = data[0];
-        const idCol = header.indexOf("ID");
-        const qrCol = header.indexOf("共有QRコードURL"); // 列名に合わせて修正してください
-
-        if (idCol >= 0 && qrCol >= 0) {
-          for (let r = 1; r < data.length; r++) {
-            if (String(data[r][idCol]).trim() === resolvedId) {
-              honobono.getRange(r + 1, qrCol + 1).setValue(url);
-              break;
-            }
-          }
-        }
+      const storedUrl = qrEmbedUrl || (qrInfo && qrInfo.viewUrl) || '';
+      if (storedUrl) {
+        updateHonobonoQrUrl_(resolvedId, storedUrl);
       }
     } catch (err) {
       Logger.log("⚠️ ほのぼのID への書き込み失敗: " + err);
@@ -1720,7 +1722,7 @@ function createExternalShare(memberId, options) {
     return {
       status: 'success',
       shareLink: url,
-      qrDriveUrl: qrInfo.embedUrl || "",
+      qrDriveUrl: qrEmbedUrl || (qrInfo && qrInfo.embedUrl) || "",
       qrViewUrl: qrInfo.viewUrl || ""
     };
 
@@ -1841,6 +1843,7 @@ function shareNormalizeRangeInput_(value) {
   const raw = String(value == null ? '' : value).trim().toLowerCase();
   if (!raw) return '30';
   if (raw === 'all' || raw === 'full' || raw === '0' || raw === 'alltime') return 'all';
+  if (raw === 'month' || raw === 'monthly' || raw === 'latest-month') return 'month';
   if (raw === '90' || raw === '90d' || raw === '90days') return '90';
   if (raw === '30' || raw === '30d' || raw === '30days') return '30';
   const num = Number(raw);
@@ -1849,7 +1852,7 @@ function shareNormalizeRangeInput_(value) {
     if (num >= 90) return '90';
     if (num >= 30) return '30';
   }
-  return '30';
+  return raw === '7' || raw === '7d' || raw === '7days' ? '7' : '30';
 }
 
 function shareNormalizeToken_(value) {
@@ -1894,6 +1897,9 @@ function shareParseRangeSpec_(spec) {
   if (normalized === 'all') {
     return { type: 'all' };
   }
+  if (normalized === 'month') {
+    return { type: 'month' };
+  }
   const days = Number(normalized);
   return { type: 'days', days: Number.isFinite(days) && days > 0 ? days : 30 };
 }
@@ -1901,8 +1907,117 @@ function shareParseRangeSpec_(spec) {
 function shareRangeLabel_(range) {
   if (!range) return '直近30日';
   if (range.type === 'all') return '全期間';
+  if (range.type === 'month') return '月次モニタリング';
   if (range.days >= 90) return '直近90日';
+  if (range.days <= 7) return '直近7日';
   return '直近30日';
+}
+
+function shareNormalizeQrEmbedUrl_(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw) === false) return raw;
+  if (raw.includes('drive.google.com/thumbnail')) return raw;
+  const idMatch = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/) || raw.match(/\/d\/([a-zA-Z0-9_-]+)\//);
+  if (idMatch && idMatch[1]) {
+    return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w300`;
+  }
+  return raw;
+}
+
+function monitoringReportsGetSheet_() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return ss.getSheetByName(MONITORING_REPORTS_SHEET_NAME) || null;
+}
+
+function monitoringReportsBuildHeaderIndex_(headerRow) {
+  const map = {};
+  headerRow.forEach((label, idx) => {
+    const key = String(label || '').trim().toLowerCase();
+    if (key) map[key] = idx;
+  });
+  return map;
+}
+
+function monitoringReportsParseMonth_(value) {
+  if (!value) return null;
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), 1);
+  }
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const replaced = raw
+    .replace(/年|\.|\//g, '-')
+    .replace(/月/g, '')
+    .replace(/[^0-9-]/g, '-');
+  const match = replaced.match(/(\d{4})-(\d{1,2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+  return new Date(year, month - 1, 1);
+}
+
+function monitoringReportsFormatMonthLabel_(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+}
+
+function monitoringReportsFindLatest_(memberId) {
+  const normalizedId = normalizeMemberId_(memberId);
+  if (!normalizedId) return null;
+  const sheet = monitoringReportsGetSheet_();
+  if (!sheet) return null;
+  const values = sheet.getDataRange().getValues();
+  if (!values || values.length < 2) return null;
+  const header = values[0];
+  const idx = monitoringReportsBuildHeaderIndex_(header);
+  const idxMember = idx.memberid;
+  const idxMonth = idx.month;
+  const idxText = idx.reporttext;
+  const idxGenerated = idx.generatedat;
+  const idxStatus = idx.status;
+  if (idxMember == null || idxText == null) return null;
+
+  let latest = null;
+  let latestKey = -Infinity;
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const idRaw = normalizeMemberId_(row[idxMember]);
+    if (!idRaw || idRaw !== normalizedId) continue;
+    const monthDate = idxMonth != null ? monitoringReportsParseMonth_(row[idxMonth]) : null;
+    const generatedAt = idxGenerated != null ? shareParseDate_(row[idxGenerated]) : null;
+    const fallbackKey = generatedAt ? generatedAt.getTime() : r;
+    const candidateKey = monthDate ? monthDate.getTime() : fallbackKey;
+    if (candidateKey > latestKey) {
+      latestKey = candidateKey;
+      latest = {
+        memberId: normalizedId,
+        monthDate,
+        monthLabel: monitoringReportsFormatMonthLabel_(monthDate),
+        monthRaw: idxMonth != null ? row[idxMonth] : '',
+        reportText: String(row[idxText] || ''),
+        generatedAt,
+        generatedAtText: shareFormatDateTime_(generatedAt),
+        status: idxStatus != null ? String(row[idxStatus] || '') : ''
+      };
+    }
+  }
+  return latest;
+}
+
+function shareLoadMonitoringReport_(share) {
+  if (!share || !share.memberId) return null;
+  if (!share.range || share.range.type !== 'month') return null;
+  const report = monitoringReportsFindLatest_(share.memberId);
+  if (!report) return null;
+  const text = String(report.reportText || '');
+  return {
+    monthLabel: report.monthLabel || String(report.monthRaw || ''),
+    generatedAtText: report.generatedAtText || '',
+    status: report.status || '',
+    reportText: text,
+  };
 }
 
 function shareFormatDateTime_(date) {
@@ -2032,7 +2147,8 @@ function shareBuildSummary_(share, profile, hasRecords) {
   const url = buildExternalShareUrl_(share.token);
   const qrDataUrl = buildExternalShareQrDataUrl_(url);
   const expired = share.expiresAt ? share.expiresAt.getTime() < Date.now() : false;
-  const qrDriveUrl = profile.qrUrl || getMemberQrDriveUrl_(share.memberId);
+  const qrSource = profile.qrUrl || share.qrUrl || getMemberQrDriveUrl_(share.memberId);
+  const qrEmbedUrl = shareNormalizeQrEmbedUrl_(qrSource) || qrDataUrl;
 
   return {
     token: share.token,
@@ -2051,7 +2167,8 @@ function shareBuildSummary_(share, profile, hasRecords) {
     rangeLabel: share.rangeLabel,
     url,
     shareLink: url,
-    qrDriveUrl,
+    qrDriveUrl: qrEmbedUrl,
+    qrEmbedUrl,
     qrUrl: qrDataUrl,
     qrDataUrl,
     qrCode: qrDataUrl,
@@ -2173,17 +2290,19 @@ function shareBuildCustomRecordSet_(share, rawRecords, recordId) {
 
   return { records: sanitized, primaryRecord };
 }
-function shareBuildResponse_(share, recordId, includeRecords) {
+function shareBuildResponse_(share, recordId, includeRecords, includeReport) {
   const recordResult = shareLoadRecords_(share, recordId, share.range);
   const profile = shareResolveProfile_(share.memberId);
   const summary = shareBuildSummary_(share, profile, recordResult.records.length > 0);
   const message = recordResult.records.length ? '' : '記録が存在しません';
+  const report = includeReport ? shareLoadMonitoringReport_(share) : null;
   return {
     summary,
     records: includeRecords ? recordResult.records : [],
     primaryRecord: includeRecords ? recordResult.primaryRecord : null,
     message,
-    recordCount: recordResult.records.length
+    recordCount: recordResult.records.length,
+    report
   };
 }
 
@@ -2203,13 +2322,15 @@ function getExternalShareMeta(token, recordId) {
     }
 
     const includeRecords = !share.passwordHash;
-    const response = shareBuildResponse_(share, recordId, includeRecords);
+    const includeReport = includeRecords;
+    const response = shareBuildResponse_(share, recordId, includeRecords, includeReport);
 
     return {
       status: 'success',
       share: response.summary,
       records: response.records,
       primaryRecord: response.primaryRecord,
+      report: response.report,
       message: includeRecords ? response.message : ''
     };
   } catch (err) {
@@ -2241,7 +2362,7 @@ function enterExternalShare(token, password, recordId) {
       }
     }
 
-    const response = shareBuildResponse_(share, recordId, true);
+    const response = shareBuildResponse_(share, recordId, true, true);
     shareUpdateAccessStats_(context.sheet, context.rowIndex);
     shareLogAccess_(share.token, share.memberId, 'success');
 
@@ -2250,6 +2371,7 @@ function enterExternalShare(token, password, recordId) {
       share: response.summary,
       records: response.records,
       primaryRecord: response.primaryRecord,
+      report: response.report,
       message: response.message
     };
   } catch (err) {

@@ -13,6 +13,22 @@
 body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var(--bg); color:var(--fg); }
 .share-app { max-width:840px; margin:0 auto; padding:28px 18px 48px; }
 .share-header { background:var(--card); border-radius:20px; padding:22px; box-shadow:0 12px 30px rgba(24,72,140,0.12); }
+.report-card { margin-top:20px; background:var(--card); border-radius:18px; padding:24px; box-shadow:0 12px 28px rgba(24,72,140,0.1); display:flex; flex-direction:column; gap:18px; }
+.report-card-header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:18px; align-items:flex-start; }
+.report-card-info { flex:1 1 280px; }
+.report-title { margin:0; font-size:1.45rem; color:var(--fg); }
+.report-subtitle { margin:8px 0 4px; font-size:0.95rem; color:var(--muted); }
+.report-meta { margin:0; font-size:0.85rem; color:#48608c; }
+.report-status { font-size:0.85rem; color:#2f4b7a; background:#eef4ff; border-radius:10px; padding:8px 12px; display:inline-block; }
+.qr-block { flex:0 0 220px; display:flex; flex-direction:column; align-items:center; gap:10px; background:#f6f9ff; border:1px dashed rgba(43,108,176,0.35); border-radius:16px; padding:16px; }
+.qr-image { width:200px; height:200px; object-fit:contain; display:none; }
+.qr-placeholder { width:200px; height:200px; display:flex; align-items:center; justify-content:center; text-align:center; font-size:0.9rem; color:#4a5a75; background:rgba(43,108,176,0.08); border-radius:12px; padding:12px; }
+.qr-caption { margin:0; font-size:0.78rem; color:#4a5a75; text-align:center; }
+.report-body { font-size:0.98rem; line-height:1.8; color:#1f2a44; background:#f8fbff; border-radius:14px; padding:18px 20px; min-height:160px; }
+.report-body p { margin:0 0 1em; white-space:pre-wrap; }
+.report-body p:last-child { margin-bottom:0; }
+.report-placeholder { font-style:italic; color:var(--muted); }
+.report-empty-line { min-height:1em; }
 .share-heading { display:flex; flex-direction:column; gap:10px; }
 .share-title { margin:0; font-size:1.6rem; color:var(--accent); }
 .share-badges { display:flex; flex-wrap:wrap; gap:8px; }
@@ -78,10 +94,23 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
 @media (max-width:640px){
   .share-app { padding:18px 14px 36px; }
   .share-header { padding:18px; }
+  .report-card { padding:18px; }
+  .report-card-header { flex-direction:column; align-items:stretch; }
+  .qr-block { width:100%; }
   .filter-row { flex-direction:column; }
   .filter { width:100%; }
   .quick-range { flex-direction:column; }
   .share-profile { grid-template-columns:1fr; }
+}
+@media print{
+  body { background:#fff; color:#000; }
+  .share-app { max-width:100%; padding:0 12mm; }
+  .share-header { box-shadow:none; border:1px solid #cbd5f5; }
+  .report-card { box-shadow:none; border:1px solid #cbd5f5; page-break-inside:avoid; }
+  .qr-block { border:1px solid #cbd5f5; background:#fff; }
+  .report-body { background:#fff; }
+  .print-button { display:none !important; }
+  .share-actions, .share-filters, .share-footer { display:none !important; }
 }
 </style>
 </head>
@@ -131,6 +160,22 @@ body { margin:0; font-family:"Noto Sans JP",system-ui,sans-serif; background:var
       <button type="button" class="print-button" id="printButton" disabled>印刷</button>
     </div>
   </header>
+  <section class="report-card" id="reportCard">
+    <div class="report-card-header">
+      <div class="report-card-info">
+        <h2 class="report-title">月次モニタリング報告書</h2>
+        <p class="report-subtitle" id="reportSubtitle">対象月を確認しています…</p>
+        <p class="report-meta" id="reportGeneratedAt"></p>
+        <div id="reportStatus" class="report-status" style="display:none;"></div>
+      </div>
+      <div class="qr-block" id="qrBlock">
+        <img id="qrImage" class="qr-image" alt="共有QRコード">
+        <div id="qrPlaceholder" class="qr-placeholder">QRコードを準備しています…</div>
+        <p class="qr-caption">印刷してご活用ください。</p>
+      </div>
+    </div>
+    <div class="report-body" id="reportContent">読み込み中です…</div>
+  </section>
   <section id="shareIntro" class="share-intro">
     共有いただいたモニタリング記録を安全に閲覧できるページです。最新の様子を時系列で確認できます。
   </section>
@@ -262,6 +307,7 @@ let searchTimer = null;
 let resolvedRecordId = RECORD_ID_PARAM ? String(RECORD_ID_PARAM) : '';
 let primaryRecordData = null;
 let singleRecordMode = !!resolvedRecordId;
+let currentReport = null;
 
 function getAudienceInfo(audience){
   const key = String(audience || '').toLowerCase();
@@ -410,6 +456,94 @@ function updateHeader(share){
     const allowAll = share && share.allowAllAttachments;
     const count = share && typeof share.allowedCount === 'number' ? share.allowedCount : 0;
     attachmentEl.textContent = allowAll ? '添付：すべて閲覧可能' : `添付：${count}件のみ共有`;
+  }
+}
+
+function updateQrSection(share){
+  const qrImage = document.getElementById('qrImage');
+  const placeholder = document.getElementById('qrPlaceholder');
+  if(!qrImage || !placeholder) return;
+  const candidates = [
+    share && share.qrEmbedUrl,
+    share && share.qrDriveUrl,
+    share && share.qrUrl,
+    share && share.qrDataUrl
+  ];
+  const src = candidates.find(value => typeof value === 'string' && value.trim().length) || '';
+  if(src){
+    qrImage.src = src;
+    qrImage.style.display = 'block';
+    placeholder.style.display = 'none';
+  }else{
+    qrImage.removeAttribute('src');
+    qrImage.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'QRコードが登録されていません。';
+  }
+}
+
+function buildReportHtml(text){
+  const value = String(text || '');
+  if(!value.trim()){
+    return '<p class="report-placeholder">月次モニタリング報告書はまだ登録されていません。</p>';
+  }
+  const lines = value.replace(/\r/g,'').split('\n');
+  return lines.map(line => {
+    if(!line.trim()) return '<p class="report-empty-line">&nbsp;</p>';
+    return `<p>${escapeHtml(line)}</p>`;
+  }).join('');
+}
+
+function updateReportCard(report, share, options = {}){
+  const subtitle = document.getElementById('reportSubtitle');
+  const generatedAtEl = document.getElementById('reportGeneratedAt');
+  const statusEl = document.getElementById('reportStatus');
+  const bodyEl = document.getElementById('reportContent');
+  currentReport = report || null;
+
+  const monthLabel = report && report.monthLabel ? report.monthLabel : '';
+  const rangeLabel = share && share.rangeLabel ? share.rangeLabel : '';
+  if(subtitle){
+    if(monthLabel){
+      subtitle.textContent = `対象月：${monthLabel}`;
+    }else if(rangeLabel){
+      subtitle.textContent = `表示範囲：${rangeLabel}`;
+    }else{
+      subtitle.textContent = '対象月：最新月を確認中…';
+    }
+  }
+
+  if(generatedAtEl){
+    generatedAtEl.textContent = report && report.generatedAtText ? `生成日時：${report.generatedAtText}` : '';
+  }
+
+  if(statusEl){
+    const statusText = report && report.status ? `ステータス：${report.status}` : '';
+    statusEl.textContent = statusText;
+    statusEl.style.display = statusText ? 'inline-block' : 'none';
+  }
+
+  if(!bodyEl) return;
+
+  if(options.requirePassword && !report){
+    bodyEl.innerHTML = '<p class="report-placeholder">パスワード入力後に表示されます。</p>';
+    return;
+  }
+
+  if(options.showLoading){
+    bodyEl.innerHTML = `<p class="report-placeholder">${escapeHtml(options.showLoading)}</p>`;
+    return;
+  }
+
+  if(report && report.reportText){
+    bodyEl.innerHTML = buildReportHtml(report.reportText);
+    return;
+  }
+
+  if(share && share.rangeLabel && share.rangeLabel.includes('月次')){
+    bodyEl.innerHTML = '<p class="report-placeholder">月次モニタリング報告書はまだ登録されていません。</p>';
+  }else{
+    bodyEl.innerHTML = '<p class="report-placeholder">共有設定に月次モニタリング報告書は含まれていません。</p>';
   }
 }
 
@@ -795,6 +929,13 @@ function fetchShareMeta(){
     updateHeader(share);
     setIntro(share);
     setFooter(share);
+    updateQrSection(share);
+
+    if(share.requirePassword && !res.report){
+      updateReportCard(null, share, { requirePassword: true });
+    }else{
+      updateReportCard(res.report || null, share);
+    }
 
     let normalizedRecords = [];
     primaryRecordData = res.primaryRecord || (Array.isArray(res.records) ? res.records[0] : null);
@@ -864,6 +1005,10 @@ function loadShareData(password){
     updateHeader(currentShare);
     setIntro(currentShare);
     setFooter(currentShare);
+    updateQrSection(currentShare);
+
+    currentReport = res.report || currentReport;
+    updateReportCard(currentReport, currentShare);
 
     const auth = document.getElementById('shareAuth');
     if(auth) auth.style.display = 'none';
