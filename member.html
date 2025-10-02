@@ -1726,11 +1726,17 @@ function setupSearchBox() {
   input.addEventListener("change", resolveInput);
   listBox.addEventListener("click", e => {
     const rawTarget = e.target;
-    const target = rawTarget instanceof Element ? rawTarget : rawTarget && rawTarget.parentElement;
-    const item = target ? target.closest(".autocomplete-item") : null;
+    const elementTarget = rawTarget instanceof Element
+      ? rawTarget
+      : (rawTarget && rawTarget.parentElement ? rawTarget.parentElement : null);
+    const item = elementTarget ? elementTarget.closest(".autocomplete-item") : null;
     if (!item || item.dataset.empty === "true") return;
-    const datasetId = item.dataset.id || item.dataset.normalizedId || "";
-    const datasetName = item.dataset.name || "";
+
+    const datasetId = (item.dataset.id || item.dataset.normalizedId || "").trim();
+    const datasetName = (item.dataset.name || "").trim();
+
+    if (!datasetId && !datasetName) return;
+
     selectMember(datasetId, datasetName);
   });
   input.addEventListener("keydown", e => {
@@ -1742,10 +1748,13 @@ function setupSearchBox() {
 function resolveInput() {
   const val = input.value.trim();
   if (!val) return;
-  if (Array.isArray(memberSearchResults) && memberSearchResults.length === 1) {
-    const only = memberSearchResults[0];
-    if (only && only.id) {
-      selectMember(only.id, only.name || "");
+
+  const searchResults = Array.isArray(memberSearchResults) ? memberSearchResults : [];
+  if (searchResults.length === 1) {
+    const only = searchResults[0];
+    const candidateId = only && (only.id || only.idNormalized);
+    if (candidateId) {
+      selectMember(candidateId, (only && only.name) || "");
       return;
     }
   }
