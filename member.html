@@ -399,6 +399,14 @@ let memberListLoading = false;
 let memberListLoaded = false;
 let recordsCache = [];
 const queryParams = new URLSearchParams(window.location.search);
+const isDevelopmentMode = (() => {
+  const debugParam = String(queryParams.get("debug") || "").toLowerCase();
+  if (["1", "true", "yes", "on"].includes(debugParam)) {
+    return true;
+  }
+  const host = (typeof window !== "undefined" && window.location && window.location.hostname) || "";
+  return host === "localhost" || host === "127.0.0.1";
+})();
 const shareAudienceInfo = {
   family: {
     label: "家族向け共有",
@@ -1683,17 +1691,21 @@ function renderAutocompleteCandidates(candidates) {
   candidates.forEach(member => {
     const item = document.createElement("div");
     item.className = "autocomplete-item";
+
     const memberId = member && member.id != null ? String(member.id) : "";
     const memberName = member && member.name != null ? String(member.name) : "";
     const reading = (member && (member.yomi || member.kana)) || "";
+    const normalizedId = member && member.idNormalized != null ? String(member.idNormalized) : "";
+    const careManager = member && member.careManager != null ? String(member.careManager) : "";
 
-    item.dataset.id = memberId;
-    item.dataset.name = memberName;
-    if (member && member.careManager != null) {
-      item.dataset.careManager = String(member.careManager);
-    }
-    if (member && member.idNormalized != null) {
-      item.dataset.normalizedId = String(member.idNormalized);
+    const dataset = item.dataset;
+    dataset.id = memberId;
+    dataset.name = memberName;
+    dataset.normalizedId = normalizedId;
+    if (careManager) {
+      dataset.careManager = careManager;
+    } else {
+      delete dataset.careManager;
     }
 
     const labelSpan = document.createElement("span");
@@ -1726,16 +1738,22 @@ function setupSearchBox() {
   input.addEventListener("change", resolveInput);
   listBox.addEventListener("click", e => {
     const rawTarget = e.target;
-    const elementTarget = rawTarget instanceof Element
-      ? rawTarget
-      : (rawTarget && rawTarget.parentElement ? rawTarget.parentElement : null);
-    const item = elementTarget ? elementTarget.closest(".autocomplete-item") : null;
+    const item = rawTarget instanceof Element
+      ? rawTarget.closest(".autocomplete-item")
+      : (rawTarget && rawTarget.parentElement ? rawTarget.parentElement.closest(".autocomplete-item") : null);
     if (!item || item.dataset.empty === "true") return;
 
-    const datasetId = (item.dataset.id || item.dataset.normalizedId || "").trim();
-    const datasetName = (item.dataset.name || "").trim();
+    const dataset = item.dataset;
+    const datasetId = (dataset.id || dataset.normalizedId || "").trim();
+    const datasetName = (dataset.name || "").trim();
 
     if (!datasetId && !datasetName) return;
+
+    if (isDevelopmentMode && typeof console !== "undefined") {
+      const snapshot = Object.assign({}, dataset);
+      const log = typeof console.debug === "function" ? console.debug : console.log;
+      log.call(console, "[member][autocomplete] clicked item dataset", snapshot);
+    }
 
     selectMember(datasetId, datasetName);
   });
