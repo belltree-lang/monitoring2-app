@@ -1664,15 +1664,55 @@ function searchUsers(rawQuery) {
     listBox.scrollTop = 0;
     return;
   }
-  listBox.innerHTML = hits
-    .map(member => {
-      const reading = member.yomi || member.kana;
-      const yomiLabel = reading ? ` <span class="muted">(${escapeHtml(reading)})</span>` : "";
-      return `<div class="autocomplete-item" data-id="${member.id}" data-name="${escapeHtml(member.name)}">${member.id}　${escapeHtml(member.name)}${yomiLabel}</div>`;
-    })
-    .join("");
-  listBox.style.display = "block";
+  renderAutocompleteCandidates(hits);
+}
+
+function renderAutocompleteCandidates(candidates) {
+  if (!Array.isArray(candidates)) candidates = [];
+  if (!listBox) listBox = document.getElementById("autocompleteList");
+  if (!listBox) return;
+
+  listBox.innerHTML = "";
   listBox.scrollTop = 0;
+  if (!candidates.length) {
+    listBox.style.display = "none";
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  candidates.forEach(member => {
+    const item = document.createElement("div");
+    item.className = "autocomplete-item";
+    const memberId = member && member.id != null ? String(member.id) : "";
+    const memberName = member && member.name != null ? String(member.name) : "";
+    const reading = (member && (member.yomi || member.kana)) || "";
+
+    item.dataset.id = memberId;
+    item.dataset.name = memberName;
+    if (member && member.careManager != null) {
+      item.dataset.careManager = String(member.careManager);
+    }
+    if (member && member.idNormalized != null) {
+      item.dataset.normalizedId = String(member.idNormalized);
+    }
+
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = memberId ? `${memberId}　${memberName}` : memberName;
+    item.appendChild(labelSpan);
+
+    if (reading) {
+      const readingSpan = document.createElement("span");
+      readingSpan.className = "muted";
+      readingSpan.textContent = `(${reading})`;
+      readingSpan.style.marginLeft = "4px";
+      item.appendChild(readingSpan);
+    }
+
+    fragment.appendChild(item);
+  });
+
+  listBox.appendChild(fragment);
+  listBox.style.display = "block";
 }
 
 function setupSearchBox() {
@@ -1689,7 +1729,9 @@ function setupSearchBox() {
     const target = rawTarget instanceof Element ? rawTarget : rawTarget && rawTarget.parentElement;
     const item = target ? target.closest(".autocomplete-item") : null;
     if (!item || item.dataset.empty === "true") return;
-    selectMember(item.dataset.id, item.dataset.name);
+    const datasetId = item.dataset.id || item.dataset.normalizedId || "";
+    const datasetName = item.dataset.name || "";
+    selectMember(datasetId, datasetName);
   });
   input.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); resolveInput(); }
