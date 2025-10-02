@@ -34,11 +34,11 @@ button:hover { opacity:0.9;}
 .member-select-toolbar { position:relative; }
 .member-new-form { display:flex; flex-direction:column; gap:10px; }
 .member-new-row { display:grid; gap:10px 12px; grid-template-columns:repeat(2, minmax(120px, 1fr)); align-items:end; }
-.member-new-row.member-new-row--compact { grid-template-columns:minmax(70px, 100px) minmax(120px, 160px); }
-.member-new-row.member-new-row--actions { grid-template-columns:minmax(200px, 1fr) auto; align-items:center; }
+.member-new-row.member-new-row--compact { grid-template-columns:80px minmax(110px, 160px); }
+.member-new-row.member-new-row--actions { grid-template-columns:minmax(260px, 1fr) auto; align-items:center; }
 .member-new-form input,
 .member-new-form select { width:100%; }
-.member-new-submit { justify-self:flex-start; padding:8px 16px; }
+.member-new-submit { justify-self:flex-end; padding:6px 12px; }
 @media(max-width:640px){
   .member-new-row { grid-template-columns:1fr; }
   .member-new-row.member-new-row--actions { grid-template-columns:1fr; }
