@@ -1675,6 +1675,25 @@ function searchUsers(rawQuery) {
   renderAutocompleteCandidates(hits);
 }
 
+function handleAutocompleteItemClick(event) {
+  const item = event && event.currentTarget;
+  if (!item || item.dataset.empty === "true") return;
+
+  const dataset = item.dataset || {};
+  const datasetId = (dataset.id || dataset.normalizedId || "").trim();
+  const datasetName = (dataset.name || "").trim();
+
+  if (!datasetId && !datasetName) return;
+
+  if (isDevelopmentMode && typeof console !== "undefined") {
+    const snapshot = Object.assign({}, dataset);
+    const log = typeof console.debug === "function" ? console.debug : console.log;
+    log.call(console, "[member][autocomplete] clicked item dataset", snapshot);
+  }
+
+  selectMember(datasetId, datasetName);
+}
+
 function renderAutocompleteCandidates(candidates) {
   if (!Array.isArray(candidates)) candidates = [];
   if (!listBox) listBox = document.getElementById("autocompleteList");
@@ -1708,6 +1727,8 @@ function renderAutocompleteCandidates(candidates) {
       delete dataset.careManager;
     }
 
+    item.addEventListener("click", handleAutocompleteItemClick);
+
     const labelSpan = document.createElement("span");
     labelSpan.textContent = memberId ? `${memberId}　${memberName}` : memberName;
     item.appendChild(labelSpan);
@@ -1736,45 +1757,6 @@ function setupSearchBox() {
   const handleInput = () => searchUsers(input.value);
   input.addEventListener("input", handleInput);
   input.addEventListener("change", resolveInput);
-  listBox.addEventListener("click", e => {
-    const rawTarget = e.target;
-    let item = null;
-
-    if (rawTarget && typeof rawTarget.closest === "function") {
-      item = rawTarget.closest(".autocomplete-item");
-    }
-
-    if (!item && rawTarget && rawTarget.parentElement && typeof rawTarget.parentElement.closest === "function") {
-      item = rawTarget.parentElement.closest(".autocomplete-item");
-    }
-
-    if (!item) {
-      let cursor = rawTarget && rawTarget.parentElement ? rawTarget.parentElement : null;
-      while (cursor && cursor !== listBox) {
-        if (cursor.classList && cursor.classList.contains("autocomplete-item")) {
-          item = cursor;
-          break;
-        }
-        cursor = cursor.parentElement;
-      }
-    }
-
-    if (!item || item.dataset.empty === "true") return;
-
-    const dataset = item.dataset;
-    const datasetId = (dataset.id || dataset.normalizedId || "").trim();
-    const datasetName = (dataset.name || "").trim();
-
-    if (!datasetId && !datasetName) return;
-
-    if (isDevelopmentMode && typeof console !== "undefined") {
-      const snapshot = Object.assign({}, dataset);
-      const log = typeof console.debug === "function" ? console.debug : console.log;
-      log.call(console, "[member][autocomplete] clicked item dataset", snapshot);
-    }
-
-    selectMember(datasetId, datasetName);
-  });
   input.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); resolveInput(); }
   });
