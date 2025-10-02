@@ -1738,9 +1738,27 @@ function setupSearchBox() {
   input.addEventListener("change", resolveInput);
   listBox.addEventListener("click", e => {
     const rawTarget = e.target;
-    const item = rawTarget instanceof Element
-      ? rawTarget.closest(".autocomplete-item")
-      : (rawTarget && rawTarget.parentElement ? rawTarget.parentElement.closest(".autocomplete-item") : null);
+    let item = null;
+
+    if (rawTarget && typeof rawTarget.closest === "function") {
+      item = rawTarget.closest(".autocomplete-item");
+    }
+
+    if (!item && rawTarget && rawTarget.parentElement && typeof rawTarget.parentElement.closest === "function") {
+      item = rawTarget.parentElement.closest(".autocomplete-item");
+    }
+
+    if (!item) {
+      let cursor = rawTarget && rawTarget.parentElement ? rawTarget.parentElement : null;
+      while (cursor && cursor !== listBox) {
+        if (cursor.classList && cursor.classList.contains("autocomplete-item")) {
+          item = cursor;
+          break;
+        }
+        cursor = cursor.parentElement;
+      }
+    }
+
     if (!item || item.dataset.empty === "true") return;
 
     const dataset = item.dataset;
