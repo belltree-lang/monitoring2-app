@@ -398,6 +398,8 @@ let memberSearchResults = [];
 let memberListLoading = false;
 let memberListLoaded = false;
 let recordsCache = [];
+// オートコンプリートからの選択時に blur 側の再解決を抑制するためのフラグ
+let selectingFromAutocomplete = false;
 const queryParams = new URLSearchParams(window.location.search);
 const isDevelopmentMode = (() => {
   const debugParam = String(queryParams.get("debug") || "").toLowerCase();
@@ -1675,25 +1677,6 @@ function searchUsers(rawQuery) {
   renderAutocompleteCandidates(hits);
 }
 
-function handleAutocompleteItemClick(event) {
-  const item = event && event.currentTarget;
-  if (!item || item.dataset.empty === "true") return;
-
-  const dataset = item.dataset || {};
-  const datasetId = (dataset.id || dataset.normalizedId || "").trim();
-  const datasetName = (dataset.name || "").trim();
-
-  if (!datasetId && !datasetName) return;
-
-  if (isDevelopmentMode && typeof console !== "undefined") {
-    const snapshot = Object.assign({}, dataset);
-    const log = typeof console.debug === "function" ? console.debug : console.log;
-    log.call(console, "[member][autocomplete] clicked item dataset", snapshot);
-  }
-
-  selectMember(datasetId, datasetName);
-}
-
 function renderAutocompleteCandidates(candidates) {
   if (!Array.isArray(candidates)) candidates = [];
   if (!listBox) listBox = document.getElementById("autocompleteList");
@@ -1707,7 +1690,7 @@ function renderAutocompleteCandidates(candidates) {
   }
 
   const fragment = document.createDocumentFragment();
-  candidates.forEach(member => {
+  candidates.forEach((member, idx) => {
     const item = document.createElement("div");
     item.className = "autocomplete-item";
 
@@ -1721,13 +1704,33 @@ function renderAutocompleteCandidates(candidates) {
     dataset.id = memberId;
     dataset.name = memberName;
     dataset.normalizedId = normalizedId;
+    dataset.index = String(idx);
     if (careManager) {
       dataset.careManager = careManager;
     } else {
       delete dataset.careManager;
     }
 
-    item.addEventListener("click", handleAutocompleteItemClick);
+    item.addEventListener("mousedown", ev => {
+      ev.preventDefault();
+      selectingFromAutocomplete = true;
+      const datasetId = (item.dataset.id || item.dataset.normalizedId || "").trim();
+      const datasetName = (item.dataset.name || "").trim();
+      if (!datasetId && !datasetName) {
+        selectingFromAutocomplete = false;
+        return;
+      }
+      if (isDevelopmentMode && typeof console !== "undefined") {
+        const snapshot = Object.assign({}, item.dataset);
+        const log = typeof console.debug === "function" ? console.debug : console.log;
+        log.call(console, "[member][autocomplete] mousedown dataset", snapshot);
+      }
+      selectMember(datasetId, datasetName);
+      listBox.style.display = "none";
+      listBox.innerHTML = "";
+      memberSearchResults = [];
+      setTimeout(() => { selectingFromAutocomplete = false; }, 0);
+    });
 
     const labelSpan = document.createElement("span");
     labelSpan.textContent = memberId ? `${memberId}　${memberName}` : memberName;
@@ -1760,7 +1763,13 @@ function setupSearchBox() {
   input.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); resolveInput(); }
   });
-  input.addEventListener("blur", () => { setTimeout(resolveInput, 100); });
+  input.addEventListener("blur", () => {
+    setTimeout(() => {
+      if (selectingFromAutocomplete) return;
+      if (listBox && listBox.style.display !== "none" && listBox.matches(":hover")) return;
+      resolveInput();
+    }, 120);
+  });
 }
 
 function resolveInput() {
