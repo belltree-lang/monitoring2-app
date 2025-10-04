@@ -145,7 +145,7 @@ button:hover { opacity:0.9;}
 .share-item .share-item-header { display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:flex-start; }
 .share-item-title { font-weight:600; color:#1f2f4b; font-size:0.9rem; }
 .share-item .share-meta { display:flex; flex-wrap:wrap; gap:10px; font-size:0.75rem; color:#546079; margin-top:6px; }
-.share-item .share-actions { display:flex; gap:6px; margin-top:8px; }
+.share-item .share-actions { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
 .share-item .share-actions .btn-compact { white-space:nowrap; }
 .share-qr { margin-top:10px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
 .share-qr img { width:110px; height:110px; border:1px solid #d0ddf4; border-radius:12px; background:#fff; padding:6px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
@@ -2567,7 +2567,8 @@ function renderShareItem(share){
   const qrHtml=qrUrl?`<div class="share-qr"><img src="${qrUrl}" alt="共有QRコード"></div>`:"";
   const descriptionHtml=info.description?`<div class="share-meta-notes">${escapeHtml(info.description)}</div>`:"";
   const copyButton=safeUrl?`<button class="secondary btn-compact" data-action="copy-url" data-url="${safeUrl}">URLコピー</button>`:"";
-  const actionButtons=[copyButton,`<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`].filter(Boolean).join("");
+  const openButton=safeUrl?`<button class="secondary btn-compact" data-action="open-url" data-url="${safeUrl}">別タブで開く</button>`:"";
+  const actionButtons=[copyButton,openButton,`<button class="danger btn-compact" data-action="revoke" data-token="${escapeHtml(share.token||'')}">リンク停止</button>`].filter(Boolean).join("");
   return `<div class="${itemClass}">`
     + `<div class="share-item-header"><span class="badge">${badgeLabel}</span><span class="share-item-title">${escapeHtml(info.label)}</span></div>`
     + `<div class="tag-group">${metaHtml}</div>`
@@ -2581,6 +2582,15 @@ async function handleShareListClick(event){
   const btn=event.target.closest('[data-action]');
   if(!btn) return;
   const action=btn.dataset.action;
+  if(action==='open-url'){
+    const url=btn.dataset.url||"";
+    if(!url) return;
+    const win=window.open(url,"_blank","noopener");
+    if(!win){
+      alert("別タブを開けませんでした。ポップアップブロックを確認してください。");
+    }
+    return;
+  }
   if(action==='copy-url'){
     const url=btn.dataset.url||"";
     if(!url) return;
@@ -2617,10 +2627,23 @@ async function handleCreateShare(event){
   console.log("🔎 DEBUG before handleCreateShare: memberId=", memberId, "memberName=", memberName);
 
   console.log("🔎 handleCreateShare start", { memberId, config: collectShareFormConfig() });
+  const triggerBtn=(event && event.currentTarget instanceof HTMLButtonElement)
+    ? event.currentTarget
+    : (()=>{
+        const el=document.getElementById("btnCreateShare");
+        return el instanceof HTMLButtonElement ? el : null;
+      })();
+  const originalBtnLabel=triggerBtn && typeof triggerBtn.textContent==='string'
+    ? triggerBtn.textContent
+    : "";
   if(event) event.preventDefault();
-  if(!memberId){ 
-    alert("利用者を選択してください"); 
-    return; 
+  if(!memberId){
+    alert("利用者を選択してください");
+    return;
+  }
+  if(triggerBtn){
+    triggerBtn.disabled=true;
+    triggerBtn.textContent="発行中…";
   }
 
   const status = document.getElementById("shareFormStatus");
@@ -2661,6 +2684,11 @@ async function handleCreateShare(event){
   } catch(err){
     console.error("❌ handleCreateShare error", err);
     if(status) status.textContent = "失敗: " + (err && err.message ? err.message : err);
+  } finally {
+    if(triggerBtn){
+      triggerBtn.disabled=false;
+      triggerBtn.textContent=originalBtnLabel || "共有リンク作成";
+    }
   }
 }
 
