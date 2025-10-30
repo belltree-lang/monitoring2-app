@@ -24,6 +24,15 @@ button.danger { background:#d32f2f; color:#fff;}
 button:hover { opacity:0.9;}
 .btn-compact { padding:4px 8px; font-size:0.8rem; }
 .pill { display:inline-block; padding:4px 10px; font-size:.85rem; border-radius:999px; background:var(--accent); color:var(--brand);}
+.record-edit-modal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(17,24,39,0.45); z-index:300; padding:20px; }
+.record-edit-modal.is-open { display:flex; }
+.record-edit-dialog { background:var(--card); border-radius:12px; box-shadow:0 12px 30px rgba(15,23,42,0.25); width:min(520px, 100%); padding:20px; display:flex; flex-direction:column; gap:12px; }
+.record-edit-dialog h3 { margin:0; font-size:1.1rem; color:#1f2f4b; }
+.record-edit-field { display:flex; flex-direction:column; gap:6px; font-size:0.85rem; color:#3d4a63; }
+.record-edit-field textarea { width:100%; min-height:160px; }
+.record-edit-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:4px; }
+.record-edit-error { min-height:1.2em; font-size:0.8rem; color:#c62828; }
+.record-edit-modal .secondary { background:#f0f2f7; color:#2f3c52; }
 .autocomplete-list { position:absolute; background:#fff; border:1px solid #ccc; border-radius:6px;
   max-height:220px; overflow-y:auto; width:260px; box-shadow:0 2px 6px rgba(0,0,0,.1); z-index:100;}
 .autocomplete-item { padding:8px 12px; cursor:pointer; font-size:0.9rem;}
@@ -391,6 +400,25 @@ button:hover { opacity:0.9;}
   </div>
 </div>
 
+<div id="recordEditModal" class="record-edit-modal" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="record-edit-dialog">
+    <h3>記録を編集</h3>
+    <div class="record-edit-field">
+      <label for="recordEditDate">日付</label>
+      <input type="date" id="recordEditDate">
+    </div>
+    <div class="record-edit-field">
+      <label for="recordEditText">内容</label>
+      <textarea id="recordEditText" placeholder="記録内容を入力"></textarea>
+    </div>
+    <div id="recordEditError" class="record-edit-error" role="alert" aria-live="polite"></div>
+    <div class="record-edit-actions">
+      <button type="button" id="recordEditCancel" class="secondary">キャンセル</button>
+      <button type="button" id="recordEditSave">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let memberId = null, memberName = "";
 let memberList = [];
@@ -398,6 +426,11 @@ let memberSearchResults = [];
 let memberListLoading = false;
 let memberListLoaded = false;
 let recordsCache = [];
+const recordEditState = {
+  record: null,
+  isSaving: false,
+  defaultSaveLabel: "保存"
+};
 // オートコンプリートからの選択時に blur 側の再解決を抑制するためのフラグ
 let selectingFromAutocomplete = false;
 const queryParams = new URLSearchParams(window.location.search);
@@ -2229,6 +2262,204 @@ function formatDateTime(value){
   return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function parseInputDate(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const str = String(value).trim();
+  if (!str) return null;
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+      return dt;
+    }
+    return null;
+  }
+  const genericMatch = str.match(/(\d{4})[^0-9](\d{1,2})[^0-9](\d{1,2})/);
+  if (genericMatch) {
+    const y = Number(genericMatch[1]);
+    const m = Number(genericMatch[2]);
+    const d = Number(genericMatch[3]);
+    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+      return new Date(y, m - 1, d);
+    }
+  }
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDateForInput(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : parseInputDate(value);
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function resolveRecordDate(record) {
+  if (!record) return null;
+  if (record.date instanceof Date && !Number.isNaN(record.date.getTime())) {
+    return record.date;
+  }
+  if (typeof record.timestamp === 'number' && !Number.isNaN(record.timestamp)) {
+    return new Date(record.timestamp);
+  }
+  const candidates = [record.dateValue, record.rawDate, record.dateText, record.fields && record.fields['日付']];
+  for (const candidate of candidates) {
+    const parsed = parseInputDate(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function getRecordByRowIndex(rowIndex) {
+  const target = Number(rowIndex);
+  if (!Number.isFinite(target)) return null;
+  return recordsCache.find(rec => Number(rec && rec.rowIndex) === target) || null;
+}
+
+function setRecordEditError(message) {
+  const el = document.getElementById("recordEditError");
+  if (el) {
+    el.textContent = message || '';
+  }
+}
+
+function setRecordEditSaving(isSaving) {
+  recordEditState.isSaving = Boolean(isSaving);
+  const saveBtn = document.getElementById("recordEditSave");
+  const cancelBtn = document.getElementById("recordEditCancel");
+  if (saveBtn) {
+    if (!recordEditState.defaultSaveLabel) {
+      recordEditState.defaultSaveLabel = saveBtn.textContent || '保存';
+    }
+    saveBtn.disabled = isSaving;
+    saveBtn.textContent = isSaving ? '保存中…' : (recordEditState.defaultSaveLabel || '保存');
+  }
+  if (cancelBtn) {
+    cancelBtn.disabled = isSaving;
+  }
+}
+
+function closeRecordEditModal() {
+  const modal = document.getElementById("recordEditModal");
+  if (modal) {
+    modal.classList.remove("is-open");
+    modal.setAttribute("aria-hidden", "true");
+  }
+  recordEditState.record = null;
+  setRecordEditSaving(false);
+  setRecordEditError('');
+}
+
+function openRecordEditModal(record) {
+  if (!record) {
+    alert("対象の記録が見つかりませんでした");
+    return;
+  }
+  recordEditState.record = record;
+  const modal = document.getElementById("recordEditModal");
+  const dateInput = document.getElementById("recordEditDate");
+  const textInput = document.getElementById("recordEditText");
+  setRecordEditError('');
+  setRecordEditSaving(false);
+  if (dateInput) {
+    const dt = resolveRecordDate(record);
+    dateInput.value = formatDateForInput(dt);
+  }
+  if (textInput) {
+    textInput.value = record.text || '';
+  }
+  if (modal) {
+    modal.classList.add("is-open");
+    modal.setAttribute("aria-hidden", "false");
+    setTimeout(() => {
+      if (textInput) textInput.focus();
+    }, 0);
+  }
+}
+
+function handleRecordEditSave() {
+  if (recordEditState.isSaving) return;
+  const record = recordEditState.record;
+  if (!record) {
+    closeRecordEditModal();
+    return;
+  }
+  const dateInput = document.getElementById("recordEditDate");
+  const textInput = document.getElementById("recordEditText");
+  const rawDate = dateInput ? String(dateInput.value || '').trim() : '';
+  const parsedDate = parseInputDate(rawDate);
+  if (!rawDate) {
+    setRecordEditError('日付を入力してください');
+    if (dateInput) dateInput.focus();
+    return;
+  }
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+    setRecordEditError('有効な日付を YYYY-MM-DD 形式で入力してください');
+    if (dateInput) dateInput.focus();
+    return;
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const candidate = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+  if (candidate.getTime() > today.getTime()) {
+    setRecordEditError('未来の日付は指定できません');
+    if (dateInput) dateInput.focus();
+    return;
+  }
+  const textValue = textInput ? textInput.value : '';
+  setRecordEditSaving(true);
+  google.script.run
+    .withSuccessHandler(() => {
+      closeRecordEditModal();
+      loadRecords();
+    })
+    .withFailureHandler(err => {
+      const msg = err && err.message ? err.message : err;
+      setRecordEditSaving(false);
+      setRecordEditError('保存に失敗しました: ' + msg);
+    })
+    .updateRecord(record.rowIndex, textValue, formatDateForInput(candidate));
+}
+
+function initRecordEditModal() {
+  const modal = document.getElementById("recordEditModal");
+  const saveBtn = document.getElementById("recordEditSave");
+  const cancelBtn = document.getElementById("recordEditCancel");
+  if (saveBtn) {
+    recordEditState.defaultSaveLabel = saveBtn.textContent || '保存';
+    saveBtn.addEventListener('click', handleRecordEditSave);
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      if (!recordEditState.isSaving) {
+        closeRecordEditModal();
+      }
+    });
+  }
+  if (modal) {
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal && !recordEditState.isSaving) {
+        closeRecordEditModal();
+      }
+    });
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('recordEditModal')?.classList.contains('is-open') && !recordEditState.isSaving) {
+      closeRecordEditModal();
+    }
+  });
+}
+
 // ===== 過去記録（編集・削除付き） =====
 function loadRecords(){
   const list = document.getElementById("recordList");
@@ -2311,15 +2542,17 @@ function bindRecordActions() {
       const rec = btn.closest(".record");
       if (!rec) return;
       const row = rec.dataset.row;
-      const textEl = rec.querySelector(".text");
-      const oldText = textEl ? textEl.textContent : "";
-      const nv = prompt("内容を修正:", oldText);
-      if (nv === null) return;
-      google.script.run.withSuccessHandler(() => {
-        loadRecords();
-      }).withFailureHandler(err => {
-        alert("更新に失敗しました: " + (err && err.message ? err.message : err));
-      }).updateRecord(row, nv);
+      const record = getRecordByRowIndex(row);
+      if (record) {
+        openRecordEditModal(record);
+        return;
+      }
+      const fallback = {
+        rowIndex: Number(row),
+        text: rec.querySelector(".text") ? rec.querySelector(".text").textContent : "",
+        dateText: rec.querySelector("b") ? rec.querySelector("b").textContent : ""
+      };
+      openRecordEditModal(fallback);
     };
   });
   document.querySelectorAll(".btnDelete").forEach(btn => {
@@ -2795,6 +3028,7 @@ function runAfterDomReady(fn){
 }
 
 runAfterDomReady(()=>{
+  initRecordEditModal();
   refreshMemberList();
   setupSearchBox();
   initInternalApp();
