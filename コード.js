@@ -2825,11 +2825,17 @@ function hashSharePassword_(password){
   return digest.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
 }
 
-function updateRecord(rowIndex, newText){
+function updateRecord(rowIndex, newText, newDate){
   try {
-    const payload = { rowIndex: Number(rowIndex), record: String(newText || '') };
+    const payload = {
+      rowIndex: Number(rowIndex),
+      record: newText
+    };
+    if (typeof newDate !== 'undefined') {
+      payload.date = newDate;
+    }
     // 既存の updateMonitoringRecord は center/staff/status/special を想定しているので
-    // 本文だけは Monitoring シートの「記録内容」列を書き換える軽量版を用意
+    // 本文と日付だけは Monitoring シートの対象列を書き換える軽量版を用意
     return updateMonitoringRecordBodyOnly_(payload);
   } catch (e) {
     throw new Error('更新に失敗しました: ' + (e && e.message ? e.message : e));
@@ -2845,7 +2851,38 @@ function deleteRecord(rowIndex){
   }
 }
 
-/** 本文（記録内容）だけを書き換える内部用：Monitoring シートの列検出を使う */
+function normalizeDateForSheet_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const str = String(value == null ? '' : value).trim();
+  if (!str) return null;
+  let y = NaN, m = NaN, d = NaN;
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    y = Number(isoMatch[1]);
+    m = Number(isoMatch[2]);
+    d = Number(isoMatch[3]);
+  } else {
+    const genericMatch = str.match(/(\d{4})[^0-9](\d{1,2})[^0-9](\d{1,2})/);
+    if (genericMatch) {
+      y = Number(genericMatch[1]);
+      m = Number(genericMatch[2]);
+      d = Number(genericMatch[3]);
+    }
+  }
+  if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) {
+      return dt;
+    }
+  }
+  const parsed = new Date(str);
+  if (isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+/** 本文（日付含む）を書き換える内部用：Monitoring シートの列検出を使う */
 function updateMonitoringRecordBodyOnly_(data){
   const payload = data && typeof data === 'object' ? data : {};
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -2862,7 +2899,23 @@ function updateMonitoringRecordBodyOnly_(data){
   const bodyCol = indexes.record >= 0 ? (indexes.record + 1) : 0;
   if (!bodyCol) throw new Error('「記録内容」列が見つかりません');
 
-  sheet.getRange(rowIndex, bodyCol).setValue(String(payload.record || ''));
+  if (Object.prototype.hasOwnProperty.call(payload, 'date')) {
+    const dateCol = indexes.date >= 0 ? (indexes.date + 1) : 0;
+    if (!dateCol) throw new Error('「日付」列が見つかりません');
+    const normalizedDate = normalizeDateForSheet_(payload.date);
+    if (!normalizedDate) {
+      throw new Error('日付の形式が正しくありません');
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const candidate = new Date(normalizedDate.getFullYear(), normalizedDate.getMonth(), normalizedDate.getDate());
+    if (candidate.getTime() > today.getTime()) {
+      throw new Error('未来の日付は設定できません');
+    }
+    sheet.getRange(rowIndex, dateCol).setValue(candidate);
+  }
+
+  sheet.getRange(rowIndex, bodyCol).setValue(String(payload.record == null ? '' : payload.record));
   return { status:'success', rowIndex };
 }
 /** 指定した memberId でレコードが取れるか確認 */
