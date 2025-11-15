@@ -29,6 +29,56 @@ const HONOBONO_HEADER_ALIASES = {
   [HONOBONO_QR_HEADER]: ['共有QR', 'QRコード', 'QR', '共有リンク', '共有URL']
 };
 
+const TREATMENT_SPREADSHEET_ID = ((__scriptProperties && __scriptProperties.getProperty('TREATMENT_SPREADSHEET_ID')) || SPREADSHEET_ID || '').trim() || SPREADSHEET_ID;
+const TREATMENT_SHEET_NAME = ((__scriptProperties && __scriptProperties.getProperty('TREATMENT_SHEET_NAME')) || 'TreatmentLog').trim() || 'TreatmentLog';
+const ATTENDANCE_SHEET_NAME = 'Attendance';
+const ATTENDANCE_SHEET_HEADERS = Object.freeze([
+  'Date',
+  'StaffEmail',
+  'StartTime',
+  'EndTime',
+  'WorkingHours',
+  'BreakHours',
+  'VisitCount',
+  'ConvertedUnits',
+  'CreatedAt',
+  'Source'
+]);
+const ATTENDANCE_START_HOUR = 9;
+const ATTENDANCE_START_MINUTE = 0;
+const ATTENDANCE_BREAK_HOURS = 1;
+const ATTENDANCE_MAX_WORKING_HOURS = 8;
+const ATTENDANCE_MAX_END_HOUR = 18;
+
+const TREATMENT_SHEET_HEADER = Object.freeze([
+  'Timestamp',
+  'VisitDate',
+  'StaffEmail',
+  'StaffName',
+  'MemberId',
+  'MemberName',
+  'SelfPayType',
+  'ServiceName',
+  'ConvertedUnits'
+]);
+
+const TREATMENT_HEADER_ALIASES = {
+  VisitDate: ['施術日', '実施日', '訪問日', 'VisitDate', 'Date', '日付'],
+  StaffEmail: ['スタッフメール', 'メールアドレス', 'Email', 'StaffEmail', 'スタッフメールアドレス'],
+  SelfPayType: ['自費種別', 'メニュー', 'Menu', 'SelfPayType', '施術種別', 'コース'],
+  ConvertedUnits: ['換算人数', '換算', 'ConvertedUnits', '換算数']
+};
+
+const TREATMENT_SELF_PAY_CONVERSIONS = Object.freeze({
+  '自費60分': 1,
+  '自費45分': 0.75,
+  '自費30分': 0.5,
+  '自費90分': 1.5,
+  '鍼灸': 1,
+  '訪問整体': 1,
+  'オプション延長30分': 0.5
+});
+
 // 画像/動画/PDF の既定保存先（利用者IDごとにサブフォルダを自動作成）
 const DEFAULT_FOLDER_ID         = '1glDniVONBBD8hIvRGMPPT1iLXdtHJpEC';
 const MEDIA_ROOT_FOLDER_ID      = DEFAULT_FOLDER_ID;
@@ -3392,6 +3442,259 @@ function honobonoEnrichShare_(share, memberId) {
   }
 
 ///半角数字に変換///
+}
+
+function createAttendanceRecord(staffEmail, targetDateInput) {
+  const debugPrefix = '[Attendance]';
+  try {
+    const email = normalizeAttendanceEmail_(staffEmail);
+    if (!email) throw new Error('メールアドレスが未指定です');
+
+    const tz = Session.getScriptTimeZone ? (Session.getScriptTimeZone() || 'Asia/Tokyo') : 'Asia/Tokyo';
+    const targetDate = normalizeAttendanceDate_(targetDateInput, tz);
+    if (!targetDate) throw new Error('日付の形式が不正です: ' + targetDateInput);
+
+    const dateKey = Utilities.formatDate(targetDate, tz, 'yyyy-MM-dd');
+
+    const spreadsheet = SpreadsheetApp.openById(TREATMENT_SPREADSHEET_ID);
+    const treatmentSheet = spreadsheet.getSheetByName(TREATMENT_SHEET_NAME);
+    if (!treatmentSheet) {
+      throw new Error('施術録シートが見つかりません: ' + TREATMENT_SHEET_NAME);
+    }
+
+    const treatmentValues = treatmentSheet.getDataRange().getValues();
+    if (!treatmentValues || treatmentValues.length < 2) {
+      throw new Error('施術録シートにデータがありません');
+    }
+
+    const headerRow = treatmentValues[0];
+    const headerIndex = buildTreatmentHeaderIndexMap_(headerRow);
+
+    const dateIdx = headerIndex.VisitDate;
+    const emailIdx = headerIndex.StaffEmail;
+    const typeIdx = headerIndex.SelfPayType;
+    const conversionIdx = headerIndex.ConvertedUnits;
+
+    if (dateIdx == null || emailIdx == null) {
+      throw new Error('施術録シートのヘッダーに必須項目が不足しています');
+    }
+
+    let visitCount = 0;
+    let convertedTotal = 0;
+
+    for (let r = 1; r < treatmentValues.length; r++) {
+      const row = treatmentValues[r];
+      const rowEmail = normalizeAttendanceEmail_(row[emailIdx]);
+      if (!rowEmail || rowEmail !== email) continue;
+
+      const rowDateKey = normalizeAttendanceDateKey_(row[dateIdx], tz);
+      if (!rowDateKey || rowDateKey !== dateKey) continue;
+
+      visitCount++;
+
+      let conversionValue = null;
+      if (conversionIdx != null && conversionIdx >= 0) {
+        const raw = row[conversionIdx];
+        const numeric = typeof raw === 'number' ? raw : parseFloat(String(raw || '').replace(/[^0-9.]/g, ''));
+        if (!isNaN(numeric)) {
+          conversionValue = numeric;
+        }
+      }
+
+      if (conversionValue == null) {
+        const typeLabel = typeIdx != null ? String(row[typeIdx] || '').trim() : '';
+        conversionValue = resolveTreatmentConversion_(typeLabel);
+      }
+
+      convertedTotal += conversionValue || 0;
+    }
+
+    if (visitCount === 0) {
+      Logger.log(`${debugPrefix} 対象データが見つかりません email=${email} date=${dateKey}`);
+    }
+
+    const workingHoursRaw = Math.max(convertedTotal, 0);
+    const workingHours = Math.min(workingHoursRaw, ATTENDANCE_MAX_WORKING_HOURS);
+    const breakHours = workingHours > 0 ? ATTENDANCE_BREAK_HOURS : 0;
+
+    const startTime = new Date(targetDate);
+    startTime.setHours(ATTENDANCE_START_HOUR, ATTENDANCE_START_MINUTE, 0, 0);
+
+    const totalDurationHours = workingHours + breakHours;
+    let endTime = new Date(startTime.getTime() + totalDurationHours * 60 * 60 * 1000);
+
+    const maxEnd = new Date(targetDate);
+    maxEnd.setHours(ATTENDANCE_MAX_END_HOUR, 0, 0, 0);
+    if (endTime.getTime() > maxEnd.getTime()) {
+      endTime = maxEnd;
+    }
+
+    const attendanceSheet = ensureAttendanceSheet_(spreadsheet);
+    const createdAt = new Date();
+    const sourceLabel = `auto:${dateKey}`;
+
+    const rowValues = [
+      targetDate,
+      email,
+      startTime,
+      endTime,
+      workingHours,
+      breakHours,
+      visitCount,
+      convertedTotal,
+      createdAt,
+      sourceLabel
+    ];
+
+    attendanceSheet.appendRow(rowValues);
+
+    return {
+      status: 'success',
+      date: dateKey,
+      email,
+      visits: visitCount,
+      convertedUnits: convertedTotal,
+      workingHours,
+      breakHours,
+      startTime,
+      endTime
+    };
+  } catch (err) {
+    Logger.log(`${debugPrefix} ERROR createAttendanceRecord: ` + (err && err.stack ? err.stack : err));
+    return { status: 'error', message: String(err && err.message || err) };
+  }
+}
+
+function normalizeAttendanceEmail_(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeAttendanceDate_(value, tz) {
+  if (value instanceof Date) {
+    const d = new Date(value.getTime());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) {
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+  }
+  const str = String(value || '').trim();
+  if (!str) return null;
+  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (isoMatch) {
+    const [_, year, month, day] = isoMatch;
+    const d = new Date(Number(year), Number(month) - 1, Number(day));
+    if (!isNaN(d.getTime())) {
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
+  }
+  return null;
+}
+
+function normalizeAttendanceDateKey_(value, tz) {
+  if (!value && value !== 0) return '';
+  let dateObj = null;
+  if (value instanceof Date) {
+    dateObj = value;
+  } else if (typeof value === 'number') {
+    dateObj = new Date(value);
+  } else {
+    const str = String(value || '').trim();
+    if (!str) return '';
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      dateObj = parsed;
+    }
+  }
+  if (!dateObj || isNaN(dateObj.getTime())) return '';
+  return Utilities.formatDate(dateObj, tz, 'yyyy-MM-dd');
+}
+
+function buildTreatmentHeaderIndexMap_(headerRow) {
+  const map = {};
+  const seen = {};
+  for (let c = 0; c < headerRow.length; c++) {
+    const raw = String(headerRow[c] || '').trim();
+    if (!raw) continue;
+    seen[raw] = c;
+  }
+
+  Object.keys(TREATMENT_HEADER_ALIASES).forEach(key => {
+    const aliases = TREATMENT_HEADER_ALIASES[key] || [];
+    let index = null;
+    for (const alias of aliases) {
+      if (seen[alias] != null) {
+        index = seen[alias];
+        break;
+      }
+      const normalized = alias.toLowerCase();
+      const hitKey = Object.keys(seen).find(k => k.toLowerCase() === normalized);
+      if (hitKey) {
+        index = seen[hitKey];
+        break;
+      }
+    }
+    if (index == null) {
+      const canonicalIndex = TREATMENT_SHEET_HEADER.indexOf(key);
+      if (canonicalIndex >= 0 && canonicalIndex < headerRow.length) {
+        index = canonicalIndex;
+      }
+    }
+    map[key] = index;
+  });
+
+  return map;
+}
+
+function resolveTreatmentConversion_(typeLabel) {
+  const label = String(typeLabel || '').trim();
+  if (!label) return 0;
+  if (Object.prototype.hasOwnProperty.call(TREATMENT_SELF_PAY_CONVERSIONS, label)) {
+    return Number(TREATMENT_SELF_PAY_CONVERSIONS[label]) || 0;
+  }
+  const lower = label.toLowerCase();
+  const hitKey = Object.keys(TREATMENT_SELF_PAY_CONVERSIONS).find(key => key.toLowerCase() === lower);
+  if (hitKey) {
+    return Number(TREATMENT_SELF_PAY_CONVERSIONS[hitKey]) || 0;
+  }
+  Logger.log(`[Attendance] 換算人数が未定義の自費種別: ${label}`);
+  return 0;
+}
+
+function ensureAttendanceSheet_(spreadsheet) {
+  const ss = spreadsheet || SpreadsheetApp.openById(TREATMENT_SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(ATTENDANCE_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(ATTENDANCE_SHEET_NAME);
+    sheet.getRange(1, 1, 1, ATTENDANCE_SHEET_HEADERS.length).setValues([ATTENDANCE_SHEET_HEADERS]);
+  }
+  const lastColumn = sheet.getLastColumn();
+  if (lastColumn < ATTENDANCE_SHEET_HEADERS.length) {
+    sheet.insertColumnsAfter(lastColumn || 1, ATTENDANCE_SHEET_HEADERS.length - lastColumn);
+  }
+  const headerRange = sheet.getRange(1, 1, 1, ATTENDANCE_SHEET_HEADERS.length);
+  const currentHeader = headerRange.getValues()[0] || [];
+  let headerDiff = false;
+  for (let i = 0; i < ATTENDANCE_SHEET_HEADERS.length; i++) {
+    if (String(currentHeader[i] || '') !== ATTENDANCE_SHEET_HEADERS[i]) {
+      headerDiff = true;
+      break;
+    }
+  }
+  if (headerDiff) {
+    headerRange.setValues([ATTENDANCE_SHEET_HEADERS]);
+  }
+  return sheet;
 }
 function convertFullWidthToHalfWidth() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
